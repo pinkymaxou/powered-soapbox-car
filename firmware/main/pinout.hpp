@@ -39,8 +39,7 @@ constexpr gpio_num_t POWER_HOLD  = GPIO_NUM_13;  // sortie ; BAS = système main
 
 // Capteur d'angle AS5600 sur I2C (3,3 V natif → branchement direct, AUCUN level-shift).
 // Adresse fixe 0x36 → un seul capteur par bus. Connecteur 4 fils : SDA, SCL, 3V3, GND
-// (+ aimant diamétral en bout d'essieu). Pull-ups 4,7 kΩ sur SDA/SCL.
-// GPIO27 / GPIO14 restent libres (réserve : 2e bus I2C pour un 2e capteur).
+// (+ aimant diamétral, voir config). Pull-ups 4,7 kΩ sur SDA/SCL.
 constexpr gpio_num_t I2C_SDA = GPIO_NUM_18;
 constexpr gpio_num_t I2C_SCL = GPIO_NUM_19;
 
@@ -51,5 +50,24 @@ constexpr gpio_num_t REVERSE_LED = GPIO_NUM_4;
 
 // Niveaux actifs
 constexpr int BTN_ACTIVE = 0;   // boutons pressés = niveau bas
+
+// ───────────────────────── Réserves futures (CÂBLÉES sur le circuit, NON utilisées) ─────────────────────────
+// Prévues pour évolutions ; le firmware ne les configure pas. Toutes en logique 3,3 V.
+//  - 2 entrées d'encodeur en quadrature A/B (3,3 V, signal direct). 35/36 = entrées seules
+//    (pas de pull-up interne → OK pour une sortie push-pull ; pull-up externe si open-collector).
+//  - 3 entrées de boutons supplémentaires (actives basses, pull-up). ⚠️ GPIO15 est un strapping
+//    pin (doit être HAUT au boot) → un bouton vers GND relâché au démarrage convient.
+//  - 1 sortie LED supplémentaire. ⚠️ GPIO5 est un strapping pin (peut pulser brièvement au boot).
+namespace future
+{
+constexpr gpio_num_t ENC1_A = GPIO_NUM_27;
+constexpr gpio_num_t ENC1_B = GPIO_NUM_14;
+constexpr gpio_num_t ENC2_A = GPIO_NUM_35;   // entrée seule
+constexpr gpio_num_t ENC2_B = GPIO_NUM_36;   // entrée seule
+constexpr gpio_num_t AUX_BTN_1 = GPIO_NUM_22;
+constexpr gpio_num_t AUX_BTN_2 = GPIO_NUM_23;
+constexpr gpio_num_t AUX_BTN_3 = GPIO_NUM_15;   // strapping
+constexpr gpio_num_t AUX_LED   = GPIO_NUM_5;    // strapping
+} // namespace future
 
 } // namespace pins

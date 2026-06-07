@@ -429,13 +429,17 @@ flowchart LR
 | 34 | **Accélérateur** (signal Hall) | entrée ADC | pédale Hall 0,8–4,2 V → **pont diviseur ~÷1,5** vers l'ADC |
 | 39 | **Tension batterie** | entrée ADC | pont **100 k / 15 k** + 0,1 µF |
 | 18 / 19 | **I²C SDA / SCL** (AS5600) | E/S | capteur d'angle 0x36, **3,3 V natif**, pull-ups 4,7 kΩ |
-| 27 / 14 | *(libres — réserve)* | — | 2ᵉ bus I²C possible pour un 2ᵉ capteur |
 | 13 | **POWER_HOLD** (latch alim.) | sortie | **actif BAS** : tient la LED de l'opto à GND → maintient l'alim ; HAUT = coupe |
 | 16 | **Bouton armement (START)** | entrée | pull-up, appui ~1 s pour armer |
 | 21 | **Bouton marche arrière** | entrée | pull-up, **momentané** (maintenu) |
 | 17 | **Ruban WS2812B** (data) | sortie | ~10 LEDs |
 | 4 | **LED bouton marche arrière** | sortie | allumée si recul actif |
 | 2 | **LED d'état** (onboard) | sortie | — |
+| **Réserves futures (câblées, non utilisées) — toutes en 3,3 V** | | | |
+| 27 / 14 | **Encodeur 1 — A / B** (réserve) | entrées | quadrature 3,3 V, signal direct |
+| 35 / 36 | **Encodeur 2 — A / B** (réserve) | entrées seules | quadrature 3,3 V (pull-up externe si open-collector) |
+| 22 / 23 / 15 | **3 boutons auxiliaires** (réserve) | entrées | actifs bas, pull-up ; ⚠️ GPIO15 = strapping (haut au boot) |
+| 5 | **LED auxiliaire** (réserve) | sortie | ⚠️ GPIO5 = strapping (peut pulser au boot) |
 
 Alimentations : un **buck 20 V → 5 V (déjà disponible)** alimente l'**ESP32** (qui fabrique son **3,3 V via le régulateur de sa carte**) ; le **3,3 V** de l'ESP32 alimente le **capteur AS5600 (I²C)** et la pédale (capteur Hall) ; **+20 V** (rail commun, via fusibles) → driver. La **masse (−)** des packs est commutée par le **latch low-side** (2× MOSFET). **GND commun** à tout.
 

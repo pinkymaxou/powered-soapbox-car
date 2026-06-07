@@ -95,6 +95,7 @@ flowchart TB
 | | Bouton **armement** (momentané) | appui ~1 s pour armer |
 | | Bouton **marche arrière** (momentané) + LED | maintenu = recul |
 | **Signalisation** | Ruban **WS2812B** (~10 LEDs) | état : vert = en route, rouge = désarmé |
+| **Réserves futures** (câblées, non utilisées) | **2× encodeur A/B 3,3 V**, **3 boutons**, **1 LED** | connecteurs prévus sur le circuit pour évolutions ; logique 3,3 V |
 | **Câblage** | Puissance ~**10 AWG**, signaux fil fin | masses communes, cosses serties |
 
 Brochage GPIO complet : voir l'onglet **Brochage** de la page web ou le §4 du

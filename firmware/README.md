@@ -69,10 +69,11 @@ Capteur de vitesse : cinématique **connue et hardcodée** dans `config.hpp` (`n
 Via la page web : calibrer l'accélérateur, ajuster `vbat_div_ratio` au multimètre,
 régler la limite de vitesse. Commencer **roues en l'air**, vitesse basse.
 
-**Pré-réglage PID (hypothèse de bring-up, à affiner au banc).** Estimé depuis le modèle
-(gain ≈ 8 km/h/commande à 50 % PWM via 1:16 + roue Ø0,30 m ; τ ≈ 1,5 s à ~100 kg) :
-**limiteur** `vmax_kp≈0,35`, `vmax_ki≈0,25`, `vmax_kd=0` (réglage IMC, λ≈0,5 s) ;
-**frein** `pid_kp≈0,10`, `pid_ki≈0,05`, `pid_kd≈0,003` (arrêt ferme sans plugging brutal).
+**Pré-réglage PID (extrapolé du modèle, à affiner au banc).** Gain plant **K ≈ 13 km/h/commande**
+(12 V→4615 tr/min à ~10 V moyens via plafond 50 %, 1:16, roue 12″, charge légère) ;
+τ ≈ 1,1 s (amortissement moteur ≈90 N·s/m à ~100 kg). Réglage IMC :
+**limiteur** `vmax_kp≈0,15`, `vmax_ki≈0,14`, `vmax_kd=0` (λ≈0,55 s) ;
+**frein** `pid_kp≈0,12`, `pid_ki≈0,08`, `pid_kd≈0,003` (sature en plugging > ~8 km/h, doux près de 0).
 Le PID intègre `dt` → **passer de 100 à 500 Hz ne change pas Kp/Ki** ; garder **Kd petit**
 (dérivé plus bruité à 500 Hz). La conversion vitesse étant désormais exacte, ces gains
 sont **directement applicables** (à affiner au banc selon le comportement réel).
