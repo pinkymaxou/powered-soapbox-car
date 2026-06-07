@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kart - Configuration</title>
+<link rel="stylesheet" href="/style.css">
+</head><body>
+<header>🛞 Kart électrique<span class="hdr-state" id="hdrstate">…</span></header>
+<nav class="tabs">
+ <button class="tab active" data-tab="dash">Tableau de bord</button>
+ <button class="tab" data-tab="cfg">Configuration</button>
+ <button class="tab" data-tab="calib">Calibration</button>
+ <button class="tab" data-tab="wifi">Wi-Fi</button>
+ <button class="tab" data-tab="pins">Brochage</button>
+ <button class="tab" data-tab="sys">Système</button>
+</nav>
+<div class="wrap">
+
+ <section id="dash" class="panel">
+  <div class="chart-title">Accélérateur · PWM · vitesse — 10 min</div>
+  <canvas id="chart" width="520" height="180"></canvas>
+  <div class="legend" id="legend"></div>
+  <div class="chart-title" id="batttitle">🔋 Batterie — 30 min</div>
+  <canvas id="battchart" width="520" height="90"></canvas>
+  <div id="bars"></div>
+  <div id="ind"></div>
+  <div class="status" id="status">Connexion…</div>
+  <div class="row">
+   <button class="danger" onclick="reboot()">⟳ Redémarrer</button>
+  </div>
+ </section>
+
+ <section id="cfg" class="panel" hidden>
+  <button class="alt" onclick="reload()">Recharger</button>
+  <form id="f"></form>
+  <button type="button" onclick="save()">💾 Enregistrer</button>
+ </section>
+
+ <section id="calib" class="panel" hidden>
+  <p class="note">Calibration de l'accélérateur — possible <b>uniquement désarmé et à l'arrêt</b>.<br>
+  Après avoir cliqué : <b>appuyer à FOND</b> sur l'accélérateur, puis <b>relâcher</b> quand l'état passe en attente. Les valeurs min/max sont enregistrées automatiquement.</p>
+  <button class="warn" onclick="calib()">▶ Lancer la calibration</button>
+  <div class="status" id="calstatus">État : —</div>
+ </section>
+
+ <section id="wifi" class="panel" hidden>
+  <div class="status" id="wifistatus">…</div>
+  <form id="wf">
+   <label>Activer le mode station<input name="enabled" type="checkbox"></label>
+   <label>SSID du réseau<input name="ssid" type="text"></label>
+   <label>Mot de passe<input name="pass" type="password"></label>
+  </form>
+  <button type="button" onclick="saveWifi()">💾 Enregistrer &amp; redémarrer</button>
+  <p class="note">Le kart se connecte au réseau choisi <b>après redémarrage</b>, tout en gardant le point d'accès « Kart-Config » actif. Reconnexion automatique toutes les 5 s si la liaison tombe.</p>
+ </section>
+
+ <section id="pins" class="panel" hidden>
+  <table class="pins">
+   <tr><th>GPIO</th><th>Fonction</th><th>Sens</th></tr>
+   <tr><td>25</td><td>PWM moteur gauche</td><td>sortie</td></tr>
+   <tr><td>26</td><td>DIR moteur gauche</td><td>sortie</td></tr>
+   <tr><td>32</td><td>PWM moteur droite</td><td>sortie</td></tr>
+   <tr><td>33</td><td>DIR moteur droite</td><td>sortie</td></tr>
+   <tr><td>34</td><td>Accélérateur (potentiomètre)</td><td>entrée ADC</td></tr>
+   <tr><td>39</td><td>Tension batterie (pont 100k/15k)</td><td>entrée ADC</td></tr>
+   <tr><td>16</td><td>Bouton démarrage / armement</td><td>entrée (pull-up)</td></tr>
+   <tr><td>21</td><td>Bouton marche arrière (momentané)</td><td>entrée (pull-up)</td></tr>
+   <tr><td>18</td><td>I²C SDA — capteur d'angle AS5600</td><td>E/S</td></tr>
+   <tr><td>19</td><td>I²C SCL — capteur d'angle AS5600</td><td>E/S</td></tr>
+   <tr><td>13</td><td>POWER_HOLD (maintien d'alim, actif bas)</td><td>sortie</td></tr>
+   <tr><td>27 / 14</td><td>libres (réserve : 2ᵉ bus I²C)</td><td>—</td></tr>
+   <tr><td>17</td><td>Ruban LED WS2812B (data)</td><td>sortie</td></tr>
+   <tr><td>4</td><td>LED du bouton marche arrière</td><td>sortie</td></tr>
+   <tr><td>2</td><td>LED d'état (onboard)</td><td>sortie</td></tr>
+  </table>
+  <p class="note">Arrêt d'urgence : coupe-courant matériel de tout le système (pas de GPIO).<br>
+  Frein : aucun contact — relâcher l'accélérateur déclenche le frein électrique.</p>
+ </section>
+
+ <section id="sys" class="panel" hidden>
+  <button class="alt" onclick="loadSys()">↻ Rafraîchir</button>
+  <table class="pins" id="systbl"><tr><td>Chargement…</td></tr></table>
+ </section>
+
+</div>
+<script>
+const ST=["IDLE","CALIBRATION","ARMÉ","DÉFAUT"];
+const FA=["—","E-STOP","BATTERIE BASSE","ACCÉLÉRATEUR","NON CALIBRÉ","ENCODEUR"];
+let ws,timer,histTimer,built=false;
+let speedScale=15;   // km/h ≙ 100 % (barres de vitesse), réglé depuis la config
+let battLow=15, battFull=21;   // V à 0 % / 100 %, dérivés du nombre de cellules (config)
+
+// Onglets
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+ document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+ t.classList.add('active');
+ document.querySelectorAll('.panel').forEach(p=>p.hidden=(p.id!==t.dataset.tab));
+ if(t.dataset.tab==='wifi') loadWifi();
+ if(t.dataset.tab==='sys') loadSys();
+});
+
+// ── Graphiques (données conservées en RAM côté ESP32) ──
+// Principal : séries rapides 1 pt/s sur 10 min. Batterie : 1 pt/5 s sur 30 min (canvas séparé).
+const SERIES=[
+ {label:'Accél %', color:'#3cf', key:'accel', data:[]},
+ {label:'PWM G',   color:'#6f6', key:'pwml',  data:[]},
+ {label:'PWM D',   color:'#fa0', key:'pwmr',  data:[]},
+ {label:'Vit G',   color:'#f6f', key:'spdl',  data:[]},
+ {label:'Vit D',   color:'#ff5', key:'spdr',  data:[]},
+];
+const BATT={label:'Batterie', color:'#3d9', key:'batt', data:[]};
+function buildLegend(){
+ document.getElementById('legend').innerHTML=
+   SERIES.map(s=>`<span style="color:${s.color}">■ ${s.label}</span>`).join('  ');
+}
+function applyHist(m){
+ SERIES.forEach(s=>{ if(Array.isArray(m[s.key])) s.data=m[s.key]; });
+ if(Array.isArray(m.batt)) BATT.data=m.batt;
+ drawChart(); drawBatt();
+}
+// Trace une liste de séries sur un canvas (chaque série couvre toute la largeur du canvas).
+function drawSeries(canvasId,list){
+ const cv=document.getElementById(canvasId),x=cv.getContext('2d'),W=cv.width,H=cv.height;
+ x.fillStyle='#000';x.fillRect(0,0,W,H);
+ x.strokeStyle='#333';
+ for(let p=0;p<=100;p+=25){const y=H-p/100*H;x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke();}
+ list.forEach(ser=>{
+  const n=ser.data.length; if(n<2)return;
+  x.strokeStyle=ser.color;x.lineWidth=1.5;x.beginPath();
+  ser.data.forEach((v,i)=>{const px=i/(n-1)*W,py=H-Math.max(0,Math.min(100,v))/100*H;
+    i?x.lineTo(px,py):x.moveTo(px,py);});
+  x.stroke();
+ });
+}
+function drawChart(){drawSeries('chart',SERIES);}
+function drawBatt(){drawSeries('battchart',[BATT]);}
+
+const OUI=v=>v?'OUI':'non';
+const clamp01=v=>Math.max(0,Math.min(100,v));
+const dirTxt=v=>v>0.001?'▲ av':(v<-0.001?'▼ ar/frein':'– arrêt');
+const battPct=v=>clamp01((v-battLow)/(battFull-battLow)*100);   // selon nb de cellules
+
+// Barres : id, libellé, couleur, valeur 0–100, texte affiché
+const BARS=[
+ {id:'accel',label:'Accélérateur', color:'#3cf', v:s=>s.throttle*100,            t:s=>(s.throttle*100).toFixed(0)+' %'},
+ {id:'pwml', label:'PWM moteur G',  color:'#6f6', v:s=>Math.abs(s.out_l)*100,     t:s=>(Math.abs(s.out_l)*100).toFixed(0)+' % '+dirTxt(s.out_l)},
+ {id:'pwmr', label:'PWM moteur D',  color:'#fa0', v:s=>Math.abs(s.out_r)*100,     t:s=>(Math.abs(s.out_r)*100).toFixed(0)+' % '+dirTxt(s.out_r)},
+ {id:'spdl', label:'Vitesse G',     color:'#f6f', v:s=>s.speed_l/speedScale*100,  t:s=>s.speed_l.toFixed(1)+' km/h'},
+ {id:'spdr', label:'Vitesse D',     color:'#ff5', v:s=>s.speed_r/speedScale*100,  t:s=>s.speed_r.toFixed(1)+' km/h'},
+ {id:'batt', label:'Batterie',      color:'#3d9', v:s=>battPct(s.vbat),           t:s=>s.vbat.toFixed(2)+' V'},
+];
+function buildBars(){
+ document.getElementById('bars').innerHTML=BARS.map(b=>
+  `<div class="bar"><div class="lbl"><span>${b.label}</span><span id="${b.id}t">—</span></div>`+
+  `<div class="track"><div class="fill" id="${b.id}f" style="background:${b.color}"></div></div></div>`).join('');
+}
+// Indicateurs (pastilles) : boutons + sorties booléennes
+const INDS=[
+ {k:'btn_start',l:'START'},{k:'btn_rev',l:'REVERSE'},
+ {k:'brake',l:'FREIN ÉLEC'},{k:'rev_led',l:'LED RECUL'}
+];
+function buildInds(){
+ document.getElementById('ind').innerHTML=INDS.map(i=>`<span class="pill" id="i_${i.k}">${i.l}</span>`).join('');
+}
+function updateInds(s){
+ INDS.forEach(i=>document.getElementById('i_'+i.k).classList.toggle('on', !!s[i.k]));
+}
+function updateBars(s){
+ BARS.forEach(b=>{
+   document.getElementById(b.id+'f').style.width=clamp01(b.v(s)).toFixed(0)+'%';
+   document.getElementById(b.id+'t').textContent=b.t(s);
+ });
+}
+function showStatus(s){
+ const st=ST[s.state]||s.state;
+ const hs=document.getElementById('hdrstate'); hs.textContent=st; hs.className='hdr-state s'+s.state;
+ const cs=document.getElementById('calstatus'); if(cs)cs.textContent='État : '+st+(s.fault?('  ·  '+(FA[s.fault]||'')):'');
+ updateBars(s);
+ updateInds(s);
+ document.getElementById('status').textContent=
+  `Défaut : ${FA[s.fault]||s.fault}\n`+
+  `Accélérateur (brut ADC) : ${s.thr_raw}`;
+}
+
+// ── Formulaire de configuration (auto-généré depuis le schéma) ──
+function deriveFromCfg(p){
+ if(p.name==='speed_limit_kmh') speedScale=Math.max(1,p.val);
+ if(p.name==='cell_count'){
+   const n=Math.max(1,p.val); battLow=n*3.0; battFull=n*4.2;
+   document.getElementById('batttitle').textContent=`🔋 Batterie (${battLow.toFixed(0)}–${battFull.toFixed(0)} V) — 30 min`;
+ }
+}
+function buildForm(params){
+ const f=document.getElementById('f');f.innerHTML='';
+ params.forEach(p=>{
+   const lab=document.createElement('label');lab.textContent=p.desc;
+   const inp=document.createElement('input');inp.type='number';inp.name=p.name;
+   inp.step=(p.type==='float')?'any':'1';inp.min=p.min;inp.max=p.max;inp.value=p.val;
+   lab.appendChild(inp);f.appendChild(lab);
+   deriveFromCfg(p);
+ });
+ built=true;
+}
+function fillForm(params){
+ if(!built)buildForm(params);
+ params.forEach(p=>{const e=document.querySelector(`[name="${p.name}"]`);
+   if(e&&document.activeElement!==e)e.value=p.val;
+   deriveFromCfg(p);});
+}
+
+function connect(){
+ ws=new WebSocket('ws://'+location.host+'/ws');
+ ws.onopen=()=>{
+   ws.send('{"type":"get"}'); ws.send('{"type":"hist"}');
+   clearInterval(timer); clearInterval(histTimer);
+   timer=setInterval(()=>{if(ws.readyState===1)ws.send('{"type":"status"}');},250);      // état live 4 Hz
+   histTimer=setInterval(()=>{if(ws.readyState===1)ws.send('{"type":"hist"}');},2000);   // graphique (RAM serveur) 0,5 Hz
+ };
+ ws.onmessage=e=>{const m=JSON.parse(e.data);
+   if(m.type==='config')fillForm(m.params);
+   else if(m.type==='status')showStatus(m);
+   else if(m.type==='hist')applyHist(m);
+   else if(m.type==='wifi')showWifi(m);
+   else if(m.type==='sysinfo')showSys(m);};
+ ws.onclose=()=>{clearInterval(timer);clearInterval(histTimer);document.getElementById('status').textContent='Reconnexion…';setTimeout(connect,1000);};
+}
+function reload(){if(ws&&ws.readyState===1)ws.send('{"type":"get"}');}
+function save(){const o={type:'set'};
+ document.querySelectorAll('#f input').forEach(i=>o[i.name]=parseFloat(i.value));
+ if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
+function calib(){if(confirm("Lancer la calibration ? Appuyer à FOND sur l'accélérateur, puis relâcher.")
+   &&ws&&ws.readyState===1)ws.send('{"type":"calibrate"}');}
+function reboot(){if(confirm("Redémarrer le système ? Il redémarrera DÉSARMÉ.")
+   &&ws&&ws.readyState===1)ws.send('{"type":"reboot"}');}
+function showWifi(m){
+ const e=document.querySelector('#wf [name=ssid]'); if(e&&document.activeElement!==e)e.value=m.ssid||'';
+ const c=document.querySelector('#wf [name=enabled]'); if(c&&document.activeElement!==c)c.checked=!!m.enabled;
+ document.getElementById('wifistatus').textContent=
+  `Mode station : ${m.enabled?'activé':'désactivé'}\nRéseau enregistré : ${m.ssid||'(aucun)'}\n`+
+  `Connecté : ${m.connected?'OUI':'non'}\nIP station : ${m.ip}`;
+}
+function loadWifi(){if(ws&&ws.readyState===1)ws.send('{"type":"wifiget"}');}
+function loadSys(){if(ws&&ws.readyState===1)ws.send('{"type":"sysinfo"}');}
+function upt(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
+ return (d?d+'j ':'')+h+'h '+m+'m '+(s%60)+'s';}
+function showSys(m){
+ const r=(k,v)=>`<tr><th>${k}</th><td>${v??'—'}</td></tr>`;
+ document.getElementById('systbl').innerHTML=
+  r('Firmware (commit)',m.fw_ver)+r('Projet',m.fw_proj)+r('Compilé le',m.fw_date)+r('ESP-IDF',m.idf)+
+  r('Puce',`${m.chip} rev ${m.rev} · ${m.cores} cœurs · ${m.flash_mb} Mo flash`)+
+  r('Uptime',upt(m.uptime_s))+r('Cause du dernier reset',m.reset)+
+  r('Heap libre',`${(m.heap_free/1024).toFixed(1)} ko (min ${(m.heap_min/1024).toFixed(1)} ko)`)+
+  r('MAC point d\'accès',m.mac_ap)+r('MAC station',m.mac_sta)+
+  r('AP — SSID',m.ap_ssid)+r('AP — IPv4',m.ip_ap)+r('AP — IPv6',m.ip6_ap||'(aucune)')+
+  r('Station — activée',m.sta_en?'oui':'non')+r('Station — SSID',m.sta_ssid||'(aucun)')+
+  r('Station — connectée',m.sta_conn?'OUI':'non')+
+  r('Station — IPv4',m.ip_sta)+r('Station — IPv6',m.ip6_sta||'(aucune)');
+}
+function saveWifi(){
+ const ssid=document.querySelector('#wf [name=ssid]').value;
+ const pass=document.querySelector('#wf [name=pass]').value;
+ const enabled=document.querySelector('#wf [name=enabled]').checked;
+ if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'wifiset',ssid:ssid,pass:pass,enabled:enabled}));
+ if(confirm("Enregistré. Redémarrer maintenant pour appliquer ?")
+   &&ws&&ws.readyState===1)ws.send('{"type":"reboot"}');
+}
+buildLegend();buildBars();buildInds();connect();
+</script></body></html>

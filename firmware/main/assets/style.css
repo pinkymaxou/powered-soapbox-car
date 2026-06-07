@@ -1,0 +1,84 @@
+:root{
+ --bg:#0e1116; --card:#171c24; --card2:#1f2630; --line:#2c333f;
+ --txt:#e7ecf3; --muted:#9aa7b8; --accent:#3da9fc; --green:#34d399;
+ --amber:#f59e0b; --red:#ef4444;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+header{
+ background:linear-gradient(90deg,#143055,#0e1116);
+ padding:16px 20px;font-size:22px;font-weight:700;letter-spacing:.3px;
+ border-bottom:1px solid var(--line);
+ display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.hdr-state{font-size:14px;font-weight:700;padding:5px 12px;border-radius:999px;
+ background:#333;color:#fff;white-space:nowrap}
+.hdr-state.s0{background:#64748b}                       /* IDLE (désarmé) */
+.hdr-state.s1{background:var(--accent);color:#06121f}   /* calibration */
+.hdr-state.s2{background:var(--green);color:#04210f}    /* armé */
+.hdr-state.s3{background:var(--red);animation:blink 1s steps(2,start) infinite} /* défaut */
+@keyframes blink{50%{opacity:.35}}
+
+/* Onglets */
+.tabs{display:flex;gap:4px;padding:10px 16px 0;background:var(--bg);
+ position:sticky;top:0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tab{background:transparent;color:var(--muted);border:0;border-bottom:3px solid transparent;
+ padding:10px 16px;font-size:15px;cursor:pointer;border-radius:8px 8px 0 0}
+.tab:hover{color:var(--txt);background:var(--card)}
+.tab.active{color:var(--txt);border-bottom-color:var(--accent);background:var(--card)}
+
+.wrap{padding:16px;max-width:600px;margin:auto}
+.panel{animation:fade .2s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+
+/* Graphiques */
+#chart,#battchart{width:100%;height:auto;background:#000;border:1px solid var(--line);border-radius:10px}
+.chart-title{font-size:13px;color:var(--muted);font-weight:600;margin:10px 0 4px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:8px 0;font-size:13px}
+.legend span{font-weight:600}
+
+/* Barres de progression (accél / PWM / vitesse / batterie) */
+#bars{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0}
+.bar{margin:9px 0}
+.bar .lbl{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:4px}
+.bar .lbl span:last-child{color:var(--txt);font-family:ui-monospace,Menlo,Consolas,monospace}
+.bar .track{height:16px;background:var(--card2);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.bar .fill{height:100%;width:0;border-radius:9px 0 0 9px;transition:width .15s ease}
+
+/* Indicateurs (boutons / sorties) */
+#ind{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.pill{font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;
+ background:var(--card2);color:var(--muted);border:1px solid var(--line);transition:.15s}
+.pill.on{background:var(--green);color:#04210f;border-color:transparent}
+
+/* Bloc d'état */
+.status{background:var(--card);border:1px solid var(--line);border-radius:12px;
+ padding:14px 16px;font-family:ui-monospace,Menlo,Consolas,monospace;
+ font-size:13px;line-height:1.55;white-space:pre-wrap;margin:12px 0}
+
+/* Formulaire de configuration */
+form{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 14px;margin:12px 0}
+label{display:flex;justify-content:space-between;align-items:center;gap:12px;
+ padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px;color:var(--muted)}
+label:last-child{border-bottom:0}
+input{width:120px;background:var(--card2);color:var(--txt);border:1px solid var(--line);
+ border-radius:8px;padding:7px 9px;font-size:14px;text-align:right}
+input:focus{outline:none;border-color:var(--accent)}
+
+/* Boutons */
+.row{display:flex;gap:10px;flex-wrap:wrap}
+button{background:var(--accent);color:#06121f;border:0;border-radius:10px;
+ padding:11px 18px;font-size:15px;font-weight:700;margin:6px 0;cursor:pointer;transition:filter .15s}
+button:hover{filter:brightness(1.1)}
+button.alt{background:var(--card2);color:var(--txt);border:1px solid var(--line)}
+button.warn{background:var(--amber);color:#241a00}
+button.danger{background:var(--red);color:#2a0606}
+
+/* Tableau de brochage */
+table.pins{width:100%;border-collapse:collapse;background:var(--card);
+ border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:14px}
+table.pins th,table.pins td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line)}
+table.pins th{background:var(--card2);color:var(--accent);font-weight:700}
+table.pins tr:last-child td{border-bottom:0}
+table.pins td:first-child{font-family:ui-monospace,monospace;color:var(--green);width:60px;text-align:center}
+.note{color:var(--muted);font-size:13px;line-height:1.5;margin-top:12px}
