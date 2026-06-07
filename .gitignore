@@ -1,0 +1,7 @@
+# Fiches techniques et photos de référence (conservées en local)
+doc/datasheet/
+doc/*.jpg
+doc/*.jpeg
+
+# Environnement Python pour les schémas (schemdraw)
+.venv-schem/
