@@ -22,6 +22,13 @@ This document outlines the coding style for the `oe-heatgrip-gdo` projects.
 > - **Incorrect**: `bool b_is_active`, `uint32_t u32_count`, `char* sz_name`, `void* p_data`.
 > - **Correct**: `bool is_active`, `uint32_t count`, `char* name`, `void* data`.
 
+## Const Correctness
+
+- **Always mark a variable `const` if it never changes after initialization.** This applies to local variables, parameters passed by reference/pointer, and member functions that don't mutate state.
+  - **Correct**: `const int count = readCount();`, `const KartConfig cfg = configSnapshot();`, `void print() const;`.
+  - **Incorrect**: `int count = readCount();` when `count` is never reassigned.
+- Prefer `constexpr` over `const` for values known at compile time.
+
 ## Conditions
 
 - **Yoda conditions**: Place the constant on the left side of comparisons to prevent accidental assignment.

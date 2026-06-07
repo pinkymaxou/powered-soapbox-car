@@ -47,6 +47,7 @@ la table de paramètres, persisté en flash. Calibration : déclenchée via le w
 
 Deux tâches : **`control`** (cœur 1, 500 Hz, watchdog 5 s) et **`leds`** (cœur 0, ~20 Hz).
 Elles partagent `g_cfg` (mutex) et `g_status` (atomics). FreeRTOS tourne à **1000 Hz**.
+Priorités / cœurs / piles dans [`main/rtos.hpp`](main/rtos.hpp) — détail (+ tâches IDF) : [`../doc/firmware-tasks.md`](../doc/firmware-tasks.md).
 
 ## Boucle de contrôle (500 Hz)
 

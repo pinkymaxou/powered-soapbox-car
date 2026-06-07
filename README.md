@@ -10,7 +10,7 @@ Projet de construction d'un **kart électrique biplace** pour enfants (~10 ans, 
 - [En bref](#en-bref) · [Pourquoi ces choix](#pourquoi-ces-choix)
 - [1. Dimensions du châssis](#1-dimensions-du-châssis)
 - [2. Position siège / pédales](#2-position-siège--pédales)
-- [3. Direction à charnière de porte](#3-direction-à-charnière-de-porte)
+- [3. Direction (2 pentures + bielle)](#3-direction-à-deux-pentures-un-pivot-par-roue--bielle)
 - [4. Matériel & électronique](#4-matériel--électronique)
   - [Propulsion (2 moteurs)](#propulsion--2-moteurs-cc-12-v) · [Commande ESP32](#commande-électronique--esp32) · [Capteur AS5600](#capteur-de-vitesse-as5600-sur-i²c) · [Calibration](#calibration-de-laccélérateur)
   - [Sécurité électrique](#sécurité-électrique) · [Câblage & brochage](#schéma-de-câblage--brochage-esp32) · [Schéma système](#schéma-système-complet-tous-les-connecteurs)
@@ -27,13 +27,13 @@ Projet de construction d'un **kart électrique biplace** pour enfants (~10 ans, 
 
 ```mermaid
 flowchart TB
-    subgraph AV["◄ AVANT ► — direction (charnière de porte)"]
+    subgraph AV["◄ AVANT ► — direction (2 pentures + bielle)"]
         direction LR
-        AVG["🛞 roue AV G"]
+        AVG["🛞 roue AV G<br/>(penture = pivot)"]
         VOL["🎡 volant<br/>(déporté gauche)"]
-        PIV(["pivot central"])
-        AVD["🛞 roue AV D"]
-        AVG ~~~ VOL ~~~ PIV ~~~ AVD
+        BIE(["bielle d'accouplement"])
+        AVD["🛞 roue AV D<br/>(penture = pivot)"]
+        AVG ~~~ VOL ~~~ BIE ~~~ AVD
     end
     subgraph CAB["HABITACLE — banquette unique 2 places (~80 cm)"]
         direction LR
@@ -77,7 +77,7 @@ flowchart TB
 | Élément | Choix |
 |---|---|
 | **Places** | 2, banquette unique côte à côte ; **conducteur à gauche** |
-| **Direction** | Essieu avant **pivotant central** sur **charnière de porte** ; **volant déporté à gauche** |
+| **Direction** | **2 pentures de porte** (un pivot par roue) reliées par une **bielle d'accouplement** ; **volant déporté à gauche** |
 | **Propulsion** | **2 moteurs CC 12 V (~172 W / 0,23 HP)** (un par roue arrière) — **même PWM aux deux** |
 | **Transmission** | Réducteurs **imprimés 3D 1:16** + **poulies vissées sur les roues + courroies** |
 | **Roues** | 4 × **Ø30 cm (12")**, jante plastique, roulement 1/2", à roulement libre |
@@ -159,7 +159,7 @@ flowchart LR
 flowchart TB
     subgraph AV["AVANT"]
         RAVG["🛞 AV gauche"]
-        PIV(["pivot central<br/>(charnière)"])
+        PIV(["2 pentures + bielle"])
         RAVD["🛞 AV droite"]
         RAVG --- PIV --- RAVD
     end
@@ -185,66 +185,70 @@ flowchart TB
 
 ---
 
-## 3. Direction à charnière de porte
+## 3. Direction à deux pentures (un pivot par roue) + bielle
 
-### Choix retenu : **essieu avant pivotant central** (pas de fusées/kingpins)
+### Choix retenu : **deux pivots de roue (style fusées), chaque penture = un axe de pivot**
 
-Une charnière de porte pivote autour d'**un seul axe vertical** : c'est exactement le principe de l'**essieu pivotant central** (toute la traverse avant tourne d'un bloc). Les fusées/kingpins demandent **deux** pivots + une tringlerie de parallélisme : trop complexe pour des outils basiques. Le pivot central est **simple, solide, robuste**.
+**Chaque roue avant pivote sur sa propre penture de porte** (la penture posée à plat = l'**axe de pivot vertical** de cette roue). Une **bielle d'accouplement (tie rod)** relie les **bras des deux roues** pour qu'elles tournent **ensemble**. La **traverse avant reste FIXE** sur le châssis (elle ne tourne pas d'un bloc) → centre de gravité et géométrie plus stables qu'un pivot central unique.
 
 ```mermaid
 flowchart TD
-    subgraph AVANT["AVANT du kart"]
-        RG["🛞 Roue AV gauche"]
-        TM["TRAVERSE AVANT MOBILE<br/>planche 60×10×2 cm"]
-        RD["🛞 Roue AV droite"]
-        RG --- TM --- RD
+    subgraph AVANT["TRAVERSE AVANT FIXE (vissée au châssis)"]
+        PG(["penture gauche<br/>= pivot roue G"])
+        PD(["penture droite<br/>= pivot roue D"])
     end
-    CH(["CHARNIÈRE posée à plat<br/>= axe de pivot vertical"])
-    PF["PLATINE FIXE<br/>vissée sur le nez du châssis"]
-    TM -- "aile vissée dessus" --> CH
-    CH -- "aile vissée dessous" --> PF
+    RG["🛞 Roue AV gauche<br/>(sur fusée + bras)"]
+    RD["🛞 Roue AV droite<br/>(sur fusée + bras)"]
+    BIE["BIELLE d'accouplement (tie rod)<br/>relie les 2 bras → roues parallèles"]
+
+    PG -- "aile fixe vissée sur la traverse" --- AVANT
+    PD -- "aile fixe vissée sur la traverse" --- AVANT
+    PG -- "aile mobile" --> RG
+    PD -- "aile mobile" --> RD
+    RG -- "bras de fusée G" --- BIE
+    RD -- "bras de fusée D" --- BIE
 
     classDef mobile fill:#cfe2ff,stroke:#333,stroke-width:2px;
-    classDef fixe fill:#e2e3e5,stroke:#333;
     classDef pivot fill:#fff3cd,stroke:#333,stroke-width:2px;
-    class TM mobile;
-    class PF fixe;
-    class CH pivot;
+    classDef link fill:#d1e7dd,stroke:#333;
+    class RG,RD mobile;
+    class PG,PD pivot;
+    class BIE link;
 ```
 
-1. **Traverse avant mobile** : planche solide (chêne/multiplis 2 cm, 60 × 10 cm) portant les 2 roues avant.
-2. **Platine pivot fixe** : planche identique boulonnée sur le nez du châssis.
-3. **Charnière posée à plat** entre les deux, **au centre exact** ; l'axe de la charnière = axe de pivot.
-4. **Renfort tige verticale** : boulon long (M10) traversant le centre **en plus** de la charnière → reprend les efforts verticaux, empêche l'arrachement.
+1. **Traverse avant fixe** : planche solide boulonnée au nez du châssis ; elle ne bouge pas.
+2. **Une penture par roue**, posée à plat : **aile fixe** vissée sur la traverse, **aile mobile** solidaire de la **fusée** (support de roue) → la roue pivote autour de l'axe de la penture.
+3. **Renfort** : un **boulon vertical (M10)** dans l'axe de chaque penture reprend les efforts verticaux (anti-arrachement).
+4. **Bras de fusée** : une patte métal sur chaque fusée, vers l'arrière.
+5. **Bielle d'accouplement** : barre/tige filetée reliant les **deux bras** (rotules boulon + nylstop à chaque bout) → les deux roues tournent **du même angle** (braquage parallèle ; arms légèrement inclinés = ébauche d'Ackermann).
 
-> **Variante plus rigide :** deux charnières empilées dos à dos sur le même axe → double la surface de fixation.
-
-### Liaison volant → essieu
+### Liaison volant → roues
 
 ```mermaid
 flowchart TD
     V["🎡 Volant"]
     C["Colonne<br/>tube acier Ø20, 2 paliers"]
     P["Bras Pitman<br/>plaque 10 cm"]
-    B["Bielle<br/>tige filetée M8 / barre plate"]
-    T["Point déporté sur<br/>TRAVERSE MOBILE"]
+    DL["Barre d'attaque (drag link)"]
+    BG["Bras de fusée GAUCHE"]
+    BIE["BIELLE d'accouplement"]
+    BD["Bras de fusée DROITE"]
 
     V --> C --> P
-    P -- "rotule (boulon + nylstop)" --> B
-    B -- "rotule (boulon + nylstop)" --> T
+    P -- "rotule (boulon + nylstop)" --> DL
+    DL -- "rotule" --> BG
+    BG -- "tie rod" --- BIE --- BD
 
     classDef cmd fill:#d1e7dd,stroke:#333;
     classDef mobile fill:#cfe2ff,stroke:#333,stroke-width:2px;
-    class V,C,P cmd;
-    class T mobile;
+    class V,C,P,DL cmd;
+    class BG,BD,BIE mobile;
 ```
 
-- **Colonne** : tube acier Ø20 mm, tenu par 2 supports vissés au châssis.
-- **Bras Pitman** : plaque métal (10 cm) en bas de colonne, balaye gauche/droite.
-- **Bielle** : tige filetée / barre plate reliant le bras Pitman à un point **décalé** de la traverse mobile.
-- **Rotules improvisées** : boulon + écrou nylstop serré « juste assez » (rondelles), articulation qui ne se desserre pas.
-
-**Déport à gauche :** le **pivot central reste au milieu** de la traverse (géométrie inchangée) ; seule la **colonne est montée à gauche** devant le conducteur, bielle un peu plus longue/oblique. Régler la longueur pour que **roues droites = volant centré**.
+- **Colonne** (tube Ø20, 2 paliers) → **bras Pitman** en bas qui balaye gauche/droite.
+- Une **barre d'attaque (drag link)** relie le bras Pitman au **bras de fusée gauche** ; la **bielle d'accouplement** transmet à la roue droite → les deux roues braquent ensemble.
+- **Rotules improvisées** : boulon + écrou **nylstop** serré « juste assez » (rondelles) à chaque articulation.
+- **Déport à gauche** : la colonne est montée à gauche devant le conducteur ; on attaque le **bras de fusée gauche** (le plus proche). Régler les longueurs pour **roues droites = volant centré**.
 
 ---
 
@@ -258,9 +262,10 @@ flowchart TD
 | | Plancher | Contreplaqué **6 mm**, ~140 × 90 cm, soutenu par la grille |
 | | Assise (zone chargée) | Contreplaqué **12 mm** sous la banquette |
 | | Support pivot / dossier | Bloc bois dur + **platine anti-arrachement** ; dossier CP 6 mm |
-| **Direction** | Charnière(s) de porte | Acier, **lame ≥ 10 cm**, 1 (ou 2 empilées) |
-| | Boulon de pivot central | **M10 × 80**, écrou nylstop, grosses rondelles |
-| | Colonne | Tube acier Ø20 mm + bras Pitman + bielle |
+| **Direction** | **2 pentures de porte** (un pivot par roue) | Acier, **lame ≥ 10 cm** |
+| | 2 axes de pivot (un par penture) | **M10 × 80**, écrou nylstop, grosses rondelles |
+| | 2 fusées + bras + **bielle d'accouplement** | barre/tige filetée M8, rotules boulon+nylstop |
+| | Colonne | Tube acier Ø20 mm + bras Pitman + barre d'attaque |
 | **Roues** | ×4 identiques | **Ø30 cm (12")**, jante plastique + pneu PVC, roulement 1/2" |
 | | Boulons à épaulement | **Fournis avec les roues** (épaulement 1/2", filetage 3/8") |
 | **Propulsion** | 2 moteurs CC **12 V** | ~172 W (0,23 HP), 19,6 A, 4615 tr/min ; un par roue AR |
@@ -598,8 +603,8 @@ flowchart TB
 ## 5. Points critiques de sécurité (enfant)
 
 - ⚠️ **Anti-basculement** : respecter **voie large (84 cm)** + assise basse (16 cm). Ne pas surélever le siège ; garder batterie et moteurs bas.
-- ⚠️ **Butées de braquage** : deux taquets limitant la rotation de la traverse (~25° max/côté).
-- ⚠️ **Fixation du pivot** : charnière vissée **+ boulon M10 traversant** + nylstop + **patte anti-arrachement**.
+- ⚠️ **Butées de braquage** : deux taquets limitant le débattement des roues (~25° max/côté).
+- ⚠️ **Fixation des 2 pivots** : chaque penture vissée **+ boulon M10 traversant** + nylstop + **patte anti-arrachement** ; **bielle** avec rotules nylstop bien serrées (jamais de jeu).
 - ⚠️ **Axes de roue sécurisés** : nylstop + **goupille/rondelle d'arrêt**.
 - ⚠️ **Carter courroies/poulies** : pas de doigts/lacets/vêtements happés.
 - ⚠️ **Angles arrondis**, ponçage anti-échardes, têtes de boulons fraisées/capuchonnées côté enfant.
@@ -663,7 +668,7 @@ flowchart LR
 
 **Phase 2 — Roues + essieux.** 4 roues Ø30 sur **boulons à épaulement** (perçage 3/8"), tournent **libres**. ✅ *Voie 84 cm, rien ne frotte.*
 
-**Phase 3 — Direction.** Charnière pivot central + boulon traversant + platine anti-arrachement ; colonne déportée gauche + bras Pitman + bielle ; **roues droites = volant centré** + butées ~25°. ✅ *Direction franche, sans jeu.*
+**Phase 3 — Direction.** **2 pentures** (un pivot par roue) sur traverse fixe + boulon M10 traversant chacune ; **fusées + bras + bielle d'accouplement** ; colonne déportée gauche + bras Pitman + barre d'attaque sur la fusée gauche ; **roues droites = volant centré** + butées ~25°. ✅ *Direction franche, sans jeu, les 2 roues braquent ensemble.*
 
 **Phase 4 — Transmission.** Poulie vissée sur chaque roue AR (grandes rondelles / contre-platine) ; réducteurs 3D + moteurs sur supports renforcés ; courroies + réglage tension + carter. ✅ *Sans courant : tout tourne à la main.*
 
@@ -684,6 +689,7 @@ flowchart LR
 Code ESP-IDF 6.1 (C++) dans [`firmware/`](firmware/) — détails dans [`firmware/README.md`](firmware/README.md).
 
 - **Boucle de contrôle 500 Hz** (FreeRTOS 1000 Hz) : accélérateur = PWM direct (rampé, plafonné ~50 %), **frein PID** vers 0, **limiteur de vitesse** PID, vitesse par **AS5600** (I²C). Machine à états, armement, **LVC** anti-sag, **watchdog**, **latch d'alimentation** (POWER_HOLD).
+- **Tâches FreeRTOS** (priorité / cœur / pile) : voir [`doc/firmware-tasks.md`](doc/firmware-tasks.md) ; constantes dans [`firmware/main/rtos.hpp`](firmware/main/rtos.hpp).
 - **Wi-Fi AP + station**, **IPv6** (link-local + SLAAC), serveur **WebSocket** : tableau de bord (graphiques, barres, pastilles), configuration live, calibration, Wi-Fi, brochage, et **page Système** (commit firmware, uptime, MAC, IP v4/v6, heap, chip, IDF).
 - Build : `cd firmware && idf.py build flash monitor`.
 

@@ -5,6 +5,7 @@
 
 #include "config.hpp"
 #include "pinout.hpp"
+#include "rtos.hpp"
 #include "ws2812.hpp"
 
 #include "freertos/FreeRTOS.h"
@@ -91,5 +92,6 @@ void ledsTask(void*)
 
 void ledsStart()
 {
-    xTaskCreatePinnedToCore(ledsTask, "leds", 3072, nullptr, 3, nullptr, 0);
+    xTaskCreatePinnedToCore(ledsTask, rtos::LEDS.name, rtos::LEDS.stack, nullptr,
+                            rtos::LEDS.prio, nullptr, rtos::LEDS.core);
 }
