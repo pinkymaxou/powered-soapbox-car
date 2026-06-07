@@ -1,0 +1,31 @@
+# Réglages par défaut du projet (cible ESP32)
+CONFIG_IDF_TARGET="esp32"
+
+# Boucle de contrôle à 500 Hz → tick FreeRTOS à 1 kHz
+CONFIG_FREERTOS_HZ=1000
+
+# IPv6 : pile activée + autoconfig SLAAC (adresse globale en plus du link-local)
+CONFIG_LWIP_IPV6=y
+CONFIG_LWIP_IPV6_AUTOCONFIG=y
+
+# Taille réelle de la flash de la carte (ESP32-WROOM 4 Mo)
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# Place pour Wi-Fi + serveur HTTP
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# Support WebSocket dans le serveur HTTP
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# Watchdog de tâche : 5 s. La boucle de contrôle s'y abonne et le réarme ;
+# si elle se bloque > 5 s, le panic déclenché redémarre l'ESP32.
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+# Sur panic (dont watchdog) → redémarrage automatique
+CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT=y
+
+# C++ : pas d'exceptions/RTTI (taille)
+CONFIG_COMPILER_CXX_EXCEPTIONS=n
+CONFIG_COMPILER_CXX_RTTI=n

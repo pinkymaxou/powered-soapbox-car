@@ -1,0 +1,28 @@
+idf_component_register(
+    SRCS
+        "main.cpp"
+        "controller.cpp"
+        "hardware.cpp"
+        "leds.cpp"
+        "config.cpp"
+        "webserver.cpp"
+        "ws2812.cpp"
+    INCLUDE_DIRS "."
+    EMBED_TXTFILES
+        "assets/index.html"
+        "assets/style.css"
+    REQUIRES
+        esp_driver_gpio
+        esp_driver_ledc
+        esp_driver_i2c
+        esp_driver_rmt
+        esp_adc
+        esp_app_format
+        spi_flash
+        nvs_flash
+        esp_timer
+        esp_wifi
+        esp_event
+        esp_netif
+        esp_http_server
+)
