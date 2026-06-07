@@ -352,7 +352,7 @@ throttle% = clamp( (brut − MIN − zone_morte) / (MAX − marge − MIN), 0 �
 
 **Sécurités liées :**
 - **Détection de défaut** : lecture **hors plage** attendue (fil coupé / pot débranché → 0 ou valeur flottante) → **throttle forcé à 0** + alerte.
-- **Anti-démarrage pédale enfoncée** : au cycle clé, si la pédale n'est pas au repos → **refuse de rouler** tant qu'elle n'est pas revenue à 0 (anti-emballement, comme une voiture).
+- **Anti-démarrage pédale enfoncée** : à la mise sous tension, si la pédale n'est pas au repos → **refuse de rouler** tant qu'elle n'est pas revenue à 0 (anti-emballement, comme une voiture).
 - **Calibration invalide** : si `MAX − MIN` trop faible → on garde des **valeurs par défaut sûres** / on refuse de rouler.
 - Calibration déclenchée **via l'interface web uniquement** (pas de bouton) ; guidage par **LED** pour les étapes.
 
@@ -528,7 +528,7 @@ flowchart LR
 **Dimensionnement (pont 100 k / 15 k) :**
 - Rapport = 15 / (100+15) = **0,130** → à 21 V, l'ADC voit **2,74 V** (sous 3,3 V ✔). À 15 V → 1,96 V.
 - Reconstruction firmware : **Vbat = V_adc × 7,67** (à **calibrer** avec un multimètre).
-- Courant de fuite du pont ≈ **0,18 mA** (négligeable ; brancher le pont sur le **rail commuté par la clé** pour zéro fuite à l'arrêt).
+- Courant de fuite du pont ≈ **0,18 mA** (négligeable ; sa masse de retour étant **commutée par le latch low-side**, le pont ne consomme **rien à l'arrêt**).
 - **Cap 0,1 µF** entre le nœud et GND : stabilise l'échantillonnage de l'ADC + filtre le bruit moteur. Possible **zener 3,3 V** sur l'entrée en sécurité anti-surtension.
 
 **Seuils (pack 5S Li-ion, classe 18 V / « 20 V max » — nombre de cellules réglable dans la config, défaut 5) :**
@@ -544,7 +544,7 @@ flowchart LR
 **Précautions firmware :**
 - **Moyenner** plusieurs lectures + **anti-rebond (~0,5 s)** : la tension **chute sous charge** (sag), il ne faut pas couper sur un creux momentané — distinguer un vrai épuisement d'un sag transitoire.
 - Couper **avant** le seuil dur du BMS du pack (qui coupe net) : la LVC ESP32 est une protection **plus douce et plus précoce**.
-- À la coupure : ramener le PWM à 0 **en douceur** si possible, puis exiger un cycle clé pour repartir.
+- À la coupure : ramener le PWM à 0 **en douceur** si possible, puis exiger un **réarmement** (bouton START) pour repartir.
 
 ### 🔋🔋 Montage 2 batteries en parallèle (sécurisé)
 
