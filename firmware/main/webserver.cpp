@@ -67,8 +67,6 @@ std::atomic<bool>  m_sta_connected{false};
 char               m_sta_ip[16] = "0.0.0.0";
 esp_netif_t*       m_netif_ap = nullptr;
 esp_netif_t*       m_netif_sta = nullptr;
-char               m_sta_ip6[48] = "";    // IPv6 link-local / global de la station
-char               m_ap_ip6[48] = "";     // IPv6 link-local du point d'accès
 
 // Reconnexion STA temporisée (évite de boucler trop vite).
 void staRetryCb(void*)
@@ -95,7 +93,6 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
     {
         m_sta_connected = false;
         std::strcpy(m_sta_ip, "0.0.0.0");
-        m_sta_ip6[0] = '\0';
         if (m_sta_retry)
         {
             esp_timer_start_once(m_sta_retry, static_cast<int64_t>(STA_RETRY_MS) * 1000);   // 5 s
@@ -113,9 +110,6 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
         auto* ev = static_cast<ip_event_got_ip6_t*>(data);
         char buf[48];
         snprintf(buf, sizeof(buf), IPV6STR, IPV62STR(ev->ip6_info.ip));
-        // L'interface AP et l'interface STA reçoivent chacune leur link-local.
-        if (m_netif_sta && ev->esp_netif == m_netif_sta) std::strcpy(m_sta_ip6, buf);
-        else if (m_netif_ap && ev->esp_netif == m_netif_ap) std::strcpy(m_ap_ip6, buf);
         ESP_LOGI(TAG, "IPv6 (%s) : %s",
                  (m_netif_ap && ev->esp_netif == m_netif_ap) ? "AP" : "STA", buf);
     }
@@ -280,6 +274,37 @@ const char* resetReasonStr(esp_reset_reason_t r)
     }
 }
 
+const char* ip6TypeStr(int t)
+{
+    switch (t)
+    {
+        case ESP_IP6_ADDR_IS_LINK_LOCAL:        return "link-local";
+        case ESP_IP6_ADDR_IS_GLOBAL:            return "global";
+        case ESP_IP6_ADDR_IS_UNIQUE_LOCAL:      return "unique-local";
+        case ESP_IP6_ADDR_IS_SITE_LOCAL:        return "site-local";
+        case ESP_IP6_ADDR_IS_IPV4_MAPPED_IPV6:  return "ipv4-mapped";
+        default:                                return "autre";
+    }
+}
+
+// Toutes les adresses IPv6 d'une interface (link-local + SLAAC…) en tableau JSON.
+std::string ip6ArrayJson(esp_netif_t* netif)
+{
+    if (!netif) return "[]";
+    esp_ip6_addr_t a[5];
+    int n = esp_netif_get_all_ip6(netif, a);
+    std::string out = "[";
+    for (int i = 0; i < n; ++i)
+    {
+        char b[96];
+        snprintf(b, sizeof(b), "%s{\"addr\":\"" IPV6STR "\",\"type\":\"%s\"}",
+                 i ? "," : "", IPV62STR(a[i]), ip6TypeStr(esp_netif_ip6_get_addr_type(&a[i])));
+        out += b;
+    }
+    out += "]";
+    return out;
+}
+
 // Infos système (page « Système ») : version/commit, uptime, MAC, IP v4/v6, heap, chip…
 std::string buildSysInfoJson()
 {
@@ -299,15 +324,15 @@ std::string buildSysInfoJson()
     bool sta_en = false;
     configGetWifi(ssid, sizeof(ssid), nullptr, 0, &sta_en);
 
-    char buf[900];
+    char buf[760];
     snprintf(buf, sizeof(buf),
         "{\"type\":\"sysinfo\","
         "\"fw_ver\":\"%s\",\"fw_proj\":\"%s\",\"fw_date\":\"%s %s\",\"idf\":\"%s\","
         "\"chip\":\"ESP32\",\"cores\":%d,\"rev\":%d,\"flash_mb\":%lu,"
         "\"uptime_s\":%lld,\"heap_free\":%lu,\"heap_min\":%lu,\"reset\":\"%s\","
         "\"mac_ap\":\"%s\",\"mac_sta\":\"%s\","
-        "\"ap_ssid\":\"%s\",\"ip_ap\":\"" IPSTR "\",\"ip6_ap\":\"%s\","
-        "\"sta_en\":%s,\"sta_ssid\":\"%s\",\"sta_conn\":%s,\"ip_sta\":\"%s\",\"ip6_sta\":\"%s\"}",
+        "\"ap_ssid\":\"%s\",\"ip_ap\":\"" IPSTR "\","
+        "\"sta_en\":%s,\"sta_ssid\":\"%s\",\"sta_conn\":%s,\"ip_sta\":\"%s\"",
         app ? app->version : "?", app ? app->project_name : "?",
         app ? app->date : "?", app ? app->time : "", app ? app->idf_ver : "?",
         chip.cores, chip.revision, static_cast<unsigned long>(flash_sz / (1024 * 1024)),
@@ -316,10 +341,15 @@ std::string buildSysInfoJson()
         static_cast<unsigned long>(esp_get_minimum_free_heap_size()),
         resetReasonStr(esp_reset_reason()),
         macStr(WIFI_IF_AP).c_str(), macStr(WIFI_IF_STA).c_str(),
-        AP_SSID, IP2STR(&ap_ip.ip), m_ap_ip6,
+        AP_SSID, IP2STR(&ap_ip.ip),
         sta_en ? "true" : "false", ssid,
-        m_sta_connected.load() ? "true" : "false", m_sta_ip, m_sta_ip6);
-    return buf;
+        m_sta_connected.load() ? "true" : "false", m_sta_ip);
+    // Toutes les adresses IPv6 de chaque interface (link-local + SLAAC…)
+    std::string out = buf;
+    out += ",\"ip6_ap\":"  + ip6ArrayJson(m_netif_ap);
+    out += ",\"ip6_sta\":" + ip6ArrayJson(m_netif_sta);
+    out += "}";
+    return out;
 }
 
 // Mini-parseur JSON plat (suffisant pour notre client contrôlé)

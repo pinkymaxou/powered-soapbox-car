@@ -26,13 +26,14 @@ constexpr int               PWM_MAX     = 4095;
 
 constexpr int ADC_OVERSAMPLE = 16;
 
-// Capteur d'angle AS5600 (I2C, 12 bits absolu = 4096 counts/tour). Monté sur l'ESSIEU/moyeu
-// → mesure DIRECTE de la vitesse roue (GEAR_RATIO = 1). Alim 3,3 V natif → AUCUN level-shift.
-// Vitesse = dérivée de l'angle (Δcounts × CTRL_HZ) avec gestion du wrap 0↔4095 ; le SIGNE de Δ
-// donne le sens. À 500 Hz, ~39 counts/échantillon sur l'essieu : aucune ambiguïté.
+// Capteur d'angle AS5600 (I2C, 12 bits absolu = 4096 counts/tour). Cinématique CONNUE :
+// AS5600 = 1 tour / 16 tours moteur (= sortie gearbox), puis courroie 1:1 jusqu'à la roue
+// → le capteur tourne EXACTEMENT à la vitesse roue ⇒ GEAR_RATIO = 1. Roue 12" = 0,3048 m.
+// Alim 3,3 V natif → AUCUN level-shift. Vitesse = dérivée de l'angle (Δcounts × CTRL_HZ) avec
+// gestion du wrap 0↔4095 ; le SIGNE de Δ donne le sens. À 500 Hz : aucune ambiguïté.
 constexpr float AS5600_CPR    = 4096.0f;  // counts par tour (12 bits)
-constexpr float GEAR_RATIO    = 1.0f;     // capteur sur l'essieu → vitesse roue directe
-constexpr float WHEEL_DIAM_M  = 0.30f;
+constexpr float GEAR_RATIO    = 1.0f;     // capteur ≡ vitesse roue (gearbox 1:16 puis courroie 1:1)
+constexpr float WHEEL_DIAM_M  = 0.3048f;  // roue 12" (connue)
 
 constexpr int     I2C_FREQ_HZ       = 400000;  // Fast-mode (le capteur supporte jusqu'à 1 MHz)
 constexpr uint8_t AS5600_ADDR       = 0x36;    // adresse I2C fixe (un seul capteur par bus)

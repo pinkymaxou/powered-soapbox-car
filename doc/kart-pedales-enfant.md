@@ -315,7 +315,7 @@ flowchart LR
 
 ### 🔄 Capteur de vitesse (AS5600 sur I²C)
 
-Capteur d'angle **AS5600** : magnétique **sans contact**, **angle absolu 12 bits** (4096 points/tour) lu en **I²C**, avec un **aimant diamétral** collé en bout d'arbre. **Monté sur l'essieu/moyeu de roue** → il mesure **directement la vitesse roue** (pas de réduction à compenser, `GEAR_RATIO = 1`). Il sert à :
+Capteur d'angle **AS5600** : magnétique **sans contact**, **angle absolu 12 bits** (4096 points/tour) lu en **I²C**, avec un **aimant diamétral** collé en bout d'arbre. **Cinématique connue** : le capteur fait **1 tour pour 16 tours moteur** (= sortie du gearbox **1:16**), et la **courroie est 1:1** jusqu'à la roue → **le capteur tourne exactement à la vitesse de la roue** ⇒ `GEAR_RATIO = 1`, **roue 12″ = 0,3048 m**. La conversion vitesse est donc **entièrement déterminée** (plus de paramètre à mesurer). Il sert à :
 - **Mesurer la vitesse** → **limiteur de vitesse fiable** (mesure réelle, pas le duty PWM).
 - **Frein PID** : ramène la vitesse à **0** au relâché (sortie signée → peut **inverser le moteur**).
 - **Sens de rotation** : donné par le **signe de Δangle** (et la broche **DIR** fixe la convention CW/CCW).
@@ -327,7 +327,7 @@ Mise en œuvre :
 - **Lecture I²C** du registre **RAW ANGLE** (0x0C/0x0D, 12 bits) ; **vitesse = dérivée de l'angle** : `Δcounts × fréquence`, avec **gestion du wrap 0↔4095**.
 - **Boucle d'asservissement à 500 Hz** (FreeRTOS à 1000 Hz). À 500 Hz, sur l'essieu (~288 tr/min) on a ~**39 counts/échantillon** → **aucune ambiguïté** (et même sur l'arbre moteur à pleine vitesse, ~55°/échantillon resterait non ambigu).
 - **Adresse I²C fixe 0x36** → **un seul AS5600 par bus**. Pour un 2ᵉ capteur (réserve) : **2ᵉ bus I²C** (GPIO27/14 réservés) ou multiplexeur I²C.
-- **Montage mécanique** : aimant **diamétral** centré face à la puce, **entrefer ~0,5–3 mm**, bon centrage → support imprimé. La détection d'aimant intégrée (AGC) sert de diagnostic.
+- **Montage mécanique** : sur l'arbre tournant à la vitesse roue (sortie gearbox ou moyeu, équivalents car courroie 1:1) ; aimant **diamétral** centré face à la puce, **entrefer ~0,5–3 mm** → support imprimé. La détection d'aimant intégrée (AGC) sert de diagnostic.
 - Bus I²C **à l'écart de la puissance** (paire torsadée), **0,1 µF** sur l'alim du capteur, **GND commun**.
 
 > *Alternative envisagée : un encodeur incrémental en quadrature (type AMT103-V) — écarté car il s'alimente en 5 V (sorties ~4,2 V → level-shift obligatoire) et n'apporte pas l'angle absolu.*

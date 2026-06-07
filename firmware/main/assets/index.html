@@ -244,16 +244,17 @@ function upt(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.fl
  return (d?d+'j ':'')+h+'h '+m+'m '+(s%60)+'s';}
 function showSys(m){
  const r=(k,v)=>`<tr><th>${k}</th><td>${v??'—'}</td></tr>`;
+ const fmt6=a=>(a&&a.length)?a.map(x=>`${x.addr} <small>(${x.type})</small>`).join('<br>'):'(aucune)';
  document.getElementById('systbl').innerHTML=
   r('Firmware (commit)',m.fw_ver)+r('Projet',m.fw_proj)+r('Compilé le',m.fw_date)+r('ESP-IDF',m.idf)+
   r('Puce',`${m.chip} rev ${m.rev} · ${m.cores} cœurs · ${m.flash_mb} Mo flash`)+
   r('Uptime',upt(m.uptime_s))+r('Cause du dernier reset',m.reset)+
   r('Heap libre',`${(m.heap_free/1024).toFixed(1)} ko (min ${(m.heap_min/1024).toFixed(1)} ko)`)+
   r('MAC point d\'accès',m.mac_ap)+r('MAC station',m.mac_sta)+
-  r('AP — SSID',m.ap_ssid)+r('AP — IPv4',m.ip_ap)+r('AP — IPv6',m.ip6_ap||'(aucune)')+
+  r('AP — SSID',m.ap_ssid)+r('AP — IPv4',m.ip_ap)+r('AP — IPv6',fmt6(m.ip6_ap))+
   r('Station — activée',m.sta_en?'oui':'non')+r('Station — SSID',m.sta_ssid||'(aucun)')+
   r('Station — connectée',m.sta_conn?'OUI':'non')+
-  r('Station — IPv4',m.ip_sta)+r('Station — IPv6',m.ip6_sta||'(aucune)');
+  r('Station — IPv4',m.ip_sta)+r('Station — IPv6',fmt6(m.ip6_sta));
 }
 function saveWifi(){
  const ssid=document.querySelector('#wf [name=ssid]').value;

@@ -63,8 +63,9 @@ après 30 s sans accélérateur, anti-démarrage pédale enfoncée, détection d
 
 ## ⚠️ À ajuster avant la première mise en route
 
-Dans `config.hpp` (`namespace hw`, **hardcodé**) : `WHEEL_DIAM_M` (diamètre roue réel) — seul
-paramètre du capteur à confirmer (AS5600 sur l'essieu → `GEAR_RATIO = 1`, `AS5600_CPR = 4096`).
+Capteur de vitesse : cinématique **connue et hardcodée** dans `config.hpp` (`namespace hw`) —
+`AS5600_CPR = 4096`, `GEAR_RATIO = 1` (capteur 1:16 depuis le moteur + courroie 1:1 = vitesse roue),
+`WHEEL_DIAM_M = 0,3048` (roue 12″) → rien à mesurer, juste à **vérifier au banc**.
 Via la page web : calibrer l'accélérateur, ajuster `vbat_div_ratio` au multimètre,
 régler la limite de vitesse. Commencer **roues en l'air**, vitesse basse.
 
@@ -73,5 +74,6 @@ régler la limite de vitesse. Commencer **roues en l'air**, vitesse basse.
 **limiteur** `vmax_kp≈0,35`, `vmax_ki≈0,25`, `vmax_kd=0` (réglage IMC, λ≈0,5 s) ;
 **frein** `pid_kp≈0,10`, `pid_ki≈0,05`, `pid_kd≈0,003` (arrêt ferme sans plugging brutal).
 Le PID intègre `dt` → **passer de 100 à 500 Hz ne change pas Kp/Ki** ; garder **Kd petit**
-(dérivé plus bruité à 500 Hz). ⚠️ Valable **uniquement après calibration de `WHEEL_DIAM_M`**.
+(dérivé plus bruité à 500 Hz). La conversion vitesse étant désormais exacte, ces gains
+sont **directement applicables** (à affiner au banc selon le comportement réel).
 Voir aussi la section **« Limitations et risques connus »** du [README racine](../README.md).

@@ -146,9 +146,9 @@ Revue du projet — points à **traiter / valider avant tout usage réel**.
 - **Web non authentifié — par choix** : les enfants n'ont pas accès au Wi-Fi ; seul le mot de passe de l'AP protège l'accès (le changer reste recommandé). La **calibration** est désormais **verrouillée hors état désarmé/à l'arrêt**, et un appui maintenu sur START **désarme** en roulant.
 
 ### Firmware / capteurs
-- **Capteur de vitesse AS5600** (I²C, sur l'essieu, **angle 12 bits absolu**) : vitesse = dérivée de l'angle à **500 Hz** (FreeRTOS 1000 Hz), gestion du wrap 0↔4095 ; **3,3 V natif** (aucun level-shift). Constantes **hardcodées** (`AS5600_CPR`, `GEAR_RATIO = 1`, `WHEEL_DIAM_M`) — pas de réglage web.
+- **Capteur de vitesse AS5600** (I²C, **angle 12 bits absolu**) : vitesse = dérivée de l'angle à **500 Hz** (FreeRTOS 1000 Hz), gestion du wrap 0↔4095 ; **3,3 V natif** (aucun level-shift). Cinématique **connue** : capteur 1:16 depuis le moteur + courroie 1:1 → tourne à la vitesse roue ⇒ constantes **hardcodées** exactes (`AS5600_CPR = 4096`, `GEAR_RATIO = 1`, `WHEEL_DIAM_M = 0,3048` pour 12″). Pas de réglage web.
 - **Détection de panne capteur** (implémentée) : PWM actif (> 10 %) mais **0 rotation pendant > 1 s** → défaut `Encoder` (couvre aussi blocage moteur / courroie cassée).
-- **`WHEEL_DIAM_M` à confirmer** (diamètre réel sous charge) : seul paramètre qui reste à mesurer pour une vitesse affichée exacte (le capteur sur l'essieu mesure directement la roue → pas de rapport gearbox/poulie à régler).
+- **Conversion vitesse entièrement déterminée** — aucun paramètre cinématique à mesurer ; ne reste qu'à **vérifier finement** au banc (tour-mètre/GPS) que l'affichage colle au réel.
 - **Seuils de défaut accélérateur fixes** (`THR_FAULT_RAW_*`) : à ajuster selon la pédale, sinon faux défauts ou non-détection d'un fil coupé.
 - **Frein = PID vers vitesse 0** (lecture capteur ; sortie signée → peut **inverser le moteur**, *plugging*) : efficace mais **génère des pics de courant** (pas de régénération). S'appuie sur la limitation de courant du driver.
 
