@@ -55,9 +55,7 @@ constexpr int BTN_ACTIVE = 0;   // boutons pressés = niveau bas
 // Prévues pour évolutions ; le firmware ne les configure pas. Toutes en logique 3,3 V.
 //  - 2 entrées d'encodeur en quadrature A/B (3,3 V, signal direct). 35/36 = entrées seules
 //    (pas de pull-up interne → OK pour une sortie push-pull ; pull-up externe si open-collector).
-//  - 3 entrées de boutons supplémentaires (actives basses, pull-up). ⚠️ GPIO15 est un strapping
-//    pin (doit être HAUT au boot) → un bouton vers GND relâché au démarrage convient.
-//  - 1 sortie LED supplémentaire. ⚠️ GPIO5 est un strapping pin (peut pulser brièvement au boot).
+//  - 2 entrées de boutons supplémentaires (actives basses, pull-up interne).
 namespace future
 {
 constexpr gpio_num_t ENC1_A = GPIO_NUM_27;
@@ -66,8 +64,6 @@ constexpr gpio_num_t ENC2_A = GPIO_NUM_35;   // entrée seule
 constexpr gpio_num_t ENC2_B = GPIO_NUM_36;   // entrée seule
 constexpr gpio_num_t AUX_BTN_1 = GPIO_NUM_22;
 constexpr gpio_num_t AUX_BTN_2 = GPIO_NUM_23;
-constexpr gpio_num_t AUX_BTN_3 = GPIO_NUM_15;   // strapping
-constexpr gpio_num_t AUX_LED   = GPIO_NUM_5;    // strapping
 } // namespace future
 
 } // namespace pins

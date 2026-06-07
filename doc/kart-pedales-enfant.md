@@ -438,8 +438,7 @@ flowchart LR
 | **Réserves futures (câblées, non utilisées) — toutes en 3,3 V** | | | |
 | 27 / 14 | **Encodeur 1 — A / B** (réserve) | entrées | quadrature 3,3 V, signal direct |
 | 35 / 36 | **Encodeur 2 — A / B** (réserve) | entrées seules | quadrature 3,3 V (pull-up externe si open-collector) |
-| 22 / 23 / 15 | **3 boutons auxiliaires** (réserve) | entrées | actifs bas, pull-up ; ⚠️ GPIO15 = strapping (haut au boot) |
-| 5 | **LED auxiliaire** (réserve) | sortie | ⚠️ GPIO5 = strapping (peut pulser au boot) |
+| 22 / 23 | **2 boutons auxiliaires** (réserve) | entrées | actifs bas, pull-up interne |
 
 Alimentations : un **buck 20 V → 5 V (déjà disponible)** alimente l'**ESP32** (qui fabrique son **3,3 V via le régulateur de sa carte**) ; le **3,3 V** de l'ESP32 alimente le **capteur AS5600 (I²C)** et la pédale (capteur Hall) ; **+20 V** (rail commun, via fusibles) → driver. La **masse (−)** des packs est commutée par le **latch low-side** (2× MOSFET). **GND commun** à tout.
 
