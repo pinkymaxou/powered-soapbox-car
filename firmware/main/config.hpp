@@ -10,7 +10,10 @@
 #include "freertos/semphr.h"
 
 // Arrondi float → int (les champs entiers/bool sont stockés en float).
-inline int iround(float v) { return static_cast<int>(v < 0 ? v - 0.5f : v + 0.5f); }
+inline int iround(float v)
+{
+    return static_cast<int>(v < 0 ? v - 0.5f : v + 0.5f);
+}
 
 // ───────────────────────── Constantes matérielles (compile-time) ─────────────────────────
 namespace hw

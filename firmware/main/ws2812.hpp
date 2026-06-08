@@ -11,11 +11,17 @@ class Ws2812
 public:
     // Initialise le ruban sur `pin` avec `count` LEDs. brightness ∈ [0..255].
     void init(gpio_num_t pin, int count, uint8_t brightness = 64);
-    void setBrightness(uint8_t b) { m_brightness = b; }
+    void setBrightness(uint8_t b)
+    {
+        m_brightness = b;
+    }
     void setAll(uint8_t r, uint8_t g, uint8_t b);
     void setPixel(int i, uint8_t r, uint8_t g, uint8_t b);
     void show();                            // pousse le tampon vers le ruban
-    int  count() const { return m_count; }
+    int count() const
+    {
+        return m_count;
+    }
 
 private:
     rmt_channel_handle_t m_chan = nullptr;

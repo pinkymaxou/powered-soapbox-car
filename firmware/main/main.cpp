@@ -13,7 +13,7 @@ extern "C" void app_main()
 {
     board::powerLatch();   // EN PREMIER : tenir l'alimentation (le bouton externe est momentané)
 
-    esp_err_t nv = nvs_flash_init();
+    const esp_err_t nv = nvs_flash_init();
     if (ESP_ERR_NVS_NO_FREE_PAGES == nv || ESP_ERR_NVS_NEW_VERSION_FOUND == nv)
     {
         ESP_ERROR_CHECK(nvs_flash_erase());

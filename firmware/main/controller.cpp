@@ -39,8 +39,8 @@ inline float clampf(float v, float lo, float hi)
 // delta = Δcounts AS5600 (12 bits, 4096/tour) sur un tick. Capteur sur l'essieu → vitesse roue directe.
 float pulsesToKmh(int delta)
 {
-    float sensor_rps = (fabsf(static_cast<float>(delta)) / hw::AS5600_CPR) * hw::CTRL_HZ;
-    float wheel_rps  = sensor_rps / hw::GEAR_RATIO;
+    const float sensor_rps = (fabsf(static_cast<float>(delta)) / hw::AS5600_CPR) * hw::CTRL_HZ;
+    const float wheel_rps  = sensor_rps / hw::GEAR_RATIO;
     return wheel_rps * PI_F * hw::WHEEL_DIAM_M * 3.6f;
 }
 
@@ -68,8 +68,8 @@ void setState(State s, Fault f)
 
 float mapThrottle(int raw, const KartConfig& cfg)
 {
-    int mn = iround(cfg.thr_min_raw);
-    int mx = iround(cfg.thr_max_raw);
+    const int mn = iround(cfg.thr_min_raw);
+    const int mx = iround(cfg.thr_max_raw);
     if (mx <= mn)
     {
         return 0;
@@ -81,7 +81,7 @@ float mapThrottle(int raw, const KartConfig& cfg)
 
 void updateLVC(float vbat, const KartConfig& cfg)
 {
-    int64_t now = esp_timer_get_time();
+    const int64_t now = esp_timer_get_time();
     if (!m_lvc_tripped)
     {
         if (vbat < cfg.vbat_cut_v)
@@ -158,14 +158,14 @@ void calibrate(KartConfig base)
     board::motorsStop();
     ESP_LOGI(TAG, "CALIBRATION : appuyer à FOND sur l'accélérateur...");
     board::led(true);
-    int mx = sampleAvg(2500);
+    const int mx = sampleAvg(2500);
     ESP_LOGI(TAG, "  MAX=%d ; relâcher...", mx);
     for (int k = 0; k < 20; ++k)
     {
         board::ledToggle();
         waitMs(100);
     }
-    int mn = sampleAvg(2500);
+    const int mn = sampleAvg(2500);
     ESP_LOGI(TAG, "  MIN=%d", mn);
     board::led(false);
 
@@ -199,16 +199,16 @@ void tick()
     board::pollButtons();   // anti-rebond (une fois par tick)
 
     // Lectures
-    bool  start_btn = board::btnStart();
-    bool  rev_btn   = board::btnReverse();
-    int   thr_raw   = board::throttleRaw(hw::ADC_OVERSAMPLE);
-    float vbat      = board::vbatVolts(hw::ADC_OVERSAMPLE) * cfg.vbat_div_ratio;
-    float spd = pulsesToKmh(board::encLeftDelta());   // AS5600 sur l'essieu (I2C) — vitesse unique
+    const bool  start_btn = board::btnStart();
+    const bool  rev_btn   = board::btnReverse();
+    const int   thr_raw   = board::throttleRaw(hw::ADC_OVERSAMPLE);
+    const float vbat      = board::vbatVolts(hw::ADC_OVERSAMPLE) * cfg.vbat_div_ratio;
+    const float spd = pulsesToKmh(board::encLeftDelta());   // AS5600 sur l'essieu (I2C) — vitesse unique
 
-    bool  thr_fault = (thr_raw < hw::THR_FAULT_RAW_LOW) || (thr_raw > hw::THR_FAULT_RAW_HIGH);
-    bool  calibrated = (iround(cfg.thr_max_raw) - iround(cfg.thr_min_raw)) >= hw::THR_MIN_VALID_SPAN;
-    float thr_frac = mapThrottle(thr_raw, cfg);
-    bool  at_rest = thr_frac <= hw::THR_REST_FRAC;
+    const bool  thr_fault = (thr_raw < hw::THR_FAULT_RAW_LOW) || (thr_raw > hw::THR_FAULT_RAW_HIGH);
+    const bool  calibrated = (iround(cfg.thr_max_raw) - iround(cfg.thr_min_raw)) >= hw::THR_MIN_VALID_SPAN;
+    const float thr_frac = mapThrottle(thr_raw, cfg);
+    const bool  at_rest = thr_frac <= hw::THR_REST_FRAC;
 
     updateLVC(vbat, cfg);
 
@@ -264,7 +264,7 @@ void tick()
     bool armed = (State::Run == m_state);
 
     // Calibration : UNIQUEMENT désarmé et à l'arrêt
-    bool cal_req = (1 == g_status.m_cmd.exchange(0));   // déclenchée uniquement via le web
+    const bool cal_req = (1 == g_status.m_cmd.exchange(0));   // déclenchée uniquement via le web
     if (cal_req && !armed && at_rest)
     {
         calibrate(cfg);
@@ -348,7 +348,7 @@ void tick()
         return;
     }
 
-    m_rev_active = rev_btn && (cfg.allow_reverse != 0.f);
+    m_rev_active = rev_btn && (0.f != cfg.allow_reverse);
 
     // Consigne + rampe (descente rapide quand on relâche)
     float target = thr_frac;
@@ -356,11 +356,11 @@ void tick()
     {
         target *= hw::VBAT_WARN_DERATE;
     }
-    float ramp = (target < m_thr_out) ? hw::THR_BRAKE_RAMP_PER_S : cfg.thr_ramp_per_s;
+    const float ramp = (target < m_thr_out) ? hw::THR_BRAKE_RAMP_PER_S : cfg.thr_ramp_per_s;
     m_thr_out = clampf(target, m_thr_out - ramp * hw::CTRL_DT_S, m_thr_out + ramp * hw::CTRL_DT_S);
     m_thr_out = clampf(m_thr_out, 0.f, 1.f);
 
-    uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(cfg.duty_cap_frac, 0.f, 1.f));
+    const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(cfg.duty_cap_frac, 0.f, 1.f));
     float cmd = 0;      // commande envoyée AUX DEUX moteurs (même PWM), signée [-1..1]
     bool ebrake = false;
 
@@ -389,9 +389,9 @@ void tick()
         // plafonne le PWM autorisé : tant que vitesse < limite il vaut 1 (aucun effet) ;
         // au-delà, il réduit le maximum permis.
         m_brake_pid.reset();
-        float vmax = m_speed_pid.update(cfg.speed_limit_kmh, spd, hw::CTRL_DT_S,
+        const float vmax = m_speed_pid.update(cfg.speed_limit_kmh, spd, hw::CTRL_DT_S,
                                         cfg.vmax_kp, cfg.vmax_ki, cfg.vmax_kd, 0.f, 1.f);
-        float mag = std::min(m_thr_out, vmax);   // l'accélérateur fixe le PWM, plafonné par le PID
+        const float mag = std::min(m_thr_out, vmax);   // l'accélérateur fixe le PWM, plafonné par le PID
         cmd = m_rev_active ? -(mag * hw::REVERSE_FACTOR) : mag;
         board::motorsSet(cmd, cmd, cap);
     }

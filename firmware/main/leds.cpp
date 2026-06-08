@@ -20,8 +20,8 @@ int     m_phase = 0;
 void render(const KartConfig& cfg)
 {
     ++m_phase;
-    bool slow = ((m_phase / 10) & 1);   // ~1 Hz
-    bool fast = ((m_phase / 3) & 1);    // ~3 Hz
+    const bool slow = ((m_phase / 10) & 1);   // ~1 Hz
+    const bool fast = ((m_phase / 3) & 1);    // ~3 Hz
     uint8_t r = 0;
     uint8_t g = 0;
     uint8_t b = 0;
@@ -79,7 +79,7 @@ void render(const KartConfig& cfg)
 
 void ledsTask(void*)
 {
-    KartConfig cfg = configSnapshot();
+    const KartConfig cfg = configSnapshot();
     m_strip.init(pins::WS2812, iround(cfg.led_count), static_cast<uint8_t>(iround(cfg.led_brightness)));
     TickType_t last = xTaskGetTickCount();
     while (true)

@@ -28,7 +28,7 @@ public:
         out += '"';
         out += name;
         out += "\":[";
-        int oldest = (m_head - m_count + CAP) % CAP;
+        const int oldest = (m_head - m_count + CAP) % CAP;
         for (int i = 0; i < m_count; ++i)
         {
             if (i)

@@ -11,7 +11,10 @@ KartConfig        g_cfg;
 KartStatus        g_status;
 SemaphoreHandle_t g_cfg_mtx = nullptr;
 
-namespace { constexpr char NVS_NS[] = "kart"; }
+namespace
+{
+constexpr char NVS_NS[] = "kart";
+}
 
 // Source unique de vérité : nom (clé NVS/JSON), libellé, type, min/défaut/max, champ visé.
 const ParamDesc PARAMS[] =
@@ -125,7 +128,7 @@ bool configSave()
     {
         writeFloat(handle, PARAMS[i].name, g_cfg.*(PARAMS[i].field));
     }
-    esp_err_t err = nvs_commit(handle);
+    const esp_err_t err = nvs_commit(handle);
     nvs_close(handle);
     if (ESP_OK == err) ESP_LOGI(TAG, "Réglages sauvegardés");
     return ESP_OK == err;
@@ -134,7 +137,7 @@ bool configSave()
 KartConfig configSnapshot()
 {
     xSemaphoreTake(g_cfg_mtx, portMAX_DELAY);
-    KartConfig cfg = g_cfg;
+    const KartConfig cfg = g_cfg;
     xSemaphoreGive(g_cfg_mtx);
     return cfg;
 }

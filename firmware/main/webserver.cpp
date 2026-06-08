@@ -175,7 +175,7 @@ uint8_t pctU8(float v)
 
 void histSample(void*)
 {
-    KartConfig cfg = configSnapshot();
+    const KartConfig cfg = configSnapshot();
     float lim = cfg.speed_limit_kmh;
     if (lim < 1.f) lim = 1.f;
 
@@ -188,8 +188,8 @@ void histSample(void*)
     {
         int cells = iround(cfg.cell_count);
         if (cells < 1) cells = 1;
-        float low = cells * 3.0f;          // ~vide (3,0 V/cellule)
-        float full = cells * 4.2f;         // pleine charge (4,2 V/cellule)
+        const float low = cells * 3.0f;          // ~vide (3,0 V/cellule)
+        const float full = cells * 4.2f;         // pleine charge (4,2 V/cellule)
         m_hist.batt.push(pctU8((g_status.m_vbat.load() - low) / (full - low) * 100.f));
     }
     ++m_hist.tick;
@@ -212,7 +212,7 @@ std::string buildHistJson()
 
 std::string buildConfigJson()
 {
-    KartConfig cfg = configSnapshot();
+    const KartConfig cfg = configSnapshot();
     std::string out = "{\"type\":\"config\",\"params\":[";
     for (int i = 0; i < PARAM_COUNT; ++i)
     {
@@ -290,7 +290,7 @@ std::string ip6ArrayJson(esp_netif_t* netif)
 {
     if (!netif) return "[]";
     esp_ip6_addr_t a[5];
-    int n = esp_netif_get_all_ip6(netif, a);
+    const int n = esp_netif_get_all_ip6(netif, a);
     std::string out = "[";
     for (int i = 0; i < n; ++i)
     {
@@ -313,7 +313,7 @@ std::string buildSysInfoJson()
     uint32_t flash_sz = 0;
     esp_flash_get_size(nullptr, &flash_sz);
 
-    int64_t up_s = esp_timer_get_time() / 1000000;
+    const int64_t up_s = esp_timer_get_time() / 1000000;
 
     esp_netif_ip_info_t ap_ip{};
     if (m_netif_ap) esp_netif_get_ip_info(m_netif_ap, &ap_ip);
@@ -387,28 +387,6 @@ bool jsonNum(const std::string& s, const char* key, double& out)
     }
     out = v;
     return true;
-}
-
-std::string readBody(httpd_req_t* req)
-{
-    std::string body;
-    if (req->content_len <= 0 || req->content_len > 4096)
-    {
-        return body;
-    }
-    body.resize(req->content_len);
-    int off = 0;
-    while (off < req->content_len)
-    {
-        int r = httpd_req_recv(req, &body[off], req->content_len - off);
-        if (r <= 0)
-        {
-            break;
-        }
-        off += r;
-    }
-    body.resize(off);
-    return body;
 }
 
 void applyConfigJson(const std::string& body)
@@ -488,7 +466,7 @@ esp_err_t wsHandler(httpd_req_t* req)
     if (std::string::npos != body.find(CMD_WIFISET))
     {
         double v;
-        bool enabled = jsonNum(body, "enabled", v) ? (0.0 != v) : true;
+        const bool enabled = jsonNum(body, "enabled", v) ? (0.0 != v) : true;
         configSetWifi(jsonStr(body, "ssid").c_str(), jsonStr(body, "pass").c_str(), enabled);
         return wsReply(req, REPLY_OK);   // prise en compte au redémarrage
     }

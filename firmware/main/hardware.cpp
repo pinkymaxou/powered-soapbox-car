@@ -141,7 +141,7 @@ void initEncoder()
 int readAngleRaw()
 {
     if (!m_as5600) return -1;
-    uint8_t reg = hw::AS5600_REG_RAWANG;
+    const uint8_t reg = hw::AS5600_REG_RAWANG;
     uint8_t buf[2] = {0, 0};
     if (ESP_OK != i2c_master_transmit_receive(m_as5600, &reg, 1, buf, 2, 20))
     {
@@ -204,9 +204,13 @@ int adcRawAvg(adc_channel_t ch, int n)
 // Le signe donne le sens de rotation. Retourne 0 si capteur absent (pas de fausse vitesse).
 int angleDelta()
 {
-    int cur = readAngleRaw();
+    const int cur = readAngleRaw();
     if (cur < 0) return 0;
-    if (m_angle_last < 0) { m_angle_last = cur; return 0; }
+    if (m_angle_last < 0)
+    {
+        m_angle_last = cur;
+        return 0;
+    }
     int d = cur - m_angle_last;
     m_angle_last = cur;
     if (d > 2048)  d -= 4096;
@@ -250,7 +254,7 @@ int board::throttleRaw(int n)
 
 float board::vbatVolts(int n)
 {
-    int raw = adcRawAvg(pins::VBAT, n);
+    const int raw = adcRawAvg(pins::VBAT, n);
     int mv = 0;
     if (m_cali && ESP_OK == adc_cali_raw_to_voltage(m_cali, raw, &mv))
     {
@@ -267,7 +271,7 @@ void board::motorsSet(float l, float r, uint32_t cap)
 
 void board::motorsBrake(float strength, uint32_t cap)
 {
-    uint32_t duty = static_cast<uint32_t>(clampf(strength, 0.f, 1.f) * cap);
+    const uint32_t duty = static_cast<uint32_t>(clampf(strength, 0.f, 1.f) * cap);
     dirPin(pins::DIR_L, Dir::Reverse);
     dirPin(pins::DIR_R, Dir::Reverse);
     setDuty(LEDC_CHANNEL_0, duty);
@@ -296,8 +300,14 @@ void board::pollButtons()
     debounce(m_db_rev,   pins::BTN_ACTIVE == gpio_get_level(pins::REVERSE_BTN));
 }
 
-bool board::btnStart()   { return m_db_start.state; }
-bool board::btnReverse() { return m_db_rev.state; }
+bool board::btnStart()
+{
+    return m_db_start.state;
+}
+bool board::btnReverse()
+{
+    return m_db_rev.state;
+}
 
 void board::reverseLED(bool on)
 {
