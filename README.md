@@ -281,6 +281,7 @@ flowchart TD
 | | **Carte d'extension (breakout)** | Borniers à vis + sorties 5 V / 3,3 V + LED d'état ; le **3,3 V** alimente l'AS5600 |
 | | **Buck 20 V → 5 V** (déjà disponible) | alimente l'ESP32 (qui fabrique son 3,3 V) |
 | | **Perfboard soudée** | 2 ponts diviseurs (throttle 10 k/20 k, Vbat 100 k/15 k) + 2 × 0,1 µF (⚠️ pas de breadboard — vibrations) |
+| | **Boîtier électrique étanche** (ABS, couvercle transparent, ~150 × 100 × 70 mm, ≈IP65) | loge ESP32 + breakout + perfboard ; presse-étoupes pour les câbles ; protège poussière/pluie/chocs (couvercle clair = LED d'état visible) |
 | | Sécurité élec. | **Arrêt d'urgence (NF) en série** dans la ligne de gate + **fusible/pack** |
 | | Ruban **WS2812B** (~10 LEDs) | état : vert = en route, rouge = désarmé |
 | **Commandes** | **Pédale accélérateur à effet Hall** | 3 fils (5 V / GND / **signal 0,8–4,2 V**), à rappel ; **pont diviseur ÷1,5** requis |
