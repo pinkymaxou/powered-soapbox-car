@@ -184,11 +184,10 @@ void calibrate(KartConfig base)
     setState(State::Lockout, Fault::None);
 }
 
-void publish(float spd_l, float spd_r, float vbat)
+void publish(float speed, float vbat)
 {
     g_status.m_vbat.store(vbat);
-    g_status.m_speed_l.store(spd_l);
-    g_status.m_speed_r.store(spd_r);
+    g_status.m_speed.store(speed);   // une seule vitesse (capteur unique sur l'essieu)
     g_status.m_estop.store(false);   // pas de capteur e-stop (coupure matérielle)
 }
 
@@ -204,9 +203,7 @@ void tick()
     bool  rev_btn   = board::btnReverse();
     int   thr_raw   = board::throttleRaw(hw::ADC_OVERSAMPLE);
     float vbat      = board::vbatVolts(hw::ADC_OVERSAMPLE) * cfg.vbat_div_ratio;
-    float spd = pulsesToKmh(board::encLeftDelta());   // AS5600 sur l'essieu (I2C)
-    float spd_l = spd;                                // télémétrie miroir (même PWM aux 2 moteurs)
-    float spd_r = spd;
+    float spd = pulsesToKmh(board::encLeftDelta());   // AS5600 sur l'essieu (I2C) — vitesse unique
 
     bool  thr_fault = (thr_raw < hw::THR_FAULT_RAW_LOW) || (thr_raw > hw::THR_FAULT_RAW_HIGH);
     bool  calibrated = (iround(cfg.thr_max_raw) - iround(cfg.thr_min_raw)) >= hw::THR_MIN_VALID_SPAN;
@@ -253,7 +250,7 @@ void tick()
         m_hold_start_us = 0;
         m_start_latch = false;
         setState(State::Fault, fault);
-        publish(spd_l, spd_r, vbat);
+        publish(spd, vbat);
         // Batterie trop basse trop longtemps → l'ESP coupe son propre maintien d'alimentation.
         if (Fault::Lvc == fault && 0 != m_lvc_since_us &&
             (now - m_lvc_since_us) > static_cast<int64_t>(hw::LVC_POWEROFF_MS) * 1000)
@@ -332,7 +329,7 @@ void tick()
         board::motorsStop();
         m_rev_active = false;
         setState(State::Lockout, Fault::None);
-        publish(spd_l, spd_r, vbat);
+        publish(spd, vbat);
         return;
     }
 
@@ -347,7 +344,7 @@ void tick()
         board::motorsStop();
         m_rev_active = false;
         setState(State::Lockout, Fault::None);
-        publish(spd_l, spd_r, vbat);
+        publish(spd, vbat);
         return;
     }
 
@@ -408,7 +405,7 @@ void tick()
     g_status.m_out_r.store(cmd);
     g_status.m_rev_led.store(m_rev_active);
     board::reverseLED(m_rev_active);
-    publish(spd_l, spd_r, vbat);
+    publish(spd, vbat);
 }
 
 void controlTask(void*)

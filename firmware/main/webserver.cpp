@@ -159,7 +159,7 @@ constexpr int HIST_FAST_N = 600;    // 10 min @ 1 s
 constexpr int HIST_BATT_N = 360;    // 30 min @ 5 s
 struct
 {
-    Ring<HIST_FAST_N> accel, pwml, pwmr, spdl, spdr;
+    Ring<HIST_FAST_N> accel, pwml, pwmr, spd;
     Ring<HIST_BATT_N> batt;
     int tick = 0;
 } m_hist;
@@ -183,8 +183,7 @@ void histSample(void*)
     m_hist.accel.push(pctU8(g_status.m_throttle.load() * 100.f));
     m_hist.pwml.push(pctU8(fabsf(g_status.m_out_l.load()) * 100.f));
     m_hist.pwmr.push(pctU8(fabsf(g_status.m_out_r.load()) * 100.f));
-    m_hist.spdl.push(pctU8(g_status.m_speed_l.load() / lim * 100.f));
-    m_hist.spdr.push(pctU8(g_status.m_speed_r.load() / lim * 100.f));
+    m_hist.spd.push(pctU8(g_status.m_speed.load() / lim * 100.f));
     if (0 == (m_hist.tick % 5))   // batterie toutes les 5 s
     {
         int cells = iround(cfg.cell_count);
@@ -204,8 +203,7 @@ std::string buildHistJson()
     m_hist.accel.appendJson(out, "accel"); out += ',';
     m_hist.pwml.appendJson(out, "pwml");   out += ',';
     m_hist.pwmr.appendJson(out, "pwmr");   out += ',';
-    m_hist.spdl.appendJson(out, "spdl");   out += ',';
-    m_hist.spdr.appendJson(out, "spdr");   out += ',';
+    m_hist.spd.appendJson(out, "spd");     out += ',';
     m_hist.batt.appendJson(out, "batt");
     xSemaphoreGive(m_hist_mtx);
     out += '}';
@@ -235,12 +233,12 @@ std::string buildStatusJson()
     char buf[400];
     snprintf(buf, sizeof(buf),
              "{\"type\":\"status\",\"state\":%d,\"fault\":%d,"
-             "\"thr_raw\":%d,\"throttle\":%.3f,\"vbat\":%.2f,\"speed_l\":%.2f,\"speed_r\":%.2f,"
+             "\"thr_raw\":%d,\"throttle\":%.3f,\"vbat\":%.2f,\"speed\":%.2f,"
              "\"btn_start\":%s,\"btn_rev\":%s,"
              "\"out_l\":%.3f,\"out_r\":%.3f,\"brake\":%s,\"rev_led\":%s}",
              g_status.m_state.load(), g_status.m_fault.load(),
              g_status.m_thr_raw.load(), g_status.m_throttle.load(), g_status.m_vbat.load(),
-             g_status.m_speed_l.load(), g_status.m_speed_r.load(),
+             g_status.m_speed.load(),
              g_status.m_btn_start.load() ? "true" : "false",
              g_status.m_btn_rev.load() ? "true" : "false",
              g_status.m_out_l.load(), g_status.m_out_r.load(),

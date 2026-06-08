@@ -503,6 +503,16 @@ flowchart LR
     class DIVT,DIVB cond;
 ```
 
+### Schéma électrique (symboles)
+
+Même contenu en **schéma électrique à symboles normalisés** (style ports nommés : les
+**étiquettes de net de même nom sont reliées**, comme sur un schéma multi-feuilles) :
+
+![Schéma électrique du kart](doc/schematics/full_schematic.png)
+
+> Régénérable : `. .venv-schem/bin/activate && python doc/schematics/full_schematic.py`.
+> Le détail du coupe-circuit est dans [`power_latch.png`](doc/schematics/power_latch.png).
+
 ### Mesure de tension batterie & coupure basse tension (LVC)
 
 L'ESP32 ne lit que **0–3,3 V** alors que la batterie monte à ~**21 V** → un **pont diviseur** (100 k / 15 k) ramène Vbat sous 3,3 V sur **ADC1 (GPIO39)** → protection logicielle **en plus du BMS**.

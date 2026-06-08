@@ -107,8 +107,7 @@ const SERIES=[
  {label:'Accél %', color:'#3cf', key:'accel', data:[]},
  {label:'PWM G',   color:'#6f6', key:'pwml',  data:[]},
  {label:'PWM D',   color:'#fa0', key:'pwmr',  data:[]},
- {label:'Vit G',   color:'#f6f', key:'spdl',  data:[]},
- {label:'Vit D',   color:'#ff5', key:'spdr',  data:[]},
+ {label:'Vitesse', color:'#f6f', key:'spd',   data:[]},
 ];
 const BATT={label:'Batterie', color:'#3d9', key:'batt', data:[]};
 function buildLegend(){
@@ -147,8 +146,7 @@ const BARS=[
  {id:'accel',label:'Accélérateur', color:'#3cf', v:s=>s.throttle*100,            t:s=>(s.throttle*100).toFixed(0)+' %'},
  {id:'pwml', label:'PWM moteur G',  color:'#6f6', v:s=>Math.abs(s.out_l)*100,     t:s=>(Math.abs(s.out_l)*100).toFixed(0)+' % '+dirTxt(s.out_l)},
  {id:'pwmr', label:'PWM moteur D',  color:'#fa0', v:s=>Math.abs(s.out_r)*100,     t:s=>(Math.abs(s.out_r)*100).toFixed(0)+' % '+dirTxt(s.out_r)},
- {id:'spdl', label:'Vitesse G',     color:'#f6f', v:s=>s.speed_l/speedScale*100,  t:s=>s.speed_l.toFixed(1)+' km/h'},
- {id:'spdr', label:'Vitesse D',     color:'#ff5', v:s=>s.speed_r/speedScale*100,  t:s=>s.speed_r.toFixed(1)+' km/h'},
+ {id:'spd',  label:'Vitesse',       color:'#f6f', v:s=>s.speed/speedScale*100,    t:s=>s.speed.toFixed(1)+' km/h'},
  {id:'batt', label:'Batterie',      color:'#3d9', v:s=>battPct(s.vbat),           t:s=>s.vbat.toFixed(2)+' V'},
 ];
 function buildBars(){

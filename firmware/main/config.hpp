@@ -111,8 +111,7 @@ struct KartStatus
     std::atomic<int>   m_thr_raw{0};
     std::atomic<float> m_throttle{0.f};
     std::atomic<float> m_vbat{0.f};
-    std::atomic<float> m_speed_l{0.f};
-    std::atomic<float> m_speed_r{0.f};
+    std::atomic<float> m_speed{0.f};   // vitesse unique (capteur AS5600 sur l'essieu)
     std::atomic<bool>  m_btn_start{false};
     std::atomic<bool>  m_btn_rev{false};
     std::atomic<float> m_out_l{0.f};
