@@ -421,13 +421,13 @@ void controlTask(void*)
 }
 } // namespace
 
-void kartInit()
+void Controller::init()
 {
     board::init();
     setState(State::Lockout, Fault::None);
 }
 
-void kartStart()
+void Controller::start()
 {
     // Tâche prioritaire épinglée sur le cœur applicatif (watchdog 5 s via sdkconfig).
     xTaskCreatePinnedToCore(controlTask, rtos::CONTROL.name, rtos::CONTROL.stack, nullptr,

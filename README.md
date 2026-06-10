@@ -701,7 +701,7 @@ Code ESP-IDF 6.1 (C++) dans [`firmware/`](firmware/) — détails dans [`firmwar
 
 - **Boucle de contrôle 500 Hz** (FreeRTOS 1000 Hz) : accélérateur = PWM direct (rampé, plafonné ~50 %), **frein PID** vers 0, **limiteur de vitesse** PID, vitesse par **AS5600** (I²C). Machine à états, armement, **LVC** anti-sag, **watchdog**, **latch d'alimentation** (POWER_HOLD).
 - **Tâches FreeRTOS** (priorité / cœur / pile) : voir [`doc/firmware-tasks.md`](doc/firmware-tasks.md) ; constantes dans [`firmware/main/rtos.hpp`](firmware/main/rtos.hpp).
-- **Wi-Fi AP + station**, **IPv6** (link-local + SLAAC), serveur **WebSocket** : tableau de bord (graphiques, barres, pastilles), configuration live, calibration, Wi-Fi, brochage, et **page Système** (commit firmware, uptime, MAC, IP v4/v6, heap, chip, IDF).
+- **Wi-Fi AP + station**, **IPv6** (link-local + SLAAC), serveur **WebSocket** : tableau de bord (**3 graphiques gradués** — accél/PWM 10 min, **vitesse 1 min**, batterie 30 min — barres, pastilles), configuration live, calibration, Wi-Fi, brochage, et **page Système** (commit firmware, uptime, MAC, IP v4/v6, heap, chip, IDF).
 - Build : `cd firmware && idf.py build flash monitor`.
 
 ---

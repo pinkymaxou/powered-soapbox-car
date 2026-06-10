@@ -23,12 +23,13 @@ L'onglet **Wi-Fi** permet de saisir un SSID/mot de passe et d'**activer le mode 
 (case à cocher) : le kart se connecte alors à ce réseau **tout en gardant le SoftAP**
 (mode AP+STA). Prise en compte **au redémarrage** ; reconnexion automatique toutes les 5 s.
 
-La page (5 onglets : **Tableau de bord / Configuration / Calibration / Wi-Fi / Brochage**)
+La page (6 onglets : **Tableau de bord / Configuration / Calibration / Wi-Fi / Brochage / Système**)
 communique par **WebSocket** (`/ws`). État live à 4 Hz (badge d'état dans le titre, barres
-de progression, pastilles d'E/S) + **graphiques** alimentés par un **historique conservé en RAM**
-côté ESP32 (persiste page fermée) : principal **10 min** (accél/PWM/vitesse, 1 pt/s) et
-**batterie 30 min** (canvas séparé, 1 pt/5 s). Configuration : formulaire **auto-généré** depuis
-la table de paramètres, persisté en flash. Calibration : déclenchée via le web (pas de bouton).
+de progression, pastilles d'E/S) + **3 graphiques gradués** (grille H+V) alimentés par un
+**historique conservé en RAM** côté ESP32 (persiste page fermée) : **accél/PWM 10 min** (1 pt/s),
+**vitesse 1 min** (1 pt/s, canvas dédié) et **batterie 30 min** (1 pt/5 s). Configuration :
+formulaire **auto-généré** depuis la table de paramètres, persisté en flash. Calibration : via le web.
+Onglet **Système** : version/commit, uptime, MAC, IP v4/v6, heap, puce, IDF.
 
 ## Architecture
 
@@ -37,7 +38,7 @@ la table de paramètres, persisté en flash. Calibration : déclenchée via le w
 | `pinout.hpp` | **Brochage matériel** (broches fixes) |
 | `config.hpp` / `.cpp` | **Table de paramètres** `PARAMS[]` + `KartConfig` (persistée NVS, clé par clé) + télémétrie `KartStatus` |
 | `hardware.hpp` / `.cpp` | Accès matériel bas niveau (`board::` — ADC, PWM/DIR, capteur d'angle AS5600 I²C, boutons, LED) |
-| `controller.hpp` / `.cpp` | **Boucle de contrôle** (namespace, tâche FreeRTOS 500 Hz) : machine à états + sécurités |
+| `controller.hpp` / `.cpp` | **Boucle de contrôle** (namespace `Controller`, tâche FreeRTOS 500 Hz) : machine à états + sécurités |
 | `pid.hpp` | Régulateur **PID** réutilisable avec **anti-windup** |
 | `leds.hpp` / `.cpp` | **Tâche dédiée** au ruban WS2812B (affichage d'état) |
 | `ws2812.hpp` / `.cpp` | Pilote WS2812B (RMT) |

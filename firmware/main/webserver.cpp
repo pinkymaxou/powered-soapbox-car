@@ -154,13 +154,15 @@ std::string buildWifiJson()
     return buf;
 }
 
-// ── Historique en RAM : rapide 10 min @ 1 s ; batterie 30 min @ 5 s ──
-constexpr int HIST_FAST_N = 600;    // 10 min @ 1 s
-constexpr int HIST_BATT_N = 360;    // 30 min @ 5 s
+// ── Historique en RAM : rapide 10 min @ 1 s ; vitesse 1 min @ 1 s ; batterie 30 min @ 5 s ──
+constexpr int HIST_FAST_N  = 600;   // 10 min @ 1 s
+constexpr int HIST_SPEED_N = 60;    // 1 min @ 1 s (graphique vitesse dédié)
+constexpr int HIST_BATT_N  = 360;   // 30 min @ 5 s
 struct
 {
-    Ring<HIST_FAST_N> accel, pwml, pwmr, spd;
-    Ring<HIST_BATT_N> batt;
+    Ring<HIST_FAST_N>  accel, pwml, pwmr;
+    Ring<HIST_SPEED_N> spd;
+    Ring<HIST_BATT_N>  batt;
     int tick = 0;
 } m_hist;
 SemaphoreHandle_t  m_hist_mtx = nullptr;

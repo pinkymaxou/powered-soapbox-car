@@ -23,9 +23,9 @@ extern "C" void app_main()
     configInit();        // table de réglages (NVS)
     wifiSoftAPInit();    // point d'accès « Kart-Config »
     webServerStart();    // serveur HTTP/WebSocket
-    kartInit();          // matériel (ADC, PWM, encodeurs, boutons)
+    Controller::init();  // matériel (ADC, PWM, capteur I2C, boutons)
     ledsStart();         // tâche d'affichage du ruban WS2812B
-    kartStart();         // boucle de contrôle 100 Hz (système désarmé au démarrage)
+    Controller::start(); // boucle de contrôle 500 Hz (système désarmé au démarrage)
 
     ESP_LOGI("kart", "Kart prêt. Config : Wi-Fi « Kart-Config » → http://192.168.4.1");
 }

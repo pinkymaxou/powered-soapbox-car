@@ -16,9 +16,11 @@
 <div class="wrap">
 
  <section id="dash" class="panel">
-  <div class="chart-title">Accélérateur · PWM · vitesse — 10 min</div>
+  <div class="chart-title">Accélérateur · PWM — 10 min</div>
   <canvas id="chart" width="520" height="180"></canvas>
   <div class="legend" id="legend"></div>
+  <div class="chart-title">🏎️ Vitesse — 1 min</div>
+  <canvas id="spdchart" width="520" height="90"></canvas>
   <div class="chart-title" id="batttitle">🔋 Batterie — 30 min</div>
   <canvas id="battchart" width="520" height="90"></canvas>
   <div id="bars"></div>
@@ -102,13 +104,14 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 });
 
 // ── Graphiques (données conservées en RAM côté ESP32) ──
-// Principal : séries rapides 1 pt/s sur 10 min. Batterie : 1 pt/5 s sur 30 min (canvas séparé).
+// Principal : accél + PWM, 1 pt/s sur 10 min. Vitesse : 1 pt/s sur 1 min (canvas dédié).
+// Batterie : 1 pt/5 s sur 30 min (canvas séparé).
 const SERIES=[
  {label:'Accél %', color:'#3cf', key:'accel', data:[]},
  {label:'PWM G',   color:'#6f6', key:'pwml',  data:[]},
  {label:'PWM D',   color:'#fa0', key:'pwmr',  data:[]},
- {label:'Vitesse', color:'#f6f', key:'spd',   data:[]},
 ];
+const SPD={label:'Vitesse',  color:'#f6f', key:'spd',  data:[]};
 const BATT={label:'Batterie', color:'#3d9', key:'batt', data:[]};
 function buildLegend(){
  document.getElementById('legend').innerHTML=
@@ -116,15 +119,29 @@ function buildLegend(){
 }
 function applyHist(m){
  SERIES.forEach(s=>{ if(Array.isArray(m[s.key])) s.data=m[s.key]; });
+ if(Array.isArray(m.spd))  SPD.data=m.spd;
  if(Array.isArray(m.batt)) BATT.data=m.batt;
- drawChart(); drawBatt();
+ drawChart(); drawSpd(); drawBatt();
 }
-// Trace une liste de séries sur un canvas (chaque série couvre toute la largeur du canvas).
-function drawSeries(canvasId,list){
+// Trace une liste de séries sur un canvas, avec une grille graduée (H + V).
+// vdiv = nb de divisions horizontales (axe du temps) ; chaque série couvre toute la largeur.
+function drawSeries(canvasId,list,vdiv){
  const cv=document.getElementById(canvasId),x=cv.getContext('2d'),W=cv.width,H=cv.height;
+ vdiv=vdiv||6;
  x.fillStyle='#000';x.fillRect(0,0,W,H);
- x.strokeStyle='#333';
- for(let p=0;p<=100;p+=25){const y=H-p/100*H;x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke();}
+ // Grille : horizontales tous les 25 % (graduation verticale = niveaux %)
+ x.lineWidth=1;x.font='9px sans-serif';x.textBaseline='middle';
+ for(let p=0;p<=100;p+=25){
+  const y=Math.round(H-p/100*(H-1))-0.5;
+  x.strokeStyle=(p===0||p===100)?'#444':'#262626';
+  x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke();
+  x.fillStyle='#888';if(p%50===0)x.fillText(p,2,Math.min(H-6,Math.max(6,y)));
+ }
+ // Grille : verticales (graduation horizontale = temps, du plus ancien à gauche → maintenant à droite)
+ for(let i=0;i<=vdiv;i++){
+  const px=Math.round(i/vdiv*(W-1))+0.5;
+  x.strokeStyle='#262626';x.beginPath();x.moveTo(px,0);x.lineTo(px,H);x.stroke();
+ }
  list.forEach(ser=>{
   const n=ser.data.length; if(n<2)return;
   x.strokeStyle=ser.color;x.lineWidth=1.5;x.beginPath();
@@ -133,8 +150,9 @@ function drawSeries(canvasId,list){
   x.stroke();
  });
 }
-function drawChart(){drawSeries('chart',SERIES);}
-function drawBatt(){drawSeries('battchart',[BATT]);}
+function drawChart(){drawSeries('chart',SERIES,10);}   // 10 min → 1 div/min
+function drawSpd(){drawSeries('spdchart',[SPD],6);}    // 1 min → 1 div/10 s
+function drawBatt(){drawSeries('battchart',[BATT],6);} // 30 min → 1 div/5 min
 
 const OUI=v=>v?'OUI':'non';
 const clamp01=v=>Math.max(0,Math.min(100,v));
