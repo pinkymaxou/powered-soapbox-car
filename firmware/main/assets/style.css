@@ -32,7 +32,7 @@ header{
 @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
 
 /* Graphiques */
-#chart,#battchart{width:100%;height:auto;background:#000;border:1px solid var(--line);border-radius:10px}
+#chart,#spdchart,#battchart{width:100%;height:auto;background:#000;border:1px solid var(--line);border-radius:10px}
 .chart-title{font-size:13px;color:var(--muted);font-weight:600;margin:10px 0 4px}
 .legend{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:8px 0;font-size:13px}
 .legend span{font-weight:600}

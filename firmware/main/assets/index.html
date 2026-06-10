@@ -3,6 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kart - Configuration</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/chart.js"></script>
 </head><body>
 <header>🛞 Kart électrique<span class="hdr-state" id="hdrstate">…</span></header>
 <nav class="tabs">
@@ -18,7 +19,6 @@
  <section id="dash" class="panel">
   <div class="chart-title">Accélérateur · PWM — 10 min</div>
   <canvas id="chart" width="520" height="180"></canvas>
-  <div class="legend" id="legend"></div>
   <div class="chart-title">🏎️ Vitesse — 1 min</div>
   <canvas id="spdchart" width="520" height="90"></canvas>
   <div class="chart-title" id="batttitle">🔋 Batterie — 30 min</div>
@@ -103,58 +103,40 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  if(t.dataset.tab==='sys') loadSys();
 });
 
-// ── Graphiques (données conservées en RAM côté ESP32) ──
-// Principal : accél + PWM, 1 pt/s sur 10 min. Vitesse : 1 pt/s sur 1 min (canvas dédié).
-// Batterie : 1 pt/5 s sur 30 min (canvas séparé).
-const SERIES=[
- {label:'Accél %', color:'#3cf', key:'accel', data:[]},
- {label:'PWM G',   color:'#6f6', key:'pwml',  data:[]},
- {label:'PWM D',   color:'#fa0', key:'pwmr',  data:[]},
-];
-const SPD={label:'Vitesse',  color:'#f6f', key:'spd',  data:[]};
-const BATT={label:'Batterie', color:'#3d9', key:'batt', data:[]};
-function buildLegend(){
- document.getElementById('legend').innerHTML=
-   SERIES.map(s=>`<span style="color:${s.color}">■ ${s.label}</span>`).join('  ');
-}
-function applyHist(m){
- SERIES.forEach(s=>{ if(Array.isArray(m[s.key])) s.data=m[s.key]; });   // accél/PWM en %
- if(Array.isArray(m.spd))  SPD.data=m.spd.map(v=>v/10);    // ×10 → km/h
- if(Array.isArray(m.batt)) BATT.data=m.batt.map(v=>v/10);  // ×10 → V
- drawChart(); drawSpd(); drawBatt();
-}
-// Trace une liste de séries sur un canvas, avec une grille graduée (H + V) en unités réelles.
-// o = {vdiv, ymin, ymax, unit, dec} : axe Y de ymin..ymax (unité réelle), vdiv divisions de temps.
-function drawSeries(canvasId,list,o){
- const cv=document.getElementById(canvasId),x=cv.getContext('2d'),W=cv.width,H=cv.height;
- const vdiv=o.vdiv||6, ymin=o.ymin||0, ymax=o.ymax, unit=o.unit||'', dec=o.dec||0, NH=4;
- const span=(ymax-ymin)||1;
- x.fillStyle='#000';x.fillRect(0,0,W,H);
- x.lineWidth=1;x.font='9px sans-serif';x.textBaseline='middle';
- // Grille horizontale + étiquettes d'axe Y (valeurs réelles : %, km/h, V)
- for(let k=0;k<=NH;k++){
-  const frac=k/NH, y=Math.round(H-frac*(H-1))-0.5;
-  x.strokeStyle=(k===0||k===NH)?'#444':'#262626';
-  x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke();
-  x.fillStyle='#888';x.fillText((ymin+frac*span).toFixed(dec)+unit,2,Math.min(H-6,Math.max(6,y)));
- }
- // Grille verticale (axe du temps : plus ancien à gauche → maintenant à droite)
- for(let i=0;i<=vdiv;i++){
-  const px=Math.round(i/vdiv*(W-1))+0.5;
-  x.strokeStyle='#262626';x.beginPath();x.moveTo(px,0);x.lineTo(px,H);x.stroke();
- }
- list.forEach(ser=>{
-  const n=ser.data.length; if(n<2)return;
-  x.strokeStyle=ser.color;x.lineWidth=1.5;x.beginPath();
-  ser.data.forEach((v,i)=>{const px=i/(n-1)*W,py=H-Math.max(0,Math.min(1,(v-ymin)/span))*H;
-    i?x.lineTo(px,py):x.moveTo(px,py);});
-  x.stroke();
+// ── Graphiques (Chart.js, embarqué/servi par l'ESP32 ; données conservées en RAM) ──
+// Principal : accél + PWM en % sur 10 min. Vitesse : km/h (0–16) sur 1 min. Batterie : V sur 30 min.
+let chMain, chSpd, chBatt;
+const dset=(label,color)=>({label,borderColor:color,backgroundColor:color,data:[],borderWidth:1.5,fill:false,tension:.15});
+function mkChart(id,datasets,ymin,ymax,unit,dec,aspect,legend){
+ return new Chart(document.getElementById(id),{
+  type:'line', data:{datasets},
+  options:{responsive:true,maintainAspectRatio:true,aspectRatio:aspect,animation:false,parsing:false,normalized:true,
+   elements:{point:{radius:0}},
+   plugins:{legend:{display:legend,labels:{color:'#bbb',boxWidth:12,boxHeight:2,font:{size:11}}}},
+   scales:{
+    x:{type:'linear',min:0,max:1,grid:{color:'#262626'},border:{color:'#444'},ticks:{display:false}},
+    y:{min:ymin,max:ymax,grid:{color:'#262626'},border:{color:'#444'},
+       ticks:{color:'#888',stepSize:(ymax-ymin)/4,callback:v=>v.toFixed(dec)+unit}}}}
  });
 }
-// Vitesse/batterie stockées ×10 (unités réelles) côté ESP → ÷10 ici. Accél/PWM restent en %.
-function drawChart(){drawSeries('chart',SERIES,{vdiv:10,ymin:0,ymax:100,unit:'%',dec:0});}                 // 10 min
-function drawSpd(){drawSeries('spdchart',[SPD],{vdiv:6,ymin:0,ymax:16,unit:' km/h',dec:0});}               // 1 min, 0–16 km/h
-function drawBatt(){drawSeries('battchart',[BATT],{vdiv:6,ymin:battLow,ymax:battFull,unit:' V',dec:1});}   // 30 min, V
+function initCharts(){
+ chMain=mkChart('chart',[dset('Accél %','#3cf'),dset('PWM G','#6f6'),dset('PWM D','#fa0')],0,100,'%',0,2.9,true);
+ chSpd =mkChart('spdchart',[dset('Vitesse','#f6f')],0,16,' km/h',0,5.8,false);
+ chBatt=mkChart('battchart',[dset('Batterie','#3d9')],battLow,battFull,' V',1,5.8,false);
+}
+function setSeries(ch,idx,arr){
+ ch.data.datasets[idx].data=arr.map((y,i)=>({x:i,y}));
+ ch.options.scales.x.max=Math.max(1,arr.length-1);
+}
+function applyHist(m){
+ if(!chMain)return;
+ if(Array.isArray(m.accel))setSeries(chMain,0,m.accel);   // %
+ if(Array.isArray(m.pwml)) setSeries(chMain,1,m.pwml);
+ if(Array.isArray(m.pwmr)) setSeries(chMain,2,m.pwmr);
+ chMain.update('none');
+ if(Array.isArray(m.spd)){ setSeries(chSpd,0,m.spd.map(v=>v/10)); chSpd.update('none'); }   // ×10 → km/h
+ if(Array.isArray(m.batt)){ setSeries(chBatt,0,m.batt.map(v=>v/10)); chBatt.update('none'); } // ×10 → V
+}
 
 const OUI=v=>v?'OUI':'non';
 const clamp01=v=>Math.max(0,Math.min(100,v));
@@ -208,6 +190,7 @@ function deriveFromCfg(p){
  if(p.name==='cell_count'){
    const n=Math.max(1,p.val); battLow=n*3.0; battFull=n*4.2;
    document.getElementById('batttitle').textContent=`🔋 Batterie (${battLow.toFixed(0)}–${battFull.toFixed(0)} V) — 30 min`;
+   if(chBatt){const y=chBatt.options.scales.y;y.min=battLow;y.max=battFull;y.ticks.stepSize=(battFull-battLow)/4;chBatt.update('none');}
  }
 }
 function buildForm(params){
@@ -285,5 +268,5 @@ function saveWifi(){
  if(confirm("Enregistré. Redémarrer maintenant pour appliquer ?")
    &&ws&&ws.readyState===1)ws.send('{"type":"reboot"}');
 }
-buildLegend();buildBars();buildInds();connect();
+initCharts();buildBars();buildInds();connect();
 </script></body></html>

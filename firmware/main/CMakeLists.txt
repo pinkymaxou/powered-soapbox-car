@@ -8,9 +8,6 @@ idf_component_register(
         "webserver.cpp"
         "ws2812.cpp"
     INCLUDE_DIRS "."
-    EMBED_TXTFILES
-        "assets/index.html"
-        "assets/style.css"
     REQUIRES
         esp_driver_gpio
         esp_driver_ledc
@@ -26,3 +23,18 @@ idf_component_register(
         esp_netif
         esp_http_server
 )
+
+# Assets web : compressés en gzip au build puis embarqués en binaire.
+# Le serveur les renvoie tels quels avec l'en-tête « Content-Encoding: gzip »
+# (le navigateur décompresse). Réduit fortement la flash (Chart.js 205 ko → ~70 ko).
+foreach(asset index.html style.css chart.min.js)
+    set(_src "${COMPONENT_DIR}/assets/${asset}")
+    set(_gz  "${CMAKE_CURRENT_BINARY_DIR}/${asset}.gz")
+    add_custom_command(
+        OUTPUT  "${_gz}"
+        COMMAND gzip -9 -n -c "${_src}" > "${_gz}"
+        DEPENDS "${_src}"
+        COMMENT "gzip ${asset}"
+        VERBATIM)
+    target_add_binary_data(${COMPONENT_LIB} "${_gz}" BINARY DEPENDS "${_gz}")
+endforeach()

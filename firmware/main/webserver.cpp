@@ -39,8 +39,13 @@
 static const char* TAG = "web";
 
 // Fichiers embarqués (EMBED_TXTFILES dans main/CMakeLists.txt) — terminés par nul.
-extern const char index_html_start[] asm("_binary_index_html_start");
-extern const char style_css_start[]  asm("_binary_style_css_start");
+// Assets compressés (gzip) embarqués — servis tels quels avec Content-Encoding: gzip.
+extern const uint8_t index_html_gz_start[]   asm("_binary_index_html_gz_start");
+extern const uint8_t index_html_gz_end[]     asm("_binary_index_html_gz_end");
+extern const uint8_t style_css_gz_start[]    asm("_binary_style_css_gz_start");
+extern const uint8_t style_css_gz_end[]      asm("_binary_style_css_gz_end");
+extern const uint8_t chart_min_js_gz_start[] asm("_binary_chart_min_js_gz_start");
+extern const uint8_t chart_min_js_gz_end[]   asm("_binary_chart_min_js_gz_end");
 
 namespace
 {
@@ -405,16 +410,27 @@ void applyConfigJson(const std::string& body)
     configUpdate(cfg, true);
 }
 
+esp_err_t sendGz(httpd_req_t* req, const char* ctype, const uint8_t* s, const uint8_t* e)
+{
+    httpd_resp_set_type(req, ctype);
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
+    return httpd_resp_send(req, reinterpret_cast<const char*>(s), e - s);
+}
+
 esp_err_t rootGet(httpd_req_t* req)
 {
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, index_html_start, HTTPD_RESP_USE_STRLEN);
+    return sendGz(req, "text/html", index_html_gz_start, index_html_gz_end);
 }
 
 esp_err_t styleGet(httpd_req_t* req)
 {
-    httpd_resp_set_type(req, "text/css");
-    return httpd_resp_send(req, style_css_start, HTTPD_RESP_USE_STRLEN);
+    return sendGz(req, "text/css", style_css_gz_start, style_css_gz_end);
+}
+
+esp_err_t chartGet(httpd_req_t* req)
+{
+    return sendGz(req, "text/javascript", chart_min_js_gz_start, chart_min_js_gz_end);
 }
 
 esp_err_t wsReply(httpd_req_t* req, const std::string& s)
@@ -573,6 +589,7 @@ void webServerStart()
     };
     reg("/",          rootGet,  false);
     reg("/style.css", styleGet, false);
+    reg("/chart.js",  chartGet, false);
     reg("/ws",        wsHandler, true);
     ESP_LOGI(TAG, "Serveur web + WebSocket démarrés");
 }

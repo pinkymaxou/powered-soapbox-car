@@ -25,7 +25,7 @@ L'onglet **Wi-Fi** permet de saisir un SSID/mot de passe et d'**activer le mode 
 
 La page (6 onglets : **Tableau de bord / Configuration / Calibration / Wi-Fi / Brochage / Système**)
 communique par **WebSocket** (`/ws`). État live à 4 Hz (badge d'état dans le titre, barres
-de progression, pastilles d'E/S) + **3 graphiques gradués** (grille H+V) alimentés par un
+de progression, pastilles d'E/S) + **3 graphiques Chart.js gradués** (grille H+V) alimentés par un
 **historique conservé en RAM** côté ESP32 (persiste page fermée) : **accél/PWM 10 min** (%, 1 pt/s),
 **vitesse 1 min** (**km/h**, axe 0–16, 1 pt/s, canvas dédié) et **batterie 30 min** (**V**, 1 pt/5 s).
 Vitesse/batterie sont stockées en unités réelles (×10) ; accél/PWM en %. Configuration :
@@ -44,7 +44,7 @@ Onglet **Système** : version/commit, uptime, MAC, IP v4/v6, heap, puce, IDF.
 | `leds.hpp` / `.cpp` | **Tâche dédiée** au ruban WS2812B (affichage d'état) |
 | `ws2812.hpp` / `.cpp` | Pilote WS2812B (RMT) |
 | `webserver.hpp` / `.cpp` | SoftAP + serveur **HTTP/WebSocket** |
-| `assets/` | Page web `index.html` + `style.css` (embarqués) |
+| `assets/` | Page web `index.html` + `style.css` + `chart.min.js` (Chart.js) — **gzippés au build** (CMake) et servis avec `Content-Encoding: gzip` |
 | `main.cpp` | `app_main` : init des sous-systèmes + démarrage des tâches |
 
 Deux tâches : **`control`** (cœur 1, 500 Hz, watchdog 5 s) et **`leds`** (cœur 0, ~20 Hz).
