@@ -168,31 +168,31 @@ struct
 SemaphoreHandle_t  m_hist_mtx = nullptr;
 esp_timer_handle_t m_hist_timer = nullptr;
 
-uint8_t pctU8(float v)
+uint8_t pctU8(float v)   // pourcentage 0..100 (accélérateur, PWM)
 {
     if (v < 0.f) v = 0.f;
     if (v > 100.f) v = 100.f;
     return static_cast<uint8_t>(v + 0.5f);
 }
 
+uint8_t u8x10(float v)   // valeur physique ×10 (résolution 0,1 ; bornée 0..25,5 → km/h, V)
+{
+    float s = v * 10.f;
+    if (s < 0.f) s = 0.f;
+    if (s > 255.f) s = 255.f;
+    return static_cast<uint8_t>(s + 0.5f);
+}
+
 void histSample(void*)
 {
-    const KartConfig cfg = configSnapshot();
-    float lim = cfg.speed_limit_kmh;
-    if (lim < 1.f) lim = 1.f;
-
     xSemaphoreTake(m_hist_mtx, portMAX_DELAY);
-    m_hist.accel.push(pctU8(g_status.m_throttle.load() * 100.f));
-    m_hist.pwml.push(pctU8(fabsf(g_status.m_out_l.load()) * 100.f));
-    m_hist.pwmr.push(pctU8(fabsf(g_status.m_out_r.load()) * 100.f));
-    m_hist.spd.push(pctU8(g_status.m_speed.load() / lim * 100.f));
+    m_hist.accel.push(pctU8(g_status.m_throttle.load() * 100.f));            // %
+    m_hist.pwml.push(pctU8(fabsf(g_status.m_out_l.load()) * 100.f));         // %
+    m_hist.pwmr.push(pctU8(fabsf(g_status.m_out_r.load()) * 100.f));         // %
+    m_hist.spd.push(u8x10(g_status.m_speed.load()));                        // km/h ×10
     if (0 == (m_hist.tick % 5))   // batterie toutes les 5 s
     {
-        int cells = iround(cfg.cell_count);
-        if (cells < 1) cells = 1;
-        const float low = cells * 3.0f;          // ~vide (3,0 V/cellule)
-        const float full = cells * 4.2f;         // pleine charge (4,2 V/cellule)
-        m_hist.batt.push(pctU8((g_status.m_vbat.load() - low) / (full - low) * 100.f));
+        m_hist.batt.push(u8x10(g_status.m_vbat.load()));                    // V ×10
     }
     ++m_hist.tick;
     xSemaphoreGive(m_hist_mtx);

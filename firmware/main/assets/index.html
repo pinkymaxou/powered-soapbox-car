@@ -118,26 +118,27 @@ function buildLegend(){
    SERIES.map(s=>`<span style="color:${s.color}">■ ${s.label}</span>`).join('  ');
 }
 function applyHist(m){
- SERIES.forEach(s=>{ if(Array.isArray(m[s.key])) s.data=m[s.key]; });
- if(Array.isArray(m.spd))  SPD.data=m.spd;
- if(Array.isArray(m.batt)) BATT.data=m.batt;
+ SERIES.forEach(s=>{ if(Array.isArray(m[s.key])) s.data=m[s.key]; });   // accél/PWM en %
+ if(Array.isArray(m.spd))  SPD.data=m.spd.map(v=>v/10);    // ×10 → km/h
+ if(Array.isArray(m.batt)) BATT.data=m.batt.map(v=>v/10);  // ×10 → V
  drawChart(); drawSpd(); drawBatt();
 }
-// Trace une liste de séries sur un canvas, avec une grille graduée (H + V).
-// vdiv = nb de divisions horizontales (axe du temps) ; chaque série couvre toute la largeur.
-function drawSeries(canvasId,list,vdiv){
+// Trace une liste de séries sur un canvas, avec une grille graduée (H + V) en unités réelles.
+// o = {vdiv, ymin, ymax, unit, dec} : axe Y de ymin..ymax (unité réelle), vdiv divisions de temps.
+function drawSeries(canvasId,list,o){
  const cv=document.getElementById(canvasId),x=cv.getContext('2d'),W=cv.width,H=cv.height;
- vdiv=vdiv||6;
+ const vdiv=o.vdiv||6, ymin=o.ymin||0, ymax=o.ymax, unit=o.unit||'', dec=o.dec||0, NH=4;
+ const span=(ymax-ymin)||1;
  x.fillStyle='#000';x.fillRect(0,0,W,H);
- // Grille : horizontales tous les 25 % (graduation verticale = niveaux %)
  x.lineWidth=1;x.font='9px sans-serif';x.textBaseline='middle';
- for(let p=0;p<=100;p+=25){
-  const y=Math.round(H-p/100*(H-1))-0.5;
-  x.strokeStyle=(p===0||p===100)?'#444':'#262626';
+ // Grille horizontale + étiquettes d'axe Y (valeurs réelles : %, km/h, V)
+ for(let k=0;k<=NH;k++){
+  const frac=k/NH, y=Math.round(H-frac*(H-1))-0.5;
+  x.strokeStyle=(k===0||k===NH)?'#444':'#262626';
   x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke();
-  x.fillStyle='#888';if(p%50===0)x.fillText(p,2,Math.min(H-6,Math.max(6,y)));
+  x.fillStyle='#888';x.fillText((ymin+frac*span).toFixed(dec)+unit,2,Math.min(H-6,Math.max(6,y)));
  }
- // Grille : verticales (graduation horizontale = temps, du plus ancien à gauche → maintenant à droite)
+ // Grille verticale (axe du temps : plus ancien à gauche → maintenant à droite)
  for(let i=0;i<=vdiv;i++){
   const px=Math.round(i/vdiv*(W-1))+0.5;
   x.strokeStyle='#262626';x.beginPath();x.moveTo(px,0);x.lineTo(px,H);x.stroke();
@@ -145,14 +146,15 @@ function drawSeries(canvasId,list,vdiv){
  list.forEach(ser=>{
   const n=ser.data.length; if(n<2)return;
   x.strokeStyle=ser.color;x.lineWidth=1.5;x.beginPath();
-  ser.data.forEach((v,i)=>{const px=i/(n-1)*W,py=H-Math.max(0,Math.min(100,v))/100*H;
+  ser.data.forEach((v,i)=>{const px=i/(n-1)*W,py=H-Math.max(0,Math.min(1,(v-ymin)/span))*H;
     i?x.lineTo(px,py):x.moveTo(px,py);});
   x.stroke();
  });
 }
-function drawChart(){drawSeries('chart',SERIES,10);}   // 10 min → 1 div/min
-function drawSpd(){drawSeries('spdchart',[SPD],6);}    // 1 min → 1 div/10 s
-function drawBatt(){drawSeries('battchart',[BATT],6);} // 30 min → 1 div/5 min
+// Vitesse/batterie stockées ×10 (unités réelles) côté ESP → ÷10 ici. Accél/PWM restent en %.
+function drawChart(){drawSeries('chart',SERIES,{vdiv:10,ymin:0,ymax:100,unit:'%',dec:0});}                 // 10 min
+function drawSpd(){drawSeries('spdchart',[SPD],{vdiv:6,ymin:0,ymax:16,unit:' km/h',dec:0});}               // 1 min, 0–16 km/h
+function drawBatt(){drawSeries('battchart',[BATT],{vdiv:6,ymin:battLow,ymax:battFull,unit:' V',dec:1});}   // 30 min, V
 
 const OUI=v=>v?'OUI':'non';
 const clamp01=v=>Math.max(0,Math.min(100,v));

@@ -26,8 +26,9 @@ L'onglet **Wi-Fi** permet de saisir un SSID/mot de passe et d'**activer le mode 
 La page (6 onglets : **Tableau de bord / Configuration / Calibration / Wi-Fi / Brochage / Système**)
 communique par **WebSocket** (`/ws`). État live à 4 Hz (badge d'état dans le titre, barres
 de progression, pastilles d'E/S) + **3 graphiques gradués** (grille H+V) alimentés par un
-**historique conservé en RAM** côté ESP32 (persiste page fermée) : **accél/PWM 10 min** (1 pt/s),
-**vitesse 1 min** (1 pt/s, canvas dédié) et **batterie 30 min** (1 pt/5 s). Configuration :
+**historique conservé en RAM** côté ESP32 (persiste page fermée) : **accél/PWM 10 min** (%, 1 pt/s),
+**vitesse 1 min** (**km/h**, axe 0–16, 1 pt/s, canvas dédié) et **batterie 30 min** (**V**, 1 pt/5 s).
+Vitesse/batterie sont stockées en unités réelles (×10) ; accél/PWM en %. Configuration :
 formulaire **auto-généré** depuis la table de paramètres, persisté en flash. Calibration : via le web.
 Onglet **Système** : version/commit, uptime, MAC, IP v4/v6, heap, puce, IDF.
 
