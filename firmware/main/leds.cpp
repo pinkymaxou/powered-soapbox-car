@@ -38,17 +38,14 @@ void render(const KartConfig& cfg)
             b = 255;
             break;
         case State::Run:
-            if (g_status.m_rev_led.load())
-            {
-                if (slow)
-                {
-                    g = 255;   // armé + reverse : vert clignotant
-                }
-            }
-            else if (g_status.m_vbat.load() < cfg.vbat_warn_v)
+            if (g_status.m_vbat.load() < cfg.vbat_warn_v)
             {
                 r = 255;
                 g = 120;       // batterie faible : orange
+            }
+            else if (g_status.m_brake.load() && slow)
+            {
+                g = 255;       // freinage : vert clignotant
             }
             else
             {

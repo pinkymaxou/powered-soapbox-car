@@ -1,14 +1,9 @@
-// controller.cpp — Logique de contrôle du kart (machine à états + PID + sécurités).
-// Pas de classe : un namespace anonyme tient l'état, la boucle tourne directement
-// dans la tâche FreeRTOS. Le matériel est derrière `board` (hardware.cpp), l'affichage
-// du ruban dans sa propre tâche (leds.cpp).
+// controller.cpp — Contrôle DIFFÉRENTIEL (variante expérimentale).
+// 2 roues avant motrices indépendantes + 1 roulette arrière. Pilotage manette (namespace input).
+// Mix arcade : y = avance, x = virage → gauche = avance − virage, droite = avance + virage.
+// Sécurités : manette déconnectée / e-stop manette / non armé / LVC → FREINAGE (PID vitesse → 0).
+// Anti-renversement : le virage autorisé décroît avec la vitesse (borne l'accélération latérale).
 // ESP-IDF 6.1 / C++.
-//
-// Accélérateur (ADC, calibré) → consigne rampée → [PID option] → PWM plafonné →
-// driver → 2 moteurs 12 V. Retours : encodeurs (vitesse), Vbat (LVC).
-// Relâcher l'accélérateur ⇒ frein électrique. Marche arrière par bouton momentané.
-// Armement par appui maintenu sur START ; désarmement auto après inactivité.
-// Watchdog 5 s : si la boucle se bloque, l'ESP32 redémarre (désarmé).
 #include "controller.hpp"
 
 #include <algorithm>
@@ -16,6 +11,7 @@
 
 #include "config.hpp"
 #include "hardware.hpp"
+#include "input.hpp"
 #include "pid.hpp"
 #include "rtos.hpp"
 
@@ -36,47 +32,58 @@ inline float clampf(float v, float lo, float hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-// delta = Δcounts AS5600 (12 bits, 4096/tour) sur un tick. Capteur sur l'essieu → vitesse roue directe.
-float pulsesToKmh(int delta)
+// Δcounts AS5600 (12 bits, 4096/tour) sur un tick → km/h SIGNÉE (le signe donne le sens).
+float countsToKmh(int delta)
 {
-    const float sensor_rps = (fabsf(static_cast<float>(delta)) / hw::AS5600_CPR) * hw::CTRL_HZ;
-    const float wheel_rps  = sensor_rps / hw::GEAR_RATIO;
+    const float sensor_rps = (static_cast<float>(delta) / hw::AS5600_CPR) * hw::CTRL_HZ;
+    const float wheel_rps = sensor_rps / hw::GEAR_RATIO;
     return wheel_rps * PI_F * hw::WHEEL_DIAM_M * 3.6f;
 }
 
-// ── État interne de la boucle de contrôle ──
-Pid     m_brake_pid;   // ramène la vitesse à 0 quand l'accélérateur est relâché
-Pid     m_speed_pid;   // plafonne le PWM quand la vitesse dépasse la limite
-State   m_state = State::Lockout;
-float   m_thr_out = 0;
+float deadzone(float v, float dz)
+{
+    if (fabsf(v) <= dz) return 0.f;
+    const float s = (v > 0.f) ? 1.f : -1.f;
+    return s * (fabsf(v) - dz) / (1.f - dz);   // remappe [dz..1] → [0..1]
+}
+
+// Limiteur de pente : rapproche `current` de `target` d'au plus rate·dt par tick.
+// Empêche les variations brusques (coup de manche « trop sec »).
+float slew(float target, float current, float rate, float dt)
+{
+    const float step = rate * dt;
+    const float diff = target - current;
+    if (diff > step)  return current + step;
+    if (diff < -step) return current - step;
+    return target;
+}
+
+// ── État interne de la boucle ──
+Pid     m_brake_l;       // frein roue gauche (consigne vitesse 0, sortie signée)
+Pid     m_brake_r;       // frein roue droite
+Pid     m_speed_pid;     // plafond de vitesse global (sortie = fraction de PWM autorisée)
+bool    m_armed = false;
 bool    m_lvc_tripped = false;
-bool    m_rev_active = false;
 int64_t m_sag_start_us = 0;
-int64_t m_lvc_since_us = 0;    // instant où la LVC s'est déclenchée (→ coupure auto)
+int64_t m_lvc_since_us = 0;
 int64_t m_hold_start_us = 0;   // début d'appui START
-int64_t m_last_act_us = 0;     // dernière activité accélérateur
-bool    m_start_latch = false; // appui START déjà traité (attend le relâché)
-int64_t m_stuck_us = 0;        // début de « PWM actif sans rotation » (encodeur unique)
-bool    m_enc_fault = false;   // panne encodeur détectée (PWM actif, 0 rotation > 1 s)
+int64_t m_last_act_us = 0;     // dernière activité manche
+bool    m_start_latch = false; // appui START déjà traité
+int64_t m_stuck_us = 0;
+bool    m_enc_fault = false;
+float   m_fwd_cmd = 0.f;   // consigne avance APRÈS limiteur de pente (état conservé entre ticks)
+float   m_turn_cmd = 0.f;  // consigne virage APRÈS limiteur de pente
+
+// Retours haptiques : détection de fronts + anti-spam.
+bool    m_armed_prev = false;
+bool    m_estop_prev = false;
+bool    m_hardfault_prev = false;
+int64_t m_rumble_block_us = 0;   // dernier buzz « tentative de bouger non armé »
 
 void setState(State s, Fault f)
 {
-    m_state = s;
     g_status.m_state.store(static_cast<int>(s));
     g_status.m_fault.store(static_cast<int>(f));
-}
-
-float mapThrottle(int raw, const KartConfig& cfg)
-{
-    const int mn = iround(cfg.thr_min_raw);
-    const int mx = iround(cfg.thr_max_raw);
-    if (mx <= mn)
-    {
-        return 0;
-    }
-    float t = static_cast<float>(raw - mn) / static_cast<float>(mx - mn);
-    t = (t - cfg.thr_deadzone) / (1.0f - cfg.thr_deadzone - cfg.thr_top_margin);
-    return clampf(t, 0.f, 1.f);
 }
 
 void updateLVC(float vbat, const KartConfig& cfg)
@@ -86,13 +93,10 @@ void updateLVC(float vbat, const KartConfig& cfg)
     {
         if (vbat < cfg.vbat_cut_v)
         {
-            if (0 == m_sag_start_us)
-            {
-                m_sag_start_us = now;
-            }
+            if (0 == m_sag_start_us) m_sag_start_us = now;
             if ((now - m_sag_start_us) > static_cast<int64_t>(hw::VBAT_SAG_DEBOUNCE_MS) * 1000)
             {
-                if (!m_lvc_tripped) m_lvc_since_us = now;
+                m_lvc_since_us = now;
                 m_lvc_tripped = true;
             }
         }
@@ -109,86 +113,48 @@ void updateLVC(float vbat, const KartConfig& cfg)
     }
 }
 
-void waitMs(int ms)
+// Freine une roue : PID vitesse → 0 (sortie signée, peut inverser). Renvoie la commande appliquée.
+float brakeWheel(Pid& pid, float speed_kmh, const KartConfig& cfg, float dt)
 {
-    esp_task_wdt_reset();
-    vTaskDelay(pdMS_TO_TICKS(ms));
+    if (fabsf(speed_kmh) <= hw::EBRAKE_MIN_KMH)
+    {
+        pid.reset();
+        return 0.f;
+    }
+    return pid.update(0.f, speed_kmh, dt, cfg.pid_kp, cfg.pid_ki, cfg.pid_kd, -1.f, 1.f);
 }
 
-// Détection de panne : si on commande un moteur (|PWM| > seuil) mais que l'encodeur
-// ne bouge pas (vitesse nulle) pendant > 1 s, on suppose un encodeur (ou une transmission)
-// en faute. Couvre aussi un blocage moteur / une courroie cassée.
-void updateEncStuck(int64_t now, float cmd, float speed_kmh, int64_t& stuck_us)
+void updateEncStuck(int64_t now, float cmd, float speed_kmh)
 {
-    if (fabsf(cmd) > hw::ENC_STUCK_PWM && speed_kmh <= 0.0f)
+    if (fabsf(cmd) > hw::ENC_STUCK_PWM && fabsf(speed_kmh) <= 0.05f)
     {
-        if (0 == stuck_us)
-        {
-            stuck_us = now;
-        }
-        else if ((now - stuck_us) > static_cast<int64_t>(hw::ENC_STUCK_MS) * 1000)
-        {
-            m_enc_fault = true;
-        }
+        if (0 == m_stuck_us) m_stuck_us = now;
+        else if ((now - m_stuck_us) > static_cast<int64_t>(hw::ENC_STUCK_MS) * 1000) m_enc_fault = true;
     }
     else
     {
-        stuck_us = 0;
+        m_stuck_us = 0;
     }
 }
 
-int sampleAvg(int ms)
-{
-    long acc = 0;
-    int n = 0;
-    for (int k = 0, iters = ms / hw::CTRL_DT_MS; k < iters; ++k)
-    {
-        acc += board::throttleRaw(hw::ADC_OVERSAMPLE);
-        ++n;
-        esp_task_wdt_reset();
-        vTaskDelay(pdMS_TO_TICKS(hw::CTRL_DT_MS));
-    }
-    return n ? static_cast<int>(acc / n) : 0;
-}
-
-// Calibration : appui à FOND (MAX) puis relâché (MIN), persistée.
-void calibrate(KartConfig base)
-{
-    setState(State::Calibrate, Fault::None);
-    board::motorsStop();
-    ESP_LOGI(TAG, "CALIBRATION : appuyer à FOND sur l'accélérateur...");
-    board::led(true);
-    const int mx = sampleAvg(2500);
-    ESP_LOGI(TAG, "  MAX=%d ; relâcher...", mx);
-    for (int k = 0; k < 20; ++k)
-    {
-        board::ledToggle();
-        waitMs(100);
-    }
-    const int mn = sampleAvg(2500);
-    ESP_LOGI(TAG, "  MIN=%d", mn);
-    board::led(false);
-
-    if (mx - mn >= hw::THR_MIN_VALID_SPAN)
-    {
-        base.thr_min_raw = static_cast<float>(mn);
-        base.thr_max_raw = static_cast<float>(mx);
-        configUpdate(base, true);
-        ESP_LOGI(TAG, "Calibration OK et sauvegardée");
-    }
-    else
-    {
-        ESP_LOGE(TAG, "Calibration invalide (span %d) → ignorée", mx - mn);
-    }
-    m_thr_out = 0;
-    setState(State::Lockout, Fault::None);
-}
-
-void publish(float speed, float vbat)
+void publish(float sl, float sr, float vbat, const input::State& in)
 {
     g_status.m_vbat.store(vbat);
-    g_status.m_speed.store(speed);   // une seule vitesse (capteur unique sur l'essieu)
-    g_status.m_estop.store(false);   // pas de capteur e-stop (coupure matérielle)
+    g_status.m_speed_l.store(sl);
+    g_status.m_speed_r.store(sr);
+    g_status.m_pad_conn.store(in.connected);
+    g_status.m_pad_batt.store(input::battery());
+    g_status.m_btn_start.store(board::btnStart() || in.start);   // START physique OU manette
+    g_status.m_estop.store(in.estop);
+    g_status.m_pad_x.store(in.rx);          // position physique du stick (cercle)
+    g_status.m_pad_y.store(in.ry);
+    g_status.m_pad_cx.store(in.x);          // consigne compensée cercle→carré
+    g_status.m_pad_cy.store(in.y);
+    g_status.m_pad_zl.store(in.zl);
+    g_status.m_pad_zr.store(in.zr);
+    g_status.m_pad_rx2.store(in.rx2);
+    g_status.m_pad_ry2.store(in.ry2);
+    g_status.m_pad_btns.store(in.buttons);
 }
 
 void tick()
@@ -196,216 +162,182 @@ void tick()
     const KartConfig cfg = configSnapshot();
     const int64_t now = esp_timer_get_time();
 
-    board::pollButtons();   // anti-rebond (une fois par tick)
+    const bool use_enc = (cfg.use_encoders != 0.f);   // 0 = ignore les AS5600 (banc sans encodeurs)
 
-    // Lectures
-    const bool  start_btn = board::btnStart();
-    const bool  rev_btn   = board::btnReverse();
-    const int   thr_raw   = board::throttleRaw(hw::ADC_OVERSAMPLE);
-    const float vbat      = board::vbatVolts(hw::ADC_OVERSAMPLE) * cfg.vbat_div_ratio;
-    const float spd = pulsesToKmh(board::encLeftDelta());   // AS5600 sur l'essieu (I2C) — vitesse unique
+    board::pollButtons();
+    const input::State in = input::get();
+    const float vraw = board::vbatVolts(hw::ADC_OVERSAMPLE);   // < 0 si capteur (ADS1115) absent
+    const bool  vbat_valid = (vraw > 0.05f);
+    const float vbat = vbat_valid ? vraw * cfg.vbat_div_ratio : 0.f;
+    const float sl = use_enc ? countsToKmh(board::encLeftDelta())  : 0.f;
+    const float sr = use_enc ? countsToKmh(board::encRightDelta()) : 0.f;
+    const float v_avg = 0.5f * (sl + sr);
+    if (!use_enc) m_enc_fault = false;   // pas d'encodeurs → pas de défaut « capteur bloqué »
 
-    const bool  thr_fault = (thr_raw < hw::THR_FAULT_RAW_LOW) || (thr_raw > hw::THR_FAULT_RAW_HIGH);
-    const bool  calibrated = (iround(cfg.thr_max_raw) - iround(cfg.thr_min_raw)) >= hw::THR_MIN_VALID_SPAN;
-    const float thr_frac = mapThrottle(thr_raw, cfg);
-    const bool  at_rest = thr_frac <= hw::THR_REST_FRAC;
-
-    updateLVC(vbat, cfg);
-
-    // Télémétrie : entrées + sorties par défaut (écrasées si on roule)
-    g_status.m_thr_raw.store(thr_raw);
-    g_status.m_throttle.store(m_thr_out);
-    g_status.m_btn_start.store(start_btn);
-    g_status.m_btn_rev.store(rev_btn);
-    g_status.m_out_l.store(0.f);
-    g_status.m_out_r.store(0.f);
-    g_status.m_brake.store(false);
-    g_status.m_rev_led.store(false);
-    g_status.m_arming.store(false);
-
-    // Défauts (priorité absolue)
-    Fault fault = Fault::None;
-    if (m_lvc_tripped)
+    // Capteur de tension absent → tension inconnue : on NE déclenche PAS la LVC (le BMS du
+    // pack assure la protection). Permet aussi de tester au banc sans l'ADS1115 câblé.
+    if (vbat_valid)
     {
-        fault = Fault::Lvc;
-    }
-    else if (thr_fault)
-    {
-        fault = Fault::Throttle;
-    }
-    else if (!calibrated)
-    {
-        fault = Fault::NotCalibrated;
-    }
-    else if (m_enc_fault)
-    {
-        fault = Fault::Encoder;
-    }
-
-    if (Fault::None != fault)
-    {
-        m_thr_out = 0;
-        board::motorsStop();
-        m_rev_active = false;
-        m_hold_start_us = 0;
-        m_start_latch = false;
-        setState(State::Fault, fault);
-        publish(spd, vbat);
-        // Batterie trop basse trop longtemps → l'ESP coupe son propre maintien d'alimentation.
-        if (Fault::Lvc == fault && 0 != m_lvc_since_us &&
-            (now - m_lvc_since_us) > static_cast<int64_t>(hw::LVC_POWEROFF_MS) * 1000)
-        {
-            ESP_LOGW(TAG, "Batterie trop basse > %d s → coupure de l'alimentation", hw::LVC_POWEROFF_MS / 1000);
-            board::powerOff();
-        }
-        return;
-    }
-
-    bool armed = (State::Run == m_state);
-
-    // Calibration : UNIQUEMENT désarmé et à l'arrêt
-    const bool cal_req = (1 == g_status.m_cmd.exchange(0));   // déclenchée uniquement via le web
-    if (cal_req && !armed && at_rest)
-    {
-        calibrate(cfg);
-        m_hold_start_us = 0;
-        m_start_latch = false;
-        m_rev_active = false;
-        return;
-    }
-
-    // Bouton START maintenu = bascule ARMÉ ⇄ DÉSARMÉ (latch jusqu'au relâché)
-    bool toggle = false;
-    if (start_btn)
-    {
-        if (!m_start_latch)
-        {
-            if (0 == m_hold_start_us)
-            {
-                m_hold_start_us = now;
-            }
-            if ((now - m_hold_start_us) >= static_cast<int64_t>(iround(cfg.arm_hold_ms)) * 1000)
-            {
-                toggle = true;
-                m_start_latch = true;
-                m_hold_start_us = 0;
-            }
-        }
+        updateLVC(vbat, cfg);
     }
     else
     {
-        m_hold_start_us = 0;
-        m_start_latch = false;
+        m_lvc_tripped = false;
+        m_sag_start_us = 0;
+        m_lvc_since_us = 0;
     }
-    g_status.m_arming.store(!armed && 0 != m_hold_start_us);
-
-    if (toggle)
-    {
-        if (armed)
-        {
-            armed = false;   // appui maintenu en roulant → désarmement
-        }
-        else if (at_rest && vbat >= cfg.vbat_recover_v)
-        {
-            setState(State::Run, Fault::None);
-            m_last_act_us = now;
-            m_thr_out = 0;
-            m_stuck_us = 0;
-            m_enc_fault = false;
-            m_brake_pid.reset();
-            m_speed_pid.reset();
-            armed = true;
-        }
-        else
-        {
-            ESP_LOGW(TAG, "Armement refusé (pédale enfoncée ou batterie insuffisante : %.2f V)", vbat);
-        }
-    }
-
-    // DÉSARMÉ : moteurs coupés
-    if (!armed)
-    {
-        m_thr_out = 0;
-        board::motorsStop();
-        m_rev_active = false;
-        setState(State::Lockout, Fault::None);
-        publish(spd, vbat);
-        return;
-    }
-
-    // ARMÉ : désarmement auto après inactivité de l'accélérateur
-    if (thr_frac > hw::THR_REST_FRAC)
-    {
-        m_last_act_us = now;
-    }
-    if ((now - m_last_act_us) > static_cast<int64_t>(iround(cfg.disarm_s)) * 1000000)
-    {
-        m_thr_out = 0;
-        board::motorsStop();
-        m_rev_active = false;
-        setState(State::Lockout, Fault::None);
-        publish(spd, vbat);
-        return;
-    }
-
-    m_rev_active = rev_btn && (0.f != cfg.allow_reverse);
-
-    // Consigne + rampe (descente rapide quand on relâche)
-    float target = thr_frac;
-    if (vbat < cfg.vbat_warn_v)
-    {
-        target *= hw::VBAT_WARN_DERATE;
-    }
-    const float ramp = (target < m_thr_out) ? hw::THR_BRAKE_RAMP_PER_S : cfg.thr_ramp_per_s;
-    m_thr_out = clampf(target, m_thr_out - ramp * hw::CTRL_DT_S, m_thr_out + ramp * hw::CTRL_DT_S);
-    m_thr_out = clampf(m_thr_out, 0.f, 1.f);
+    publish(sl, sr, vbat, in);
 
     const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(cfg.duty_cap_frac, 0.f, 1.f));
-    float cmd = 0;      // commande envoyée AUX DEUX moteurs (même PWM), signée [-1..1]
-    bool ebrake = false;
 
-    if (m_thr_out <= 1e-3f && !m_rev_active)
+    // ── Défauts / conditions de non-conduite ──
+    Fault fault = Fault::None;
+    if (m_lvc_tripped)                              fault = Fault::Lvc;
+    else if (m_enc_fault)                           fault = Fault::Encoder;
+    else if (in.connected && !input::calibrated())  fault = Fault::NotCalibrated;  // manette non calibrée
+
+    // Manette absente / e-stop manette / DÉFAUT → on désarme et on freine (sécurité absolue).
+    // Un défaut force le désarmement : il faudra réarmer (START maintenu) une fois résolu.
+    if (!in.connected || in.estop || (Fault::None != fault)) m_armed = false;
+
+    const bool can_drive = m_armed && in.connected && !in.estop && (Fault::None == fault);
+
+    // ── Armement par appui maintenu sur START (anti-démarrage : manche centré + manette connectée) ──
+    // START = bouton physique OU bouton START/Options de la manette (même fonction).
+    const bool start_held = board::btnStart() || in.start;
+    const bool centered = (fabsf(in.x) < 0.08f) && (fabsf(in.y) < 0.08f);
+    if (start_held)
     {
-        // Accélérateur relâché → freinage : le PID ramène la vitesse (encodeur) à 0.
-        // Sa sortie est signée : négative ⇒ le moteur est inversé (plugging actif).
-        m_speed_pid.reset();
-        if (spd > hw::EBRAKE_MIN_KMH)
+        if (0 == m_hold_start_us) m_hold_start_us = now;
+        else if (!m_start_latch && (now - m_hold_start_us) > static_cast<int64_t>(cfg.arm_hold_ms) * 1000)
         {
-            cmd = m_brake_pid.update(0.f, spd, hw::CTRL_DT_S,
-                                     cfg.pid_kp, cfg.pid_ki, cfg.pid_kd,
-                                     -1.f, 1.f);
-            board::motorsSet(cmd, cmd, cap);
-            ebrake = (cmd < 0.f);
-        }
-        else
-        {
-            board::motorsStop();
-            m_brake_pid.reset();
+            m_start_latch = true;
+            if (!m_armed && in.connected && centered) { m_armed = true; m_last_act_us = now; }
+            else                                       { m_armed = false; }
         }
     }
     else
     {
-        // Accélérateur → PWM direct (boucle ouverte). Un PID de **limitation de vitesse**
-        // plafonne le PWM autorisé : tant que vitesse < limite il vaut 1 (aucun effet) ;
-        // au-delà, il réduit le maximum permis.
-        m_brake_pid.reset();
-        const float vmax = m_speed_pid.update(cfg.speed_limit_kmh, spd, hw::CTRL_DT_S,
-                                        cfg.vmax_kp, cfg.vmax_ki, cfg.vmax_kd, 0.f, 1.f);
-        const float mag = std::min(m_thr_out, vmax);   // l'accélérateur fixe le PWM, plafonné par le PID
-        cmd = m_rev_active ? -(mag * hw::REVERSE_FACTOR) : mag;
-        board::motorsSet(cmd, cmd, cap);
+        m_hold_start_us = 0;
+        m_start_latch = false;
     }
 
-    // Détection de panne encodeur / blocage (PWM actif sans rotation > 1 s)
-    updateEncStuck(now, cmd, spd, m_stuck_us);
+    // ── Retours haptiques manette (sur fronts) ──
+    const bool hard_fault = (Fault::Lvc == fault) || (Fault::Encoder == fault);
+    if (m_armed && !m_armed_prev)                               // vient d'être armé → doux
+        input::rumble(90, 160, 220);
+    if ((hard_fault && !m_hardfault_prev) || (in.estop && !m_estop_prev))  // erreur soudaine / e-stop → fort
+        input::rumble(255, 255, 450);
+    const bool pushing = (fabsf(in.rx) > 0.5f) || (fabsf(in.ry) > 0.5f);
+    if (pushing && !can_drive && (now - m_rumble_block_us) > 800000)       // bouge mais bloqué → fort (répété)
+    {
+        input::rumble(220, 220, 250);
+        m_rumble_block_us = now;
+    }
+    m_armed_prev = m_armed;
+    m_estop_prev = in.estop;
+    m_hardfault_prev = hard_fault;
 
-    g_status.m_throttle.store(m_thr_out);
-    g_status.m_brake.store(ebrake);
-    g_status.m_out_l.store(cmd);
-    g_status.m_out_r.store(cmd);
-    g_status.m_rev_led.store(m_rev_active);
-    board::reverseLED(m_rev_active);
-    publish(spd, vbat);
+    float out_l = 0.f, out_r = 0.f, fwd = 0.f, turn = 0.f;
+    bool braking = false;
+
+    if (!can_drive)
+    {
+        // FREINAGE : couvre déconnexion manette, e-stop, LVC, défaut, désarmé.
+        // Avec encodeurs : PID qui ramène chaque roue à 0. Sans : sortie nulle (PWM 0).
+        if (use_enc)
+        {
+            out_l = brakeWheel(m_brake_l, sl, cfg, hw::CTRL_DT_S);
+            out_r = brakeWheel(m_brake_r, sr, cfg, hw::CTRL_DT_S);
+        }
+        braking = true;
+        m_speed_pid.reset();
+        m_fwd_cmd = 0.f;     // repart en douceur au prochain armement
+        m_turn_cmd = 0.f;
+        setState((Fault::None != fault) ? State::Fault : State::Lockout, fault);
+    }
+    else
+    {
+        m_brake_l.reset();
+        m_brake_r.reset();
+        float fwd_t = deadzone(in.y, cfg.thr_deadzone);
+        const float turn_t = deadzone(in.x, cfg.thr_deadzone);
+        if (cfg.allow_reverse == 0.f && fwd_t < 0.f) fwd_t = 0.f;   // recul interdit ?
+
+        // 1) Limiteur de pente : interdit une variation trop BRUSQUE (coup de manche « sec »).
+        m_fwd_cmd = slew(fwd_t, m_fwd_cmd, cfg.thr_ramp_per_s, hw::CTRL_DT_S);
+        m_turn_cmd = slew(turn_t, m_turn_cmd, cfg.turn_rate, hw::CTRL_DT_S);
+        fwd = m_fwd_cmd;
+        turn = m_turn_cmd;
+
+        // 2) Anti-renversement : borne l'AMPLITUDE du virage pour que a_lat = v·ω reste
+        //    ≤ a_lat_max (prédictif). a_lat ≈ 2·turn_gain·Vmax²·|fwd|·|turn| / voie.
+        const float vmax_mps = std::max(cfg.speed_limit_kmh, 1.f) / 3.6f;
+        const float denom = 2.f * std::max(cfg.turn_gain, 0.01f) * vmax_mps * vmax_mps * fabsf(fwd);
+        float turn_max = 1.f;
+        if (denom > 1e-3f) turn_max = clampf(cfg.a_lat_max * hw::TRACK_M / denom, 0.f, 1.f);
+        turn = clampf(turn, -turn_max, turn_max);
+        m_turn_cmd = turn;   // garde l'état borné (pas de windup de la rampe au-delà de la limite)
+
+        // Mix arcade différentiel (pivot sur place possible si fwd≈0).
+        out_l = clampf(fwd - turn * cfg.turn_gain, -1.f, 1.f);
+        out_r = clampf(fwd + turn * cfg.turn_gain, -1.f, 1.f);
+
+        // Plafond de vitesse global (préserve le ratio de virage) via PID sur la vitesse moyenne.
+        // Sans encodeurs : pas d'asservissement vitesse → on s'appuie sur le plafond PWM (duty_cap).
+        if (use_enc)
+        {
+            const float vcap = m_speed_pid.update(cfg.speed_limit_kmh, fabsf(v_avg), hw::CTRL_DT_S,
+                                                  cfg.vmax_kp, cfg.vmax_ki, cfg.vmax_kd, 0.f, 1.f);
+            out_l *= vcap;
+            out_r *= vcap;
+        }
+        else
+        {
+            m_speed_pid.reset();
+        }
+
+        if (fabsf(fwd) < 1e-3f && fabsf(turn) < 1e-3f)
+        {
+            // Manche centré → frein (PID → 0 avec encodeurs, sinon sortie nulle).
+            if (use_enc)
+            {
+                out_l = brakeWheel(m_brake_l, sl, cfg, hw::CTRL_DT_S);
+                out_r = brakeWheel(m_brake_r, sr, cfg, hw::CTRL_DT_S);
+            }
+            else
+            {
+                out_l = 0.f;
+                out_r = 0.f;
+            }
+            braking = true;
+        }
+        else
+        {
+            m_last_act_us = now;
+        }
+        setState(State::Run, Fault::None);
+    }
+
+    board::motorsSet(out_l, out_r, cap);
+    if (use_enc) updateEncStuck(now, 0.5f * (out_l + out_r), v_avg);
+
+    // Désarmement auto après inactivité.
+    if (m_armed && (now - m_last_act_us) > static_cast<int64_t>(cfg.disarm_s) * 1000000) m_armed = false;
+
+    // Coupure d'alimentation si LVC prolongée.
+    if (Fault::Lvc == fault && 0 != m_lvc_since_us &&
+        (now - m_lvc_since_us) > static_cast<int64_t>(hw::LVC_POWEROFF_MS) * 1000)
+    {
+        board::powerOff();
+    }
+
+    g_status.m_fwd.store(fwd);
+    g_status.m_turn.store(turn);
+    g_status.m_out_l.store(out_l);
+    g_status.m_out_r.store(out_r);
+    g_status.m_brake.store(braking);
+    g_status.m_arming.store(m_armed);
 }
 
 void controlTask(void*)
@@ -424,12 +356,13 @@ void controlTask(void*)
 void Controller::init()
 {
     board::init();
+    input::init();
     setState(State::Lockout, Fault::None);
+    g_status.m_brake.store(true);   // état par défaut : FREINAGE (jamais en roue libre au repos)
 }
 
 void Controller::start()
 {
-    // Tâche prioritaire épinglée sur le cœur applicatif (watchdog 5 s via sdkconfig).
     xTaskCreatePinnedToCore(controlTask, rtos::CONTROL.name, rtos::CONTROL.stack, nullptr,
                             rtos::CONTROL.prio, nullptr, rtos::CONTROL.core);
 }

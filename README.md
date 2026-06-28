@@ -2,17 +2,17 @@
 
 Projet de construction d'un **kart électrique biplace** pour enfants (~10 ans, 1,38–1,45 m), conçu pour être réalisable avec des **outils basiques** (perceuse, scie, clés) + une **imprimante 3D** pour les réducteurs. Chaque choix est expliqué pour pouvoir adapter selon le matériel disponible.
 
-> **Note :** ce kart est **électrique** et **biplace** (deux enfants **côte à côte**). Le **conducteur est à gauche** ; le **volant est légèrement déporté à gauche** devant lui, et les **pédales (accél./frein) sont du côté gauche** uniquement. La place de droite est **passager** (repose-pieds, pas de commandes). Les « pédales » désignent les **commandes au pied façon voiture** : **accélérateur** (capteur → ESP32) et **frein** (électrique au relâché). La propulsion vient de **2 moteurs CC 12 V** (un par roue arrière). Il n'y a **pas** de pédalier de vélo ni de chaîne.
+> **Note :** ce kart est un **tricycle à entraînement différentiel**. Les **2 roues AVANT sont motrices et indépendantes** (un **moteur CC 12 V + réducteur + courroie par roue**) ; la **direction se fait par différence de vitesse** entre les deux roues (*differential / skid steer*) — **pas de volant, pas de colonne, pas de tringlerie**. La **roue arrière est libre** : une **roulette pivotante (caster) non motorisée** qui s'oriente toute seule → **3 roues au total**. Le kart est **biplace** (deux enfants **côte à côte**) et **piloté à la manette Bluetooth** (mélange « arcade » : un stick pour avancer/reculer et tourner) — **pas de pédale accélérateur ni de volant**. La propulsion vient des **2 moteurs avant** ; il n'y a **pas** de pédalier ni de chaîne.
 
 ## Table des matières
 
 - [Aperçu (vue de dessus)](#aperçu-vue-de-dessus)
 - [En bref](#en-bref) · [Pourquoi ces choix](#pourquoi-ces-choix)
 - [1. Dimensions du châssis](#1-dimensions-du-châssis)
-- [2. Position siège / pédales](#2-position-siège--pédales)
-- [3. Direction (2 pentures + bielle)](#3-direction-à-deux-pentures-un-pivot-par-roue--bielle)
+- [2. Position siège / commandes](#2-position-siège--commandes)
+- [3. Direction différentielle](#3-direction-différentielle-skid-steer)
 - [4. Matériel & électronique](#4-matériel--électronique)
-  - [Propulsion (2 moteurs)](#propulsion--2-moteurs-cc-12-v) · [Commande ESP32](#commande-électronique--esp32) · [Capteur AS5600](#capteur-de-vitesse-as5600-sur-i²c) · [Calibration](#calibration-de-laccélérateur)
+  - [Propulsion (2 moteurs avant)](#propulsion--2-moteurs-cc-12-v-avant) · [Commande ESP32](#commande-électronique--esp32) · [Capteurs AS5600](#capteurs-de-vitesse-as5600-2-sur-i²c) · [Mesure batterie / ADS1115](#mesure-batterie--adc-externe-ads1115) · [Calibration](#calibration-de-la-manette)
   - [Sécurité électrique](#sécurité-électrique) · [Câblage & brochage](#schéma-de-câblage--brochage-esp32) · [Schéma système](#schéma-système-complet-tous-les-connecteurs)
   - [Mesure batterie / LVC](#mesure-de-tension-batterie--coupure-basse-tension-lvc) · [2 batteries en parallèle](#montage-2-batteries-en-parallèle) · [Interrupteur d'alimentation (latch)](#interrupteur-dalimentation--mosfet-low-side--latch--arrêt-durgence)
 - [5. Points critiques de sécurité](#5-points-critiques-de-sécurité-enfant)
@@ -27,73 +27,70 @@ Projet de construction d'un **kart électrique biplace** pour enfants (~10 ans, 
 
 ```mermaid
 flowchart TB
-    subgraph AV["◄ AVANT ► — direction (2 pentures + bielle)"]
+    subgraph AV["◄ AVANT ► — 2 roues MOTRICES + BAIE TECHNIQUE"]
         direction LR
-        AVG["🛞 roue AV G<br/>(penture = pivot)"]
-        VOL["🎡 volant<br/>(déporté gauche)"]
-        BIE(["bielle d'accouplement"])
-        AVD["🛞 roue AV D<br/>(penture = pivot)"]
-        AVG ~~~ VOL ~~~ BIE ~~~ AVD
+        AVG["🛞 roue AV G<br/>moteur + réducteur + courroie"]
+        BAY["🔋 BAIE TECHNIQUE<br/>2× batteries 20 V<br/>🧠 ESP32 + driver 2 canaux"]
+        AVD["🛞 roue AV D<br/>moteur + réducteur + courroie"]
+        AVG ~~~ BAY ~~~ AVD
     end
     subgraph CAB["HABITACLE — banquette unique 2 places (~80 cm)"]
         direction LR
-        COND["🧒 CONDUCTEUR (gauche)<br/>volant + pédales accél/frein"]
+        COND["🧒 CONDUCTEUR (gauche)<br/>manette Bluetooth"]
+        SEP["🛑 séparation centrale<br/>ARRÊT D'URGENCE (e-stop)"]
         PASS["🧒 PASSAGER (droite)<br/>repose-pieds"]
-        COND ~~~ PASS
+        COND ~~~ SEP ~~~ PASS
     end
-    subgraph BAY["BAIE TECHNIQUE arrière (+ ~30 cm)"]
+    subgraph AR["◄ ARRIÈRE ► — roulette LIBRE"]
         direction LR
-        MG["⚙️ moteur G<br/>+ réducteur 1:16"]
-        ELE["🔋 2× batteries 20 V<br/>🧠 ESP32 + driver"]
-        MD["⚙️ moteur D<br/>+ réducteur 1:16"]
-        MG ~~~ ELE ~~~ MD
+        ARC["🛞 roulette pivotante<br/>(caster, non motorisée)"]
     end
-    subgraph AR["◄ ARRIÈRE ► — roues motrices (courroie)"]
-        direction LR
-        ARG["🛞 roue AR G"]
-        ARD["🛞 roue AR D"]
-        ARG ~~~ ARD
-    end
-    AV --> CAB --> BAY --> AR
+    AV --> CAB --> AR
 
     classDef wheel fill:#cfe2ff,stroke:#333,stroke-width:2px;
+    classDef caster fill:#e2e3e5,stroke:#333,stroke-width:2px;
     classDef drv fill:#d1e7dd,stroke:#333;
     classDef pas fill:#fff3cd,stroke:#333;
     classDef elec fill:#f8d7da,stroke:#333;
-    classDef mot fill:#cfe2ff,stroke:#333;
-    class AVG,AVD,ARG,ARD wheel;
-    class COND,VOL drv;
+    classDef estop fill:#f8d7da,stroke:#900,stroke-width:2px;
+    class AVG,AVD wheel;
+    class ARC caster;
+    class COND drv;
     class PASS pas;
-    class MG,MD mot;
-    class ELE elec;
+    class BAY elec;
+    class SEP estop;
 ```
 
-**Gabarit :** longueur ~150–180 cm · largeur ~96 cm · voie ~84 cm · 4 roues Ø30 cm · assise basse 16 cm (anti-basculement).
+**Gabarit :** longueur ~150–180 cm · largeur ~96 cm · **voie avant ~84 cm** · **2 roues motrices avant Ø30 cm + baie technique à l'avant** + **1 roulette arrière libre** · **séparation centrale = arrêt d'urgence** · assise basse 16 cm (anti-basculement).
 
-> ⚠️ Réservé au **terrain plat, sous surveillance adulte**. Vitesse estimée ~8–13 km/h, autonomie ~10–20 min.
+> ⚠️ Réservé au **terrain plat, sous surveillance adulte**. Vitesse estimée ~8–13 km/h, autonomie ~10–20 min. **Un tricycle bascule plus facilement qu'un 4 roues** → anti-renversement logiciel (voir §3).
 
 ## En bref
 
 | Élément | Choix |
 |---|---|
-| **Places** | 2, banquette unique côte à côte ; **conducteur à gauche** |
-| **Direction** | **2 pentures de porte** (un pivot par roue) reliées par une **bielle d'accouplement** ; **volant déporté à gauche** |
-| **Propulsion** | **2 moteurs CC 12 V (~172 W / 0,23 HP)** (un par roue arrière) — **même PWM aux deux** |
-| **Transmission** | Réducteurs **imprimés 3D 1:16** + **poulies vissées sur les roues + courroies** |
-| **Roues** | 4 × **Ø30 cm (12")**, jante plastique, roulement 1/2", à roulement libre |
-| **Électronique** | **ESP32** → **driver double canal 20 A / 6–30 V** (PWM + DIR), **PWM bridé ~50 %** |
-| **Énergie** | **2 × packs 20 V / 5 Ah en parallèle** (diode-OR) + 2 adaptateurs vers bornes de puissance |
-| **Vitesse** | Mesurée par **capteur d'angle AS5600 (I²C)** ; asservissement à **500 Hz** |
-| **Commandes** | Pédale **accélérateur à effet Hall** ; **frein électrique au relâché** ; bouton **armement** + bouton **marche arrière** |
+| **Places** | 2, banquette unique côte à côte ; **conducteur à gauche** (manette) |
+| **Direction** | **Différentielle (skid steer)** : différence de vitesse entre les 2 roues avant ; **pivot sur place** possible ; **aucune pièce de direction mécanique** |
+| **Propulsion** | **2 moteurs CC 12 V (~172 W / 0,23 HP)** AVANT **indépendants** (un par roue) — **PWM/DIR par roue** |
+| **Transmission** | Réducteurs **imprimés 3D 1:16** + **poulies vissées sur les roues avant + courroies** |
+| **Roues** | **2 × motrices avant Ø30 cm (12")** (jante plastique, roulement 1/2") + **1 roulette arrière pivotante libre** |
+| **Pilotage** | **Manette Bluetooth** (stick : Y = avance/recul, X = virage) ; **calibration obligatoire** ; joystick analogique réservé (futur) |
+| **Électronique** | **ESP32** → **driver double canal 20 A / 6–30 V** (PWM + DIR / canal), **PWM bridé ~50 %** ; **baie technique à l'AVANT** (près des 2 moteurs, câblage de puissance court) |
+| **Énergie** | **2 × packs 20 V / 5 Ah en parallèle** (diode-OR) + 2 adaptateurs vers bornes de puissance ; **logés à l'AVANT** dans la baie technique |
+| **Vitesse** | Mesurée par **2 capteurs d'angle AS5600** (un par roue, 1 par bus I²C) ; asservissement à **500 Hz** |
+| **Commandes** | Pilotage à la **manette Bluetooth** ; bouton **armement** (physique ou START de la manette, ~1 s) ; **arrêt d'urgence matériel** sur la **séparation centrale** de l'habitacle (coupe tout) **+** arrêt d'urgence logiciel = bouton **B** de la manette ; **frein électrique par défaut** |
 | **Châssis** | **Bois** allégé : madriers **2×3** + plancher **contreplaqué 6 mm** |
-| **Masse** | ~**34 kg** à vide · ~**100 kg** en charge (2 enfants) |
+| **Masse** | ~**32 kg** à vide · ~**98 kg** en charge (2 enfants) |
 
 ## Pourquoi ces choix
 
-- **Stabilité avant tout** : assise basse (16 cm), **voie large (84 cm)**, empattement long (95 cm) → ne bascule pas, même avec 2 enfants.
+- **Direction différentielle = mécanique nulle** : plus de volant, colonne, pivots, fusées, bielle ni barre d'attaque → moins de pièces à fabriquer, à régler et à user ; on **tourne en logiciel** (différence de PWM entre les 2 roues). **Pivot sur place** quand l'avance ≈ 0.
+- **Roulette arrière libre** : une seule roulette pivotante non motorisée s'oriente d'elle-même → géométrie simple, pas d'essieu arrière.
+- **Stabilité maîtrisée** : un tricycle bascule plus vite qu'un 4 roues → assise basse (16 cm), **voie avant large** + **anti-renversement firmware** (bornage de l'amplitude de virage selon la vitesse **et** limiteur de pente sur le virage).
 - **Moteurs 12 V sur batterie 20 V** : le **PWM est plafonné à ~50 %** (≈ 10 V moyens) pour éviter la surchauffe des moteurs.
-- **Roues à roulement libre** : entraînées par **courroie** (poulie vissée sur la jante), elles gardent leur roulement d'origine — pas d'essieu moteur traversant.
-- **Sécurité** : arrêt d'urgence **coupe-courant général** (en série dans la gate du latch, ESP32 compris), démarrage par **bouton momentané** + latch low-side (2× MOSFET, l'ESP se maintient en vie), fusible par pack, **frein électrique au relâché**, coupure basse tension (LVC), **watchdog 5 s**, démarrage **désarmé** par défaut, carters sur courroies/poulies, ceinture, casque.
+- **Roues avant à roulement libre** : entraînées par **courroie** (poulie vissée sur la jante), elles gardent leur roulement d'origine — pas d'essieu moteur traversant.
+- **Baie technique à l'avant** : batteries + driver + ESP32 sont regroupés **à l'avant, près des 2 moteurs** → **câblage de puissance court** (moins de pertes, moins de fils ~10 AWG à tirer), masse motrice et énergie concentrées sur l'essieu moteur. Disposition longitudinale : **AVANT (2 roues motrices + baie technique) → HABITACLE → ARRIÈRE (roulette libre)**.
+- **Sécurité** : **arrêt d'urgence matériel central**, placé sur la **séparation entre les 2 places** (à portée des deux enfants), **coupe-courant général** (en série dans la gate du latch, ESP32 compris) **et** arrêt d'urgence logiciel manette (bouton B) ; démarrage par **bouton momentané** + latch low-side (2× MOSFET, l'ESP se maintient en vie), fusible par pack, **frein électrique par défaut** (déconnexion manette → freinage immédiat), coupure basse tension (LVC), **watchdog 5 s**, démarrage **désarmé** par défaut, carters sur courroies/poulies, ceinture, casque.
 
 ---
 
@@ -101,198 +98,185 @@ flowchart TB
 
 | Cote | Valeur | Pourquoi |
 |---|---|---|
-| Longueur totale | **150 cm** (prévoir **jusqu'à ~180 cm**) | Pédales + dossier devant ; **+ ~30 cm à l'arrière** pour loger **moteurs, driver et batteries** (baie technique) |
+| Longueur totale | **150 cm** (prévoir **jusqu'à ~180 cm**) | **Baie technique à l'avant** (batteries, driver, électronique, ~30 cm près des 2 moteurs) + habitacle + dossier + porte-à-faux jusqu'à la roulette arrière |
 | Largeur hors-tout | **96 cm** | Doit loger **deux enfants côte à côte** |
 | **Largeur intérieure banquette** | **~80 cm** | 2 × ~40 cm/enfant (épaules + coudes) |
-| **Voie** (écartement roues, axe à axe) | **84 cm** | Voie large = **anti-basculement**, crucial avec 2 occupants |
-| **Empattement** (essieu AV ↔ AR) | **95 cm** | Long = stable et droit ; encaisse mieux le surcroît de poids |
-| Hauteur d'assise (sol → fond du siège) | **16 cm** | Centre de gravité **bas** = ne se renverse pas |
+| **Séparation centrale** (cloison entre les 2 places) | hauteur **~40 cm / sol** (~24 cm au-dessus de l'assise), **centrée**, ~4 cm d'épaisseur | Cloison verticale **à portée des deux enfants** ; porte le **bouton d'arrêt d'urgence** matériel (champignon à ~35 cm) |
+| **Baie technique** (avant) | longueur ~**30 cm** (0–30 cm depuis l'essieu avant) | Loge **2 packs 20 V, driver, ESP32, breakout** près des 2 moteurs (câblage court) |
+| **Voie avant** (écartement roues motrices, axe à axe) | **84 cm** | Voie large = **anti-basculement** ET **bras de levier du différentiel** (plus la voie est large, plus le virage est franc à différentiel donné) |
+| **Empattement** (essieu AV ↔ roulette AR) | **~110 cm** | Assez long pour la stabilité (les 2 enfants restent entre l'essieu moteur et la roulette) ; la roulette ne fait que suivre, le pivot se fait sur l'essieu avant |
+| Hauteur d'assise (sol → fond du siège) | **16 cm** | Centre de gravité **bas** = limite le renversement |
 | Garde au sol (sous châssis) | **8 cm** | Passe les petits obstacles sans talonner |
 | Hauteur de dossier (assise → haut) | **34 cm** | Soutient le dos des deux enfants |
-| **Roues (×4 identiques)** | **Ø30 cm (12")**, jante plastique + pneu PVC dur | Mêmes roues partout → plan simplifié |
-| Moyeu / fixation | **Roulement métal, alésage 1/2"**, moyeu large ~3,8 cm | Tourne **libre** sur un boulon à épaulement fixe (fournis) |
+| **Roues motrices avant (×2 identiques)** | **Ø30 cm (12")**, jante plastique + pneu PVC dur | Mêmes roues à gauche/droite → plan simplifié |
+| **Roulette arrière (×1)** | **Roulette pivotante (caster) Ø ~12,5 cm (5")**, hauteur montée ~15 cm, charge ≥ 50 kg | Non motorisée, s'oriente librement ; hauteur de montage choisie pour garder le châssis **de niveau** avec l'essieu avant (centre à 15 cm) |
+| Moyeu / fixation roues avant | **Roulement métal, alésage 1/2"**, moyeu large ~3,8 cm | Tourne **libre** sur un boulon à épaulement fixe (fournis) |
 
-**Idée directrice :** assise basse + **voie très large (84 cm)** + empattement long = un engin **qui ne bascule pas** malgré deux enfants côte à côte.
+**Idée directrice :** assise basse + **voie avant large (84 cm)** = un engin **qui reste stable** malgré le format tricycle et deux enfants côte à côte. L'anti-renversement firmware complète la géométrie.
 
 ---
 
-## 2. Position siège / pédales
+## 2. Position siège / commandes
 
-Repère 0 = essieu arrière ; cotes mesurées **vers l'avant**.
+Repère 0 = essieu **avant** (roues motrices) ; cotes mesurées **vers l'arrière**. La **baie technique** (batteries + électronique) occupe l'avant, **entre l'essieu moteur et la banquette**.
 
-| Élément | Distance depuis essieu AR | Hauteur / sol |
+| Élément | Distance depuis essieu AV | Hauteur / sol |
 |---|---|---|
-| Essieu arrière (repère) | **0 cm** | centre à 15 cm (roue Ø30) |
-| **Fond du dossier** | **23 cm** | assise à 16 cm |
-| Avant de l'assise | **53 cm** | 16 cm |
-| **Boîtier de pédales** (accél./frein) | **70 cm** | ~22 cm |
-| **Pédale la plus avancée** | **85 cm** | — |
-| Essieu avant | **88 cm** | centre à 15 cm |
+| Essieu avant (roues motrices, repère) | **0 cm** | centre à 15 cm (roue Ø30) |
+| **Baie technique** (batteries + électronique) | **~0–30 cm** | dans le châssis, bas |
+| **Cale-pieds** | **~35 cm** | repose-pieds au-dessus/derrière la baie |
+| Avant de l'assise | **~65 cm** | 16 cm |
+| **Fond du dossier** | **~95 cm** | assise à 16 cm |
+| Roulette arrière (libre) | **~110 cm** | centre selon Ø ~12,5 cm |
 
-➡️ **Distance dossier → pédale avancée = 62 cm** ✔ (jambe presque tendue, léger pli du genou).
+➡️ Avec la **manette Bluetooth**, il n'y a **plus de boîtier de pédales ni de volant** à positionner : seule compte l'ergonomie d'assise. **Dossier → cale-pieds ≈ 60 cm** (95 − 35) ✔ jambe presque tendue, léger pli du genou. Prévoir un endroit sûr pour **poser/charger la manette**. Siège **réglable** (§6) pour s'adapter à la taille de l'enfant.
+
+➡️ **Séparation centrale + arrêt d'urgence** : une **cloison verticale entre les 2 places** (à portée des deux enfants) porte le **bouton d'arrêt d'urgence matériel** (coupe-circuit en série dans la gate du latch). **Facilement accessible**, il **coupe tout** (puissance **et** ESP32), en complément de l'arrêt d'urgence **logiciel** de la manette (bouton **B**). Le **pilotage du véhicule reste à la manette Bluetooth**.
 
 ### Vue de côté
 
 ```mermaid
 flowchart LR
-    AR["🛞 Essieu AR<br/>Ø30 cm — 0 cm"]
-    DOS["Dossier<br/>23 cm"]
-    ASS["Avant assise<br/>53 cm"]
-    PED["Pédales accél/frein<br/>70 cm"]
-    PAV["Pédale avancée<br/>85 cm"]
-    AV["🛞 Essieu AV<br/>Ø30 cm — 88 cm"]
+    AV["🛞 Essieu AV motrice<br/>Ø30 cm — 0 cm"]
+    BAY["🔋 Baie technique<br/>~0–30 cm"]
+    ASS["Avant assise<br/>~65 cm"]
+    DOS["Dossier<br/>~95 cm"]
+    AR["🛞 Roulette AR libre<br/>~110 cm (Ø12,5)"]
 
-    AR --> DOS --> ASS --> PED --> PAV --> AV
-    DOS -. "dossier → pédale = 62 cm ✔" .-> PAV
+    AV --> BAY --> ASS --> DOS --> AR
 
     classDef axe fill:#cfe2ff,stroke:#333,stroke-width:2px;
+    classDef caster fill:#e2e3e5,stroke:#333,stroke-width:2px;
     classDef ergo fill:#fff3cd,stroke:#333;
-    class AR,AV axe;
-    class DOS,PAV ergo;
+    classDef elec fill:#f8d7da,stroke:#333;
+    class AV axe;
+    class AR caster;
+    class ASS,DOS ergo;
+    class BAY elec;
 ```
 
-> **Banquette unique 2 places** : les deux enfants côte à côte (~80 cm intérieure), même dossier. Seul le **côté gauche** reçoit le **volant déporté** et les **pédales** ; le côté droit est passager. Les cotes valent pour la **place conducteur (gauche)**.
+> **Banquette unique 2 places** : les deux enfants côte à côte (~80 cm intérieure), même dossier. Le **conducteur (gauche)** tient la **manette** ; le côté droit est passager. La **baie technique** (batteries + électronique) est **à l'avant**, entre l'essieu moteur et l'assise.
 
 ### Vue de dessus (disposition 2 places)
 
 ```mermaid
 flowchart TB
-    subgraph AV["AVANT"]
-        RAVG["🛞 AV gauche"]
-        PIV(["2 pentures + bielle"])
-        RAVD["🛞 AV droite"]
-        RAVG --- PIV --- RAVD
+    subgraph AV["AVANT — 2 roues MOTRICES + BAIE TECHNIQUE"]
+        RAVG["🛞 AV gauche (motrice)"]
+        BAY["🔋 baie technique<br/>batteries + driver + ESP32"]
+        RAVD["🛞 AV droite (motrice)"]
+        RAVG --- BAY --- RAVD
     end
     subgraph HAB["HABITACLE — banquette unique ~80 cm"]
-        COND["🧒 CONDUCTEUR (gauche)<br/>volant déporté + pédales"]
+        COND["🧒 CONDUCTEUR (gauche)<br/>manette Bluetooth"]
+        SEP["🛑 séparation centrale<br/>ARRÊT D'URGENCE (e-stop)"]
         PASS["🧒 PASSAGER (droite)<br/>repose-pieds"]
-        COND --- PASS
+        COND --- SEP --- PASS
     end
-    subgraph AR["ARRIÈRE"]
-        RARG["🛞 AR gauche (motrice)"]
-        RARD["🛞 AR droite (motrice)"]
-        RARG --- RARD
+    subgraph AR["ARRIÈRE — roulette LIBRE"]
+        RARC["🛞 roulette pivotante (caster)"]
     end
     AV --- HAB --- AR
 
     classDef wheel fill:#cfe2ff,stroke:#333,stroke-width:2px;
+    classDef caster fill:#e2e3e5,stroke:#333,stroke-width:2px;
     classDef drv fill:#d1e7dd,stroke:#333;
     classDef pas fill:#fff3cd,stroke:#333;
-    class RAVG,RAVD,RARG,RARD wheel;
+    classDef elec fill:#f8d7da,stroke:#333;
+    classDef estop fill:#f8d7da,stroke:#900,stroke-width:2px;
+    class RAVG,RAVD wheel;
+    class RARC caster;
     class COND drv;
     class PASS pas;
+    class BAY elec;
+    class SEP estop;
 ```
 
 ---
 
-## 3. Direction à deux pentures (un pivot par roue) + bielle
+## 3. Direction différentielle (skid steer)
 
-### Choix retenu : **deux pivots de roue (style fusées), chaque penture = un axe de pivot**
+### Principe : **tourner par différence de vitesse entre les 2 roues avant**
 
-**Chaque roue avant pivote sur sa propre penture de porte** (la penture posée à plat = l'**axe de pivot vertical** de cette roue). Une **bielle d'accouplement (tie rod)** relie les **bras des deux roues** pour qu'elles tournent **ensemble**. La **traverse avant reste FIXE** sur le châssis (elle ne tourne pas d'un bloc) → centre de gravité et géométrie plus stables qu'un pivot central unique.
-
-```mermaid
-flowchart TD
-    subgraph AVANT["TRAVERSE AVANT FIXE (vissée au châssis)"]
-        PG(["penture gauche<br/>= pivot roue G"])
-        PD(["penture droite<br/>= pivot roue D"])
-    end
-    RG["🛞 Roue AV gauche<br/>(sur fusée + bras)"]
-    RD["🛞 Roue AV droite<br/>(sur fusée + bras)"]
-    BIE["BIELLE d'accouplement (tie rod)<br/>relie les 2 bras → roues parallèles"]
-
-    PG -- "aile fixe vissée sur la traverse" --- AVANT
-    PD -- "aile fixe vissée sur la traverse" --- AVANT
-    PG -- "aile mobile" --> RG
-    PD -- "aile mobile" --> RD
-    RG -- "bras de fusée G" --- BIE
-    RD -- "bras de fusée D" --- BIE
-
-    classDef mobile fill:#cfe2ff,stroke:#333,stroke-width:2px;
-    classDef pivot fill:#fff3cd,stroke:#333,stroke-width:2px;
-    classDef link fill:#d1e7dd,stroke:#333;
-    class RG,RD mobile;
-    class PG,PD pivot;
-    class BIE link;
-```
-
-1. **Traverse avant fixe** : planche solide boulonnée au nez du châssis ; elle ne bouge pas.
-2. **Une penture par roue**, posée à plat : **aile fixe** vissée sur la traverse, **aile mobile** solidaire de la **fusée** (support de roue) → la roue pivote autour de l'axe de la penture.
-3. **Renfort** : un **boulon vertical (M10)** dans l'axe de chaque penture reprend les efforts verticaux (anti-arrachement).
-4. **Bras de fusée** : une patte métal sur chaque fusée, vers l'arrière.
-5. **Bielle d'accouplement** : barre/tige filetée reliant les **deux bras** (rotules boulon + nylstop à chaque bout) → les deux roues tournent **du même angle** (braquage parallèle ; arms légèrement inclinés = ébauche d'Ackermann).
-
-### Liaison volant → roues
+Il n'y a **aucune pièce de direction mécanique** : pas de volant, pas de colonne, pas de pivots de roue, pas de fusées, pas de bielle d'accouplement (tie rod), pas de barre d'attaque (drag link), pas de bras Pitman, pas de butées de braquage. **On tourne en faisant rouler une roue avant plus vite que l'autre.** La **roue arrière est une roulette libre** qui suit le mouvement.
 
 ```mermaid
 flowchart TD
-    V["🎡 Volant"]
-    C["Colonne<br/>tube acier Ø20, 2 paliers"]
-    P["Bras Pitman<br/>plaque 10 cm"]
-    DL["Barre d'attaque (drag link)"]
-    BG["Bras de fusée GAUCHE"]
-    BIE["BIELLE d'accouplement"]
-    BD["Bras de fusée DROITE"]
+    PAD["🎮 Manette Bluetooth<br/>stick Y = avance · stick X = virage"]
+    MIX["Mélange « arcade » (firmware)<br/>gauche = avance − virage·gain<br/>droite = avance + virage·gain"]
+    LIM["Anti-renversement<br/>(amplitude bornée + limiteur de pente)"]
+    ML["⚙️ Moteur AV gauche"]
+    MR["⚙️ Moteur AV droite"]
+    RG["🛞 Roue AV gauche"]
+    RD["🛞 Roue AV droite"]
+    CAS["🛞 Roulette AR libre<br/>(s'oriente seule)"]
 
-    V --> C --> P
-    P -- "rotule (boulon + nylstop)" --> DL
-    DL -- "rotule" --> BG
-    BG -- "tie rod" --- BIE --- BD
+    PAD --> MIX --> LIM
+    LIM -- "consigne G" --> ML --> RG
+    LIM -- "consigne D" --> MR --> RD
+    RG -. "le châssis pivote" .-> CAS
+    RD -. "le châssis pivote" .-> CAS
 
     classDef cmd fill:#d1e7dd,stroke:#333;
     classDef mobile fill:#cfe2ff,stroke:#333,stroke-width:2px;
-    class V,C,P,DL cmd;
-    class BG,BD,BIE mobile;
+    classDef caster fill:#e2e3e5,stroke:#333,stroke-width:2px;
+    class PAD,MIX,LIM cmd;
+    class RG,RD mobile;
+    class CAS caster;
 ```
 
-- **Colonne** (tube Ø20, 2 paliers) → **bras Pitman** en bas qui balaye gauche/droite.
-- Une **barre d'attaque (drag link)** relie le bras Pitman au **bras de fusée gauche** ; la **bielle d'accouplement** transmet à la roue droite → les deux roues braquent ensemble.
-- **Rotules improvisées** : boulon + écrou **nylstop** serré « juste assez » (rondelles) à chaque articulation.
-- **Déport à gauche** : la colonne est montée à gauche devant le conducteur ; on attaque le **bras de fusée gauche** (le plus proche). Régler les longueurs pour **roues droites = volant centré**.
+1. **Mélange « arcade »** : le firmware combine l'avance (stick Y) et le virage (stick X) en deux consignes de roue : `gauche = avance − virage·gain` et `droite = avance + virage·gain`. Tourner le stick à droite = roue gauche plus rapide → le kart vire à droite.
+2. **Pivot sur place** : si l'avance ≈ 0 et qu'on pousse le stick latéralement, les deux roues tournent **en sens opposés** → le kart **tourne sur lui-même** (la roulette arrière pivote pour suivre).
+3. **Anti-renversement** : un tricycle bascule facilement, donc le virage est protégé sur **deux plans** :
+   - **Amplitude bornée selon la vitesse** : la valeur de virage admissible est réduite quand on va vite, pour garder l'accélération latérale sous un maximum (`a_lat_max`). Plus on roule vite, moins on peut braquer fort.
+   - **Limiteur de pente (slew-rate)** : la consigne de virage ne peut pas varier de plus de `turn_rate` par seconde → un coup de manche brusque est **lissé** au lieu de provoquer un différentiel violent. L'avance est lissée de même (`thr_ramp_per_s`).
+
+Paramètres web : **`turn_gain`** (autorité de virage), **`a_lat_max`** (accél. latérale max), **`turn_rate`** (douceur du virage), **`thr_ramp_per_s`** (douceur de l'avance). Détails dans [`firmware/README.md`](firmware/README.md).
+
+> **Conséquence du skid steer :** en virage serré, les roues **ripent** légèrement sur le sol (frottement de glissement) — c'est inhérent à ce type de direction. À vitesse modérée sur terrain plat, l'effet reste acceptable.
 
 ---
 
 ## 4. Matériel & électronique
 
-> **Châssis essentiellement en bois, allégé** : grille de **madriers 2×3** (SPF ~38×64 mm) + **plancher contreplaqué 6 mm**. Renforcer aux points de charge (pivot, supports moteurs, ancrage ceinture). ⚠️ Le CP 6 mm impose une **grille 2×3 rapprochée** (traverses tous les ~25–30 cm) ; **12 mm sous la banquette**.
+> **Châssis essentiellement en bois, allégé** : grille de **madriers 2×3** (SPF ~38×64 mm) + **plancher contreplaqué 6 mm**. Renforcer aux points de charge (supports moteurs avant, fixation roulette arrière, ancrage ceinture). ⚠️ Le CP 6 mm impose une **grille 2×3 rapprochée** (traverses tous les ~25–30 cm) ; **12 mm sous la banquette**.
 
 | Catégorie | Élément | Taille / spec |
 |---|---|---|
 | **Bois** | Châssis (longerons + traverses) | Madriers **2×3** (SPF ~38×64 mm), grille rapprochée |
 | | Plancher | Contreplaqué **6 mm**, ~140 × 90 cm, soutenu par la grille |
 | | Assise (zone chargée) | Contreplaqué **12 mm** sous la banquette |
-| | Support pivot / dossier | Bloc bois dur + **platine anti-arrachement** ; dossier CP 6 mm |
-| **Direction** | **2 pentures de porte** (un pivot par roue) | Acier, **lame ≥ 10 cm** |
-| | 2 axes de pivot (un par penture) | **M10 × 80**, écrou nylstop, grosses rondelles |
-| | 2 fusées + bras + **bielle d'accouplement** | barre/tige filetée M8, rotules boulon+nylstop |
-| | Colonne | Tube acier Ø20 mm + bras Pitman + barre d'attaque |
-| **Roues** | ×4 identiques | **Ø30 cm (12")**, jante plastique + pneu PVC, roulement 1/2" |
-| | Boulons à épaulement | **Fournis avec les roues** (épaulement 1/2", filetage 3/8") |
-| **Propulsion** | 2 moteurs CC **12 V** | ~172 W (0,23 HP), 19,6 A, 4615 tr/min ; un par roue AR |
+| | Supports moteurs avant / dossier | Bloc bois dur + platine ; dossier CP 6 mm |
+| **Roues** | **2 × roues motrices avant** identiques | **Ø30 cm (12")**, jante plastique + pneu PVC, roulement 1/2" |
+| | **1 × roulette arrière pivotante (caster)** | Roulette **libre**, non motorisée ; **Ø ~12,5 cm (5")**, hauteur montée ~15 cm, **charge ≥ 50 kg** |
+| | Boulons à épaulement (roues avant) | **Fournis avec les roues** (épaulement 1/2", filetage 3/8") |
+| **Propulsion** | **2 moteurs CC 12 V** (un par roue **avant**) | ~172 W (0,23 HP), 19,6 A, 4615 tr/min ; **indépendants** |
 | | 2 réducteurs 3D | Rapport **1:16**, imprimés (PETG/ABS/nylon) |
-| | Poulies + courroies | Poulie **vissée sur chaque roue AR** + courroie vers le gearbox (**1:1**) |
-| | **Capteur d'angle AS5600** + aimant diamétral | magnétique sans contact, **12 bits absolu I²C**, **3,3 V natif** (aucun level-shift), pull-ups 4,7 kΩ |
-| **Énergie / électronique** | Batteries (**2 requises**) | **2 × packs 20 V / 5 Ah** à glissière, **en parallèle** (~40 A total) |
+| | Poulies + courroies | Poulie **vissée sur chaque roue avant** + courroie vers le gearbox (**1:1**) |
+| | **2 × capteur d'angle AS5600** + aimant diamétral | un par roue avant, **1 par bus I²C** ; magnétique sans contact, **12 bits absolu I²C** (adresse fixe 0x36), **3,3 V natif** (aucun level-shift), pull-ups 4,7 kΩ |
+| **Pilotage** | **Manette Bluetooth** | stick : Y = avance/recul, X = virage ; bouton **B** = arrêt d'urgence, bouton **START** = armement ; **calibration obligatoire** |
+| | *Joystick analogique* | **réservé (futur, non câblé)** : 2 voies de l'ADS1115 (A1/A2) prévues derrière la même abstraction logicielle |
+| **Énergie / électronique** | Batteries (**2 requises**) | **2 × packs 20 V / 5 Ah** à glissière, **en parallèle** (~40 A total) ; **logées à l'AVANT** (baie technique, près des moteurs) |
 | | **Adaptateurs de batterie** (×2) | Support à glissière → bornes de puissance (+ / −) |
 | | **Diodes idéales (diode-OR)** — requis | **2 × modules 40 A / 60 A** (un par pack) + 1 fusible/pack |
 | | **Interrupteur d'alimentation (latch)** | **2× MOSFET N IRFZ44N** low-side (+ dissipateur) + **opto** + zener/pull-down + **bouton démarrage** |
 | | Driver moteur | **1 carte double canal 20 A / 6–30 V** (PWM+DIR/canal), duty **bridé ~50 %** |
 | | Calculateur | **Carte ESP32-WROOM** (double cœur 240 MHz, Wi-Fi/BT, 4 MB flash) |
-| | **Carte d'extension (breakout)** | Borniers à vis + sorties 5 V / 3,3 V + LED d'état ; le **3,3 V** alimente l'AS5600 |
+| | **ADC externe ADS1115** | **16 bits I²C**, alimenté **3,3 V**, adresse **0x48** sur le bus 0 (avec l'AS5600 gauche) ; A0 = Vbat, A1/A2 réservés joystick futur |
+| | **Carte d'extension (breakout)** | Borniers à vis + sorties 5 V / 3,3 V + LED d'état ; le **3,3 V** alimente AS5600 + ADS1115 |
 | | **Buck 20 V → 5 V** (déjà disponible) | alimente l'ESP32 (qui fabrique son 3,3 V) |
-| | **Perfboard soudée** | 2 ponts diviseurs (throttle 10 k/20 k, Vbat 100 k/15 k) + 2 × 0,1 µF (⚠️ pas de breadboard — vibrations) |
-| | **Boîtier électrique étanche** (ABS, couvercle transparent, ~150 × 100 × 70 mm, ≈IP65) | loge ESP32 + breakout + perfboard ; presse-étoupes pour les câbles ; protège poussière/pluie/chocs (couvercle clair = LED d'état visible) |
-| | Sécurité élec. | **Arrêt d'urgence (NF) en série** dans la ligne de gate + **fusible/pack** |
+| | **Perfboard soudée** | pont diviseur Vbat 100 k/15 k (vers A0 de l'ADS1115) + condensateurs de découplage (⚠️ pas de breadboard — vibrations) |
+| | **Boîtier électrique étanche** (ABS, couvercle transparent, ~150 × 100 × 70 mm, ≈IP65) | **dans la baie technique avant** ; loge ESP32 + breakout + ADS1115 + perfboard ; presse-étoupes pour les câbles ; protège poussière/pluie/chocs (couvercle clair = LED d'état visible) |
+| | Sécurité élec. | **Arrêt d'urgence (NF) en série** dans la ligne de gate (bouton **sur la séparation centrale** de l'habitacle, à portée des deux enfants) + **fusible/pack** |
 | | Ruban **WS2812B** (~10 LEDs) | état : vert = en route, rouge = désarmé |
-| **Commandes** | **Pédale accélérateur à effet Hall** | 3 fils (5 V / GND / **signal 0,8–4,2 V**), à rappel ; **pont diviseur ÷1,5** requis |
-| | Bouton **armement** + bouton **marche arrière** + LED | momentanés ; armement = appui ~1 s |
-| **Frein** | **Frein électrique au relâché** ✅ | géré par le firmware (driver en inversion) ; pas de patin |
-| **Réserves futures** (câblées, non utilisées) | **2× encodeur A/B 3,3 V**, **2 boutons** | connecteurs prévus pour évolutions ; logique 3,3 V |
+| **Commandes** | Bouton **armement** + LED | momentané ; armement = appui ~1 s (bouton physique **ou** START de la manette) |
+| **Frein** | **Frein électrique (par défaut)** ✅ | géré par le firmware (PID de plugging) ; **état par défaut = freinage** ; déconnexion manette → freinage immédiat ; pas de patin |
+| **Réserves futures** (câblées, non utilisées) | **2× encodeur incrémental quadrature AMT103-V** (un par roue avant), **joystick analogique** | connecteurs prévus pour évolutions ; A/B sur GPIO 34/35 (G) et 36/39 (D) ; joystick sur A1/A2 de l'ADS1115 |
 | **Visserie / finition** | Boulons traversants M8/M10, écrous **nylstop** | équerres, vis à bois, vernis ; arêtes arrondies |
 
-### Propulsion — 2 moteurs CC 12 V
+### Propulsion — 2 moteurs CC 12 V (avant)
 
-Chaque roue AR est entraînée par son **propre moteur CC à aimants permanents 12 V** via un **réducteur imprimé 3D au rapport 1:16**. **Système simplifié** : les **deux moteurs reçoivent exactement le même PWM** (pas de différentiel) ; **un seul capteur de vitesse** (AS5600) sert au contrôle.
+Chaque **roue avant** est entraînée par son **propre moteur CC à aimants permanents 12 V** via un **réducteur imprimé 3D au rapport 1:16** et une **courroie 1:1**. Les **deux moteurs sont commandés indépendamment** (PWM + DIR par canal) : c'est cette **différence de commande** qui assure la direction. **Chaque roue a son propre capteur AS5600** pour l'asservissement.
 
 | Caractéristique | Valeur |
 |---|---|
@@ -308,28 +292,36 @@ Chaque roue AR est entraînée par son **propre moteur CC à aimants permanents 
 ```mermaid
 flowchart LR
     BATT["🔋 Batterie 20 V / 5 Ah"]
-    ESP["🧠 ESP32<br/>(throttle, rampe, limites)"]
+    PAD["🎮 Manette Bluetooth"]
+    ESP["🧠 ESP32<br/>(mélange arcade, anti-renversement, limites)"]
     DRV["Driver double canal<br/>20 A · 6–30 V · PWM+DIR"]
-    M1["Moteur G 12 V (~172 W)"]
-    M2["Moteur D 12 V (~172 W)"]
+    M1["Moteur AV G 12 V (~172 W)"]
+    M2["Moteur AV D 12 V (~172 W)"]
     G1["Réducteur 3D 1:16"]
     G2["Réducteur 3D 1:16"]
-    R1["🛞 Roue AR gauche"]
-    R2["🛞 Roue AR droite"]
+    R1["🛞 Roue AV gauche"]
+    R2["🛞 Roue AV droite"]
+    CAS["🛞 Roulette AR libre"]
 
     BATT -- "alim puissance" --> DRV
+    PAD -. "Bluetooth (x,y)" .-> ESP
     ESP -- "PWM+DIR canal G (3,3 V)" --> DRV
     ESP -- "PWM+DIR canal D (3,3 V)" --> DRV
     DRV -- "canal G (≤20 A)" --> M1 --> G1 -- "poulie + courroie 1:1" --> R1
     DRV -- "canal D (≤20 A)" --> M2 --> G2 -- "poulie + courroie 1:1" --> R2
-    M1 -. "vitesse roue : AS5600 (I²C 3,3 V)" .-> ESP
+    M1 -. "vitesse roue G : AS5600 (I²C bus 0)" .-> ESP
+    M2 -. "vitesse roue D : AS5600 (I²C bus 1)" .-> ESP
+    R1 -. "le châssis pivote" .-> CAS
+    R2 -. "le châssis pivote" .-> CAS
 
     classDef pwr fill:#f8d7da,stroke:#333;
     classDef ctrl fill:#d1e7dd,stroke:#333;
     classDef wheel fill:#cfe2ff,stroke:#333,stroke-width:2px;
+    classDef caster fill:#e2e3e5,stroke:#333,stroke-width:2px;
     class BATT pwr;
-    class ESP,DRV ctrl;
+    class ESP,DRV,PAD ctrl;
     class R1,R2 wheel;
+    class CAS caster;
 ```
 
 **Performances estimées :**
@@ -345,41 +337,47 @@ flowchart LR
 
 ### Commande électronique — ESP32
 
-- L'**ESP32** lit le throttle et envoie la **même commande PWM + DIR aux deux canaux** du driver.
+- L'**ESP32** reçoit les axes de la **manette Bluetooth**, applique le **mélange arcade** + **anti-renversement**, puis envoie **un PWM + DIR indépendant à chaque canal** du driver.
 - Driver : **double canal, 20 A continu / 60 A crête, 6–30 V**, entrées **PWM + DIR** compatibles **3,3 V**, PWM jusqu'à 20 kHz ; protections **surintensité / sous-tension / température**. ⚠️ **Aucune protection contre l'inversion de polarité** (VB+/VB-) → un branchement inversé **détruit la carte**.
-- **Accélérateur = PWM direct** (boucle ouverte) ; au **relâché**, un **PID ramène la vitesse à 0** (lecture AS5600) — sortie signée → peut **inverser le moteur** (plugging).
-- Bonnes pratiques : **PWM plafonné ~50 %**, **rampe** de montée, **limiteur de vitesse** (mesure capteur), **watchdog**, throttle **à rappel**.
+- **Frein PID par défaut** : à l'arrêt ou sans avance, un **PID ramène chaque roue à 0** (lecture AS5600) — sortie signée → peut **inverser le moteur** (plugging). C'est l'**état par défaut**.
+- Bonnes pratiques : **PWM plafonné ~50 %**, **rampe** d'avance, **limiteur de vitesse** (mesure capteur), **watchdog**, **freinage si la manette se déconnecte**.
 
-### Capteur de vitesse AS5600 (sur I²C)
+### Capteurs de vitesse AS5600 (×2, sur I²C)
 
-Capteur d'angle **AS5600** : magnétique **sans contact**, **angle absolu 12 bits** (4096 points/tour) lu en **I²C**, avec un **aimant diamétral** en bout d'arbre. **Cinématique connue** : le capteur fait **1 tour pour 16 tours moteur** (= sortie du gearbox **1:16**), et la **courroie est 1:1** jusqu'à la roue → **le capteur tourne exactement à la vitesse de la roue** ⇒ `GEAR_RATIO = 1`, **roue 12″ = 0,3048 m**. La conversion vitesse est **entièrement déterminée**. Il sert à :
-- **Mesurer la vitesse** → limiteur fiable ; **frein PID** vers 0 ; **sens** (signe de Δangle, broche DIR fixe la convention) ; **sécurité** (blocage : PWM actif sans rotation > 1 s → défaut).
+Capteur d'angle **AS5600** : magnétique **sans contact**, **angle absolu 12 bits** (4096 points/tour) lu en **I²C**, avec un **aimant diamétral** en bout d'arbre. Il y a **un AS5600 par roue avant**, **un par bus I²C** (chaque AS5600 ayant l'adresse fixe **0x36**, ils ne peuvent pas cohabiter sur le même bus). **Cinématique connue** : le capteur fait **1 tour pour 16 tours moteur** (= sortie du gearbox **1:16**), et la **courroie est 1:1** jusqu'à la roue → **le capteur tourne exactement à la vitesse de la roue** ⇒ `GEAR_RATIO = 1`, **roue 12″ = 0,3048 m**. La conversion vitesse est **entièrement déterminée**. Ils servent à :
+- **Mesurer la vitesse de chaque roue** → limiteur fiable ; **frein PID** vers 0 ; **sens** (signe de Δangle, broche DIR fixe la convention) ; **sécurité** (blocage : PWM actif sans rotation > 1 s → défaut).
 
-✅ **3,3 V natif** (VDD5V/VDD3V3 reliées) → **SDA/SCL directement sur l'ESP32, AUCUN level-shift**. Câblage : **SDA, SCL, 3,3 V, GND** (+ aimant), pull-ups **4,7 kΩ**.
+✅ **3,3 V natif** (VDD5V/VDD3V3 reliées) → **SDA/SCL directement sur l'ESP32, AUCUN level-shift**. Câblage par capteur : **SDA, SCL, 3,3 V, GND** (+ aimant), pull-ups **4,7 kΩ** par bus.
 
-Mise en œuvre : lecture I²C du registre **RAW ANGLE** (0x0C/0x0D) → **vitesse = dérivée de l'angle** (`Δcounts × fréquence`, **wrap 0↔4095**) ; **boucle 500 Hz** (FreeRTOS 1000 Hz) → aucune ambiguïté ; **adresse fixe 0x36** (un seul AS5600/bus ; 2ᵉ bus I²C réservé pour le futur) ; aimant **diamétral** centré, **entrefer 0,5–3 mm** ; bus I²C **à l'écart de la puissance**, 0,1 µF sur l'alim.
+Mise en œuvre : lecture I²C du registre **RAW ANGLE** (0x0C/0x0D) → **vitesse = dérivée de l'angle** (`Δcounts × fréquence`, **wrap 0↔4095**) ; **boucle 500 Hz** (FreeRTOS 1000 Hz) → aucune ambiguïté ; aimant **diamétral** centré, **entrefer 0,5–3 mm** ; bus I²C **à l'écart de la puissance**, condensateur de découplage sur l'alim.
 
-> *Alternative envisagée : un encodeur incrémental en quadrature (type AMT103-V) — écarté car il s'alimente en 5 V (sorties ~4,2 V → level-shift obligatoire) et n'apporte pas l'angle absolu.*
+> *Alternative réservée : un encodeur incrémental en quadrature (type AMT103-V) par roue — non câblé pour l'instant ; broches input-only prévues (voir brochage), décodage PCNT possible plus tard.*
 
-### Calibration de l'accélérateur
+### Mesure batterie — ADC externe ADS1115
 
-Le capteur Hall ne va jamais pile 0/3,3 V et varie d'une pièce à l'autre → on **calibre** (via l'interface web uniquement) :
+Toutes les mesures analogiques passent par un **ADS1115** (16 bits, I²C, PGA) **au lieu de l'ADC interne de l'ESP32** — plus précis et linéaire, et sans le conflit ADC2/Wi-Fi. Le breakout se branche **en piggyback sur le bus I²C 0** (avec l'AS5600 gauche : adresses distinctes **0x36 / 0x48**).
 
-1. Pédale **relâchée** → valeur **MIN** ; 2. pédale **à fond** → valeur **MAX** ; stocké en **NVS**.
+- ⚠️ **Alimenter en 3,3 V** (niveaux I²C compatibles ESP32) → `AIN_max = 3,3 V`.
+- **A0 = tension batterie** (via le pont diviseur **100 k / 15 k**), suivie en **mode continu**.
+- **A1 / A2 = réservés** au futur joystick X/Y (lecture single-shot) ; **A3 libre**.
+- Le driver **dégrade proprement** : ADS1115 absent → la mesure Vbat renvoie 0, aucun crash.
 
-```
-throttle% = clamp( (brut − MIN − zone_morte) / (MAX − marge − MIN), 0 … 1 )
-```
+### Calibration de la manette
 
-**Zone morte** en bas (relâché = 0 % garanti), **marge** en haut (100 % atteint). Sécurités : **lecture hors plage** (fil coupé) → throttle 0 ; **anti-démarrage pédale enfoncée** ; **calibration invalide** (`MAX−MIN` trop faible) → valeurs sûres / refus de rouler.
+**Le kart refuse de rouler tant que la manette n'est pas calibrée.** La calibration se fait **exclusivement depuis la page web** (onglet Manette), **pour la manette Bluetooth uniquement** :
+
+1. **Centre** : manche au repos → capture le point neutre ;
+2. **Extrêmes** : bouger les sticks à fond → capture l'amplitude par axe.
+
+L'échelle (centre + demi-amplitude par axe) est **persistée en NVS** (namespace `pad`). ⚠️ **Un (ré)appairage EFFACE la calibration** (nouvelle manette = nouvelle calibration). Tant que la manette n'est pas calibrée, connectée et armée, le contrôleur **reste au frein** (état par défaut).
 
 ### Sécurité électrique
 
-- **Arrêt d'urgence** bien accessible, **NF en série dans la ligne de gate** du latch : l'ouvrir retire l'alimentation de gate → les 2 MOSFET s'ouvrent → **coupe TOUT** (puissance **et** ESP32), **sans passer les 40 A dans le contact**. Au retour, système **désarmé**.
+- **Arrêt d'urgence** bien accessible, **NF en série dans la ligne de gate** du latch : l'ouvrir retire l'alimentation de gate → les 2 MOSFET s'ouvrent → **coupe TOUT** (puissance **et** ESP32), **sans passer les 40 A dans le contact**. Au retour, système **désarmé**. (En complément, le **bouton B de la manette** déclenche un freinage immédiat côté firmware.)
 - **Démarrage par bouton momentané** (amorce le latch) ; **fusible/pack**, câblage ≥ courant des 2 moteurs.
 - **Architecture batterie : 5S Li-ion** (~18,5 V nominal, 21 V pleine charge, ~15 V bas) — nombre de cellules réglable (défaut 5). Décharge profonde : **BMS du pack + LVC côté ESP32**.
 - **2 batteries en parallèle (REQUISES)** : même 20 V, capacité ×2, **courant ÷2 par pack**. ⚠️ **Jamais en série**. Ne relier que des packs **au même niveau de charge** ; **diode-OR + 1 fusible/pack**.
-- **Limiteur de vitesse** bas au début ; **batterie fixée/protégée** ; **carters** ; **frein électrique** + **désarmement auto 30 s** + **watchdog 5 s** + **PWM ~50 %**. Couper l'alim avant intervention.
+- **Limiteur de vitesse** bas au début ; **batterie fixée/protégée** ; **carters** ; **frein électrique** + **désarmement auto** + **watchdog 5 s** + **PWM ~50 %**. Couper l'alim avant intervention.
 
 ### Schéma de câblage + brochage ESP32
 
@@ -392,14 +390,15 @@ flowchart LR
     GNDC(["GND commun"])
     BUCK["Buck<br/>20 V → 5 V"]
     ESP["🧠 ESP32"]
+    PAD["🎮 Manette BT"]
     DRV["Driver double canal<br/>20 A / 6–30 V"]
-    M1["⚙️ Moteur G 12 V"]
-    M2["⚙️ Moteur D 12 V"]
-    ENC["🧭 AS5600 (essieu)<br/>(angle 12 bits)"]
-    THR["🦶 Accélérateur Hall<br/>signal 0,8–4,2 V"]
-    DIVT(["Pont diviseur ÷1,5<br/>(throttle)"])
-    DIVB(["Pont diviseur 100k/15k<br/>(Vbat)"])
-    BTN["Boutons START / REVERSE"]
+    M1["⚙️ Moteur AV G 12 V"]
+    M2["⚙️ Moteur AV D 12 V"]
+    ADS["📈 ADS1115 (0x48)<br/>ADC 16 bits I²C (3,3 V)"]
+    EG["🧭 AS5600 roue G (bus 0)"]
+    ED["🧭 AS5600 roue D (bus 1)"]
+    DIVB(["Pont diviseur 100k/15k<br/>(Vbat → A0)"])
+    BTN["Bouton START (armement)"]
     WS["🌈 Ruban WS2812B"]
 
     %% Puissance : le + alimente en permanence ; c'est le − qui est commuté (low-side)
@@ -413,21 +412,22 @@ flowchart LR
     %% Sorties moteurs + retour de vitesse
     DRV -- "M1A / M1B" --> M1
     DRV -- "M2A / M2B" --> M2
-    ENC -. "I²C SDA/SCL (3,3 V)" .-> ESP
+    EG -. "I²C bus 0 SDA18/SCL19 (3,3 V)" .-> ESP
+    ED -. "I²C bus 1 SDA27/SCL14 (3,3 V)" .-> ESP
+    ADS -. "I²C bus 0 (3,3 V)" .-> ESP
 
     %% Signaux
+    PAD -. "Bluetooth" .-> ESP
     ESP -- "PWM+DIR G/D" --> DRV
-    BUCK -- "5 V" --> THR
-    THR -- "0,8–4,2 V" --> DIVT -- "→ ADC GPIO34" --> ESP
-    RAIL -- "÷ pont" --> DIVB -- "→ ADC GPIO39" --> ESP
-    BTN -- "GPIO (pull-up)" --> ESP
-    ESP -- "data" --> WS
+    RAIL -- "÷ pont" --> DIVB -- "→ A0 ADS1115" --> ADS
+    BTN -- "GPIO16 (pull-up)" --> ESP
+    ESP -- "data GPIO17" --> WS
 
     classDef pwr fill:#f8d7da,stroke:#333;
     classDef ctrl fill:#d1e7dd,stroke:#333;
     classDef mot fill:#cfe2ff,stroke:#333,stroke-width:2px;
     class BATT,FUSE,RAIL,SW,BUCK pwr;
-    class ESP,DRV ctrl;
+    class ESP,DRV,PAD ctrl;
     class M1,M2 mot;
 ```
 
@@ -435,33 +435,33 @@ flowchart LR
 
 | GPIO | Fonction | Sens | Note |
 |---|---|---|---|
-| 25 / 26 | **PWM / DIR moteur gauche** | sortie | LEDC ~18 kHz, **duty ≤ 50 %** |
-| 32 / 33 | **PWM / DIR moteur droite** | sortie | idem |
-| 34 | **Accélérateur** (signal Hall) | entrée ADC | pédale 0,8–4,2 V → **pont ÷1,5** |
-| 39 | **Tension batterie** | entrée ADC | pont **100 k / 15 k** + 0,1 µF |
-| 18 / 19 | **I²C SDA / SCL** (AS5600) | E/S | capteur d'angle 0x36, **3,3 V**, pull-ups 4,7 kΩ |
+| 25 / 26 | **PWM / DIR moteur AVANT gauche** | sortie | LEDC, **duty ≤ 50 %** |
+| 32 / 33 | **PWM / DIR moteur AVANT droite** | sortie | idem |
+| 18 / 19 | **I²C bus 0 SDA / SCL** | E/S | **AS5600 roue G (0x36)** + **ADS1115 (0x48)**, 3,3 V, pull-ups 4,7 kΩ |
+| 27 / 14 | **I²C bus 1 SDA / SCL** | E/S | **AS5600 roue D (0x36)**, 3,3 V, pull-ups 4,7 kΩ |
 | 13 | **POWER_HOLD** (latch alim.) | sortie | **actif BAS** : maintient l'alim ; HAUT = coupe |
-| 16 | **Bouton armement (START)** | entrée | pull-up, appui ~1 s |
-| 21 | **Bouton marche arrière** | entrée | pull-up, momentané |
+| 16 | **Bouton armement (START)** | entrée | pull-up, appui ~1 s (ou START de la manette) |
 | 17 | **Ruban WS2812B** (data) | sortie | ~10 LEDs |
-| 4 | **LED marche arrière** | sortie | allumée si recul actif |
 | 2 | **LED d'état** (onboard) | sortie | — |
 | **Réserves futures (câblées, non utilisées) — 3,3 V** | | | |
-| 27 / 14 | **Encodeur 1 — A / B** | entrées | quadrature 3,3 V |
-| 35 / 36 | **Encodeur 2 — A / B** | entrées seules | quadrature 3,3 V (pull-up externe si open-collector) |
-| 22 / 23 | **2 boutons auxiliaires** | entrées | actifs bas, pull-up interne |
+| 34 / 35 | **Encodeur roue GAUCHE — A / B** (AMT103-V) | entrées seules | quadrature 3,3 V (broches input-only) |
+| 36 / 39 | **Encodeur roue DROITE — A / B** (AMT103-V) | entrées seules | quadrature 3,3 V (broches input-only) |
+| 22 / 23 | **Index encodeur / 2 entrées aux.** | entrées | libres (index X optionnel) |
+| 4 / 21 | **GPIO libres** | — | non affectés |
+| — | **Tension batterie** | (ADS1115 A0) | **pas sur un GPIO** : mesurée par l'ADS1115 via pont 100 k/15 k |
+| — | **Joystick analogique** | (ADS1115 A1/A2) | réservé futur |
 
 **Points clés du câblage :**
-- **Masse commune** ESP32 ↔ driver ↔ accélérateur ↔ capteur I²C : indispensable.
+- **Masse commune** ESP32 ↔ driver ↔ ADS1115 ↔ capteurs I²C : indispensable.
 - **Interrupteur low-side + e-stop en série** : le **+** reste toujours présent ; on coupe en ouvrant les **2 MOSFET côté masse**.
-- **Pas de contact de frein** : relâcher l'accélérateur déclenche le frein électrique.
+- **Frein par défaut** : à l'arrêt, sans avance ou si la manette se déconnecte, le firmware freine.
 - **Puissance ~10 AWG** (cosses serties) ; **signaux fil fin**. **Fusible 30 A/pack**.
 - ⚠️ **Polarité du driver (VB+/VB-)** : aucune protection inversion → **vérifier deux fois**.
-- **Deux ponts diviseurs vers l'ADC** (signal > 3,3 V) : throttle ÷1,5 (GPIO34), Vbat 100 k/15 k (GPIO39), **0,1 µF** sur chaque nœud.
+- **Vbat via l'ADS1115** (pas l'ADC interne) : pont 100 k/15 k vers A0, **condensateur de découplage** sur le nœud.
 
 ### Schéma système complet (tous les connecteurs)
 
-Vue d'ensemble bloc-à-bloc montrant **chaque connecteur** (pédale, AS5600 I²C, boutons, moteurs, WS2812), le **conditionnement** (diviseurs) et l'**alimentation**.
+Vue d'ensemble bloc-à-bloc montrant **chaque connecteur** (manette via la radio interne, 2× AS5600 sur 2 bus I²C, ADS1115, bouton START, moteurs avant, WS2812), le **conditionnement** (diviseur Vbat) et l'**alimentation**.
 
 ```mermaid
 flowchart LR
@@ -479,29 +479,30 @@ flowchart LR
     V5 --> ESP
     ESP -. "GPIO13 POWER_HOLD (actif bas)" .-> LATCH
 
-    PED["🦶 CONN PÉDALE<br/>SIG / +5V / GND"] --> DIVT["Diviseur ÷1,5<br/>10k/20k"] -->|"ADC GPIO34"| ESP
-    RAIL --> DIVB["Diviseur 100k/15k"] -->|"ADC GPIO39"| ESP
-    ENC["🧭 CONN AS5600 (essieu)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO18/19 (3,3 V)"| ESP
+    PAD["🎮 MANETTE BLUETOOTH<br/>(radio interne ESP32)"] -.->|"x, y, boutons"| ESP
+    RAIL --> DIVB["Diviseur 100k/15k"] -->|"A0"| ADS["📈 ADS1115 (0x48)<br/>bus 0 I²C (3,3 V)"]
+    ADS -->|"I²C GPIO18/19"| ESP
+    EG["🧭 CONN AS5600 G (bus 0)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO18/19 (3,3 V)"| ESP
+    ED["🧭 CONN AS5600 D (bus 1)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO27/14 (3,3 V)"| ESP
     BST["🔌 CONN START<br/>(S / GND)"] -->|"GPIO16 pull-up"| ESP
-    BRV["🔌 CONN RECUL<br/>(S / GND)"] -->|"GPIO21 pull-up"| ESP
 
     ESP -->|"PWM/DIR G+D<br/>GPIO25/26/32/33"| DRV["🛞 DRIVER MOTEUR<br/>2 canaux 20 A"]
     RAIL --> DRV
-    DRV -->|"M1A / M1B"| MG["⚙️ CONN MOTEUR G"]
-    DRV -->|"M2A / M2B"| MD["⚙️ CONN MOTEUR D"]
+    DRV -->|"M1A / M1B"| MG["⚙️ CONN MOTEUR AVANT G"]
+    DRV -->|"M2A / M2B"| MD["⚙️ CONN MOTEUR AVANT D"]
     ESP -->|"GPIO17 data"| WS["🌈 CONN WS2812B"]
-    ESP -->|"GPIO4"| LEDR["💡 LED recul"]
 
-    V5 -. "+5 V" .-> PED
     V5 -. "+5 V" .-> WS
-    ESP -. "3,3 V" .-> ENC
+    ESP -. "3,3 V" .-> EG
+    ESP -. "3,3 V" .-> ED
+    ESP -. "3,3 V" .-> ADS
 
     classDef pwr fill:#f8d7da,stroke:#333;
     classDef conn fill:#fff3cd,stroke:#333;
     classDef cond fill:#d1e7dd,stroke:#333;
     class RAIL,V5,LATCH,DRV pwr;
-    class PA,PB,PED,ENC,BST,BRV,MG,MD,WS conn;
-    class DIVT,DIVB cond;
+    class PA,PB,PAD,EG,ED,ADS,BST,MG,MD,WS conn;
+    class DIVB cond;
 ```
 
 ### Schéma électrique (symboles)
@@ -516,11 +517,11 @@ Même contenu en **schéma électrique à symboles normalisés** (style ports no
 
 ### Mesure de tension batterie & coupure basse tension (LVC)
 
-L'ESP32 ne lit que **0–3,3 V** alors que la batterie monte à ~**21 V** → un **pont diviseur** (100 k / 15 k) ramène Vbat sous 3,3 V sur **ADC1 (GPIO39)** → protection logicielle **en plus du BMS**.
+La batterie monte à ~**21 V** → un **pont diviseur** (100 k / 15 k) ramène Vbat sous 3,3 V sur **l'entrée A0 de l'ADS1115** (ADC externe 16 bits, alimenté 3,3 V) → protection logicielle **en plus du BMS**.
 
-- Rapport = 15/115 = **0,130** → à 21 V l'ADC voit **2,74 V** (✔). Reconstruction : **Vbat = V_adc × 7,67** (à calibrer).
+- Rapport = 15/115 = **0,130** → à 21 V l'entrée voit **2,74 V** (✔). Reconstruction : **Vbat = V_adc × 7,67** (à calibrer via `vbat_div_ratio`).
 - Fuite du pont ≈ 0,18 mA — sa masse de retour étant **commutée par le latch low-side**, **rien à l'arrêt**.
-- **0,1 µF** sur le nœud ADC ; zener 3,3 V possible en sécurité.
+- **Condensateur de découplage** sur le nœud ADC ; l'ADS1115 (16 bits, PGA) donne une mesure plus stable que l'ADC interne.
 
 | État | Tension pack | /cellule | Action firmware |
 |---|---:|---:|---|
@@ -613,51 +614,52 @@ flowchart TB
 
 ## 5. Points critiques de sécurité (enfant)
 
-- ⚠️ **Anti-basculement** : respecter **voie large (84 cm)** + assise basse (16 cm). Ne pas surélever le siège ; garder batterie et moteurs bas.
-- ⚠️ **Butées de braquage** : deux taquets limitant le débattement des roues (~25° max/côté).
-- ⚠️ **Fixation des 2 pivots** : chaque penture vissée **+ boulon M10 traversant** + nylstop + **patte anti-arrachement** ; **bielle** avec rotules nylstop bien serrées (jamais de jeu).
-- ⚠️ **Axes de roue sécurisés** : nylstop + **goupille/rondelle d'arrêt**.
+- ⚠️ **Anti-renversement** : un tricycle bascule plus facilement qu'un 4 roues. Garder la **voie avant large (84 cm)** + assise basse (16 cm) ; ne pas surélever le siège ; garder batterie et moteurs bas. **Ne jamais désactiver l'anti-renversement firmware** (amplitude de virage bornée + limiteur de pente) ; commencer avec `turn_gain`/`speed_limit_kmh` bas.
+- ⚠️ **Fixation des 2 motorisations avant** : supports moteurs solidement vissés/renforcés ; courroies tendues et carters fermés (jamais de jeu).
+- ⚠️ **Roulette arrière** : axe et pivot bien serrés (nylstop / freinfilet) ; vérifier qu'elle pivote librement sans point dur.
+- ⚠️ **Axes de roue avant sécurisés** : nylstop + **goupille/rondelle d'arrêt**.
 - ⚠️ **Carter courroies/poulies** : pas de doigts/lacets/vêtements happés.
 - ⚠️ **Angles arrondis**, ponçage anti-échardes, têtes de boulons fraisées/capuchonnées côté enfant.
 - ⚠️ **Ceinture ventrale** ancrée au châssis ; **casque obligatoire** ; **cale-pieds**.
-- ⚠️ **Inspection avant chaque usage** : serrage pivot/axes, tension courroies + serrage poulies, e-stop, fixation batterie, test du frein électrique.
+- ⚠️ **Arrêt d'urgence matériel central** : placé sur la **séparation entre les 2 places**, **facilement accessible aux deux enfants** ; il **coupe tout** (puissance **et** ESP32, via l'ouverture de la gate du latch). C'est l'arrêt **garanti**, en complément de l'arrêt d'urgence **logiciel** de la manette (bouton **B**). Vérifier qu'il n'est ni masqué ni bloqué, et que les enfants savent l'actionner.
+- ⚠️ **Manette** : calibrée avant chaque session ; vérifier que le **bouton B (arrêt d'urgence logiciel)** freine, et que la **déconnexion** (manette éteinte / hors de portée) déclenche le freinage.
+- ⚠️ **Inspection avant chaque usage** : supports moteurs, tension courroies + serrage poulies, roulette arrière, **e-stop matériel central** + e-stop manette, fixation de la baie technique (batteries à l'avant), test du frein électrique.
 - ⚠️ **Terrain plat, sous surveillance**, loin de la circulation et des pentes.
-- ⚠️ **Pneus plastique = peu d'adhérence** → vitesse modérée, virages doux, frein bien réglé.
+- ⚠️ **Pneus plastique = peu d'adhérence** → vitesse modérée, virages doux, et **ripage du skid-steer** en virage serré (voir §3).
 
 ---
 
 ## 6. Siège réglable
 
-Pour ajuster la distance **dossier ↔ pédale entre 55 et 68 cm** :
+Pour ajuster la distance **dossier ↔ avant d'assise** au gabarit de l'enfant :
 
 | Méthode | Principe | Avantage |
 |---|---|---|
 | **A. Base coulissante à fentes** ✅ | Le siège glisse sur 2 rails à fentes, serrage **écrous papillon** | Réglage continu, sans outil |
 | **B. Rangée de trous** | On reboulonne le siège dans le bon trou (tous les 3 cm) | Très solide, par crans |
-| **C. Boîtier de pédales coulissant** | On déplace le bloc pédales au lieu du siège | Siège calé contre le dossier |
+| **C. Repose-pieds réglable** | On déplace le cale-pieds au lieu du siège | Siège calé contre le dossier |
 
-👉 Recommandé : **A** (base coulissante + écrous papillon) — l'enfant grandit → on recule le siège.
+👉 Recommandé : **A** (base coulissante + écrous papillon) — l'enfant grandit → on recule le siège. (Plus de boîtier de pédales à déplacer : le pilotage est à la manette.)
 
 ---
 
 ## 7. Estimation de masse
 
-> Hypothèses : CP ~600 kg/m³, madrier 2×3 SPF ≈ 1,17 kg/m, roues ~1,0 kg/pièce.
+> Hypothèses : CP ~600 kg/m³, madrier 2×3 SPF ≈ 1,17 kg/m, roue motrice ~1,0 kg/pièce, roulette ~0,5 kg.
 
 | Poste | Masse |
 |---|---:|
-| Bois (plancher CP 6 mm, châssis 2×3, pivot, banquette, renforts) | ~18 kg |
-| 4 roues Ø30 cm | 4,0 kg |
-| Direction (colonne, volant, charnières, bielle) | 1,8 kg |
-| Visserie / boulons à épaulement | 1,8 kg |
-| Propulsion (2 moteurs + 2 gearbox 3D + poulies/courroies) | 3,8 kg |
-| Électronique + batteries (2 packs 20 V, driver, ESP32, câblage) | 2,5 kg |
-| Pédales + frein + divers (ceinture, carters, peinture) | 2,4 kg |
-| **TOTAL À VIDE** | **≈ 34 kg** |
+| Bois (plancher CP 6 mm, châssis 2×3, supports, banquette, renforts) | ~18 kg |
+| 2 roues motrices avant Ø30 cm + 1 roulette arrière | ~2,5 kg |
+| Visserie / boulons à épaulement | 1,6 kg |
+| Propulsion (2 moteurs avant + 2 gearbox 3D + poulies/courroies) | 3,8 kg |
+| Électronique + batteries (2 packs 20 V, driver, ESP32, ADS1115, câblage) | 2,5 kg |
+| Frein/divers (ceinture, carters, peinture, manette) | 2,0 kg |
+| **TOTAL À VIDE** | **≈ 32 kg** |
 | + 2 enfants (~33 kg chacun) | +66 kg |
-| **TOTAL EN ROULAGE** | **≈ 100 kg** |
+| **TOTAL EN ROULAGE** | **≈ 98 kg** |
 
-**Conséquences :** le bois domine (~53 % à vide) → premier levier d'allègement. Résistance au roulement à ~100 kg ≈ **25 N** sur le plat ; force motrice ~70 N (PWM 50 %) à ~140 N (crête) → **OK sur le plat**, pente réaliste **~3–6 %**. Le freinage doit être dimensionné pour ~100 kg.
+**Conséquences :** le bois domine (~56 % à vide) → premier levier d'allègement. La suppression des pièces de direction (volant, colonne, bielle, fusées) **allège** par rapport au 4 roues ; en revanche le 2ᵉ moteur **et la baie technique (batteries + électronique)** concentrent la masse à l'**avant** (sur l'essieu moteur) → **report de charge sur les 2 roues motrices** (bon pour l'adhérence et la traction ; vérifier que la roulette arrière reste chargée pour ne pas cabrer). Résistance au roulement à ~100 kg ≈ **25 N** sur le plat ; force motrice cumulée des 2 roues avant largement suffisante → **OK sur le plat**, pente réaliste **~3–6 %**. Le freinage électrique doit être dimensionné pour ~100 kg.
 
 ---
 
@@ -667,31 +669,29 @@ Ordre des plus simples aux plus risqués. **Règle d'or : tout tester roues en l
 
 ```mermaid
 flowchart LR
-    P1["1. Châssis bois"] --> P2["2. Roues + essieux"] --> P3["3. Direction"]
-    P3 --> P4["4. Transmission<br/>(gearbox + courroies)"] --> P5["5. Puissance<br/>(batteries, latch, driver)"]
-    P5 --> P6["6. Commande<br/>(ESP32, capteurs)"] --> P7["7. Firmware<br/>+ calibration"]
-    P7 --> P8["8. Essais progressifs"] --> P9["9. Sécurité finale"]
+    P1["1. Châssis bois"] --> P2["2. Roues avant + roulette AR"] --> P3["3. Motorisations avant<br/>(2 moteurs + gearbox + courroies)"]
+    P3 --> P5["4. Puissance<br/>(batteries, latch, driver)"]
+    P5 --> P6["5. Commande<br/>(ESP32, ADS1115, 2× AS5600)"] --> P7["6. Firmware<br/>+ appairage/calibration manette"]
+    P7 --> P8["7. Essais progressifs"] --> P9["8. Sécurité finale"]
 ```
 
 **Phase 0 — Préparation.** Rassembler matériel (§4) et outils (perceuse, scie, clés, fer à souder, multimètre, imprimante 3D). Imprimer les 2 réducteurs (1:16) + gabarit de perçage. Travailler **batteries débranchées**.
 
-**Phase 1 — Châssis bois.** Grille 2×3 (traverses ~25–30 cm) + plancher CP 6 mm (12 mm sous banquette) + banquette ~80 cm + dossier. ✅ *S'asseoir à deux sans flexion excessive.*
+**Phase 1 — Châssis bois.** Grille 2×3 (traverses ~25–30 cm) + plancher CP 6 mm (12 mm sous banquette) + **baie technique à l'avant** (~30 cm, entre l'essieu moteur et la banquette) + banquette ~80 cm + **séparation centrale** entre les 2 places (cloison verticale recevant le bouton d'arrêt d'urgence) + dossier. ✅ *S'asseoir à deux sans flexion excessive ; le bouton d'arrêt d'urgence central tombe sous la main des deux enfants.*
 
-**Phase 2 — Roues + essieux.** 4 roues Ø30 sur **boulons à épaulement** (perçage 3/8"), tournent **libres**. ✅ *Voie 84 cm, rien ne frotte.*
+**Phase 2 — Roues avant + roulette arrière.** 2 roues Ø30 sur **boulons à épaulement** (perçage 3/8"), tournent **libres** ; **roulette pivotante** fixée à l'arrière, pivot serré mais libre. ✅ *Voie avant 84 cm, rien ne frotte ; la roulette s'oriente seule en poussant le châssis.*
 
-**Phase 3 — Direction.** **2 pentures** (un pivot par roue) sur traverse fixe + boulon M10 traversant chacune ; **fusées + bras + bielle d'accouplement** ; colonne déportée gauche + bras Pitman + barre d'attaque sur la fusée gauche ; **roues droites = volant centré** + butées ~25°. ✅ *Direction franche, sans jeu, les 2 roues braquent ensemble.*
+**Phase 3 — Motorisations avant (remplace l'ancienne « direction »).** Sur **chaque roue avant** : poulie vissée (grandes rondelles / contre-platine) + réducteur 3D + moteur sur support renforcé + courroie + réglage tension + carter. **Pas de tringlerie** : la direction est différentielle, donc rien à régler côté volant/bielle. ✅ *Sans courant : chaque roue avant tourne à la main, courroie tendue.*
 
-**Phase 4 — Transmission.** Poulie vissée sur chaque roue AR (grandes rondelles / contre-platine) ; réducteurs 3D + moteurs sur supports renforcés ; courroies + réglage tension + carter. ✅ *Sans courant : tout tourne à la main.*
+**Phase 4 — Électronique de puissance ⚠️ (à l'avant).** 2 packs + adaptateurs **logés dans la baie technique avant** (câblage de puissance court vers les 2 moteurs) ; chaque pack **fusible → diode idéale → rail +20 V** (diode-OR) ; **coupe-circuit latch low-side** (2× IRFZ44N sur la masse, gate via **bouton** + **opto**, pull-down + zener, **e-stop NF en série dans la gate** — voir `doc/schematics/power_latch.png`) ; **monter le bouton d'arrêt d'urgence sur la séparation centrale de l'habitacle** (à portée des deux enfants) ; driver (⚠️ **polarité VB+/VB-**) → 2 moteurs avant ; **~10 AWG**, cosses serties. ✅ *Au multimètre AVANT branchement : polarité, ~20 V au driver, le bouton amorce et **l'e-stop central coupe tout** (puissance + ESP32).*
 
-**Phase 5 — Électronique de puissance ⚠️.** 2 packs + adaptateurs ; chaque pack **fusible → diode idéale → rail +20 V** (diode-OR) ; **coupe-circuit latch low-side** (2× IRFZ44N sur la masse, gate via **bouton** + **opto**, pull-down + zener, **e-stop NF en série dans la gate** — voir `doc/schematics/power_latch.png`) ; driver (⚠️ **polarité VB+/VB-**) → moteurs ; **~10 AWG**, cosses serties. ✅ *Au multimètre AVANT branchement : polarité, ~20 V au driver, le bouton amorce et l'e-stop coupe tout.*
+**Phase 5 — Électronique de commande.** ESP32 + breakout ; **buck 20→5 V** sur le rail +20 (l'ESP fabrique son 3,3 V) ; **ADS1115** (3,3 V) sur le bus 0, pont Vbat 100 k/15 k → A0 + condensateur ; **2× AS5600** : roue G sur **bus 0 (SDA18/SCL19)**, roue D sur **bus 1 (SDA27/SCL14)**, pull-ups 4,7 kΩ par bus + aimants centrés ; bouton START (GPIO16, pull-up) ; WS2812B (GPIO17). *(Réserves futures câblées non utilisées : 2× encodeur A/B 34/35 + 36/39 ; joystick sur A1/A2 de l'ADS1115.)* ✅ *Masses communes, 3,3 V/5 V présents, AS5600 détectés (0x36 sur chaque bus) + ADS1115 (0x48).*
 
-**Phase 6 — Électronique de commande.** ESP32 + breakout ; **buck 20→5 V** sur le rail +20 (l'ESP fabrique son 3,3 V) ; perfboard (diviseurs throttle ÷1,5 + Vbat 100k/15k + 0,1 µF) ; pédale Hall (→ GPIO34, repérer au multimètre) ; **AS5600 sur I²C (SDA 18 / SCL 19, pull-ups 4,7 kΩ)** + aimant centré ; boutons START/REVERSE (pull-up) ; LED reverse ; WS2812B. *(Réserves futures câblées non utilisées : 2× encodeur A/B 27/14 + 35/36, 2 boutons 22/23.)* ✅ *Masses communes, 3,3 V/5 V présents, AS5600 détecté (0x36).*
+**Phase 6 — Firmware + réglages.** `idf.py build flash monitor` (voir [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://192.168.4.1`. **Appairer puis calibrer la manette** (obligatoire pour rouler) ; ajuster **`vbat_div_ratio`** au multimètre. Conversion vitesse **déjà déterminée** (AS5600 1:16 + courroie 1:1 → `GEAR_RATIO=1`, roue 12″) → **vérifier au banc** + **affiner les PID** par roue (limiteur ≈ 0,15/0,14, frein ≈ 0,12/0,08/0,003). Régler **limite de vitesse basse** + **anti-renversement** (`turn_gain`, `a_lat_max`, `turn_rate`, `thr_ramp_per_s`) + vérifier LVC. *(Boucle 500 Hz, IPv6, page Système : automatiques.)*
 
-**Phase 7 — Firmware + réglages.** `idf.py build flash monitor` (voir [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://192.168.4.1`. **Calibrer l'accélérateur** ; ajuster **`vbat_div_ratio`** au multimètre. Conversion vitesse **déjà déterminée** (AS5600 1:16 + courroie 1:1 → `GEAR_RATIO=1`, roue 12″) → **vérifier au banc** + **affiner les PID** (défauts limiteur 0,15/0,14, frein 0,12/0,08/0,003). Régler **limite de vitesse basse** + vérifier LVC. *(Boucle 500 Hz, IPv6, page Système : automatiques.)*
+**Phase 7 — Essais progressifs (roues en l'air).** Armer (START physique ou manette), avance légère → sens correct de **chaque roue** (inverser M1A/M1B si besoin) ; pousser le stick à droite → vire à droite ; tester **frein par défaut**, **pivot sur place**, **désarmement**, **arrêt d'urgence manette (B)** et **déconnexion manette → freinage**, **e-stop matériel central** (coupe tout) ; provoquer les défauts (**LVC** simulée, **panne capteur** en débranchant un AS5600) → doit refuser/couper. Puis au sol : terrain plat, vitesse mini, anti-renversement actif, 1 enfant léger d'abord, limite **progressive**.
 
-**Phase 8 — Essais progressifs (roues en l'air).** Armer (START), throttle léger → sens correct (inverser M1A/M1B si besoin) ; tester **frein au relâché**, **marche arrière**, **désarmement**, **e-stop** ; provoquer les défauts (**LVC** simulée, **panne capteur** en débranchant l'AS5600) → doit refuser/couper. Puis au sol : terrain plat, vitesse mini, 1 enfant léger d'abord, limite **progressive**.
-
-**Phase 9 — Sécurité finale.** Ceinture ancrée, casques, carters, angles arrondis, cale-pieds, axes sécurisés. **Inspection avant chaque usage**. Usage **sous surveillance adulte**.
+**Phase 8 — Sécurité finale.** Ceinture ancrée, casques, carters, angles arrondis, cale-pieds, axes sécurisés, roulette serrée, **baie technique avant fixée** (batteries calées), **arrêt d'urgence central dégagé et testé** (coupe tout). **Inspection avant chaque usage**. Usage **sous surveillance adulte**.
 
 ---
 
@@ -699,9 +699,9 @@ flowchart LR
 
 Code ESP-IDF 6.1 (C++) dans [`firmware/`](firmware/) — détails dans [`firmware/README.md`](firmware/README.md).
 
-- **Boucle de contrôle 500 Hz** (FreeRTOS 1000 Hz) : accélérateur = PWM direct (rampé, plafonné ~50 %), **frein PID** vers 0, **limiteur de vitesse** PID, vitesse par **AS5600** (I²C). Machine à états, armement, **LVC** anti-sag, **watchdog**, **latch d'alimentation** (POWER_HOLD).
+- **Boucle de contrôle 500 Hz** (FreeRTOS 1000 Hz) : lecture **manette** (mélange arcade) + **anti-renversement** (amplitude bornée + limiteur de pente), **2 vitesses de roue** par **AS5600** (I²C, un par bus), **PID de freinage** + **PID limiteur de vitesse** par roue, **PWM + DIR indépendants**. Machine à états, armement (START physique ou manette), **LVC** anti-sag (via ADS1115), **watchdog**, **latch d'alimentation** (POWER_HOLD). **Frein par défaut** dès le boot et si la manette se déconnecte.
 - **Tâches FreeRTOS** (priorité / cœur / pile) : voir [`doc/firmware-tasks.md`](doc/firmware-tasks.md) ; constantes dans [`firmware/main/rtos.hpp`](firmware/main/rtos.hpp).
-- **Wi-Fi AP + station**, **IPv6** (link-local + SLAAC), serveur **WebSocket** : tableau de bord (**3 graphiques Chart.js gradués** — accél/PWM 10 min (%), **vitesse 1 min (km/h, 0–16)**, batterie 30 min (V) — barres, pastilles), configuration live, calibration, Wi-Fi, brochage, et **page Système** (commit firmware, uptime, MAC, IP v4/v6, heap, chip, IDF).
+- **Bluetooth (manette) + Wi-Fi** en coexistence ; **Wi-Fi AP + station**, **IPv6**, serveur **WebSocket** : tableau de bord (graphiques Chart.js gradués — avance/PWM + régime par roue, vitesse, batterie), configuration live, **onglet Manette** (appairage, calibration, visualisation du stick), Wi-Fi, brochage, et **page Système**.
 - Build : `cd firmware && idf.py build flash monitor`.
 
 ---
@@ -711,14 +711,15 @@ Code ESP-IDF 6.1 (C++) dans [`firmware/`](firmware/) — détails dans [`firmwar
 Points à **traiter / valider avant tout usage réel**.
 
 **Sécurité & accès**
-- **L'arrêt d'urgence est le seul arrêt matériel garanti** (NF en série dans la gate → ouvre les 2 MOSFET → coupe tout, ESP32 compris). Le reste (LVC, désarmement, watchdog) est logiciel ; l'ESP peut aussi se couper via POWER_HOLD.
-- **Web non authentifié — par choix** : seul le mot de passe de l'AP protège l'accès (le changer reste recommandé). La **calibration** est verrouillée hors état désarmé/à l'arrêt ; un appui maintenu sur START **désarme** en roulant.
+- **L'arrêt d'urgence matériel central est le seul arrêt garanti** (bouton **sur la séparation entre les 2 places**, à portée des deux enfants ; NF en série dans la gate → ouvre les 2 MOSFET → coupe tout, ESP32 compris). Le reste (arrêt d'urgence manette, LVC, désarmement, watchdog, freinage sur déconnexion) est logiciel ; l'ESP peut aussi se couper via POWER_HOLD.
+- **Web non authentifié — par choix** : seul le mot de passe de l'AP protège l'accès (le changer reste recommandé). La **calibration manette** est verrouillée hors état désarmé/à l'arrêt.
+- **Dépendance à la manette** : si la manette se déconnecte, le kart **freine** (sécurité), mais le pilote perd le contrôle directionnel jusqu'à reconnexion → rouler à portée Bluetooth, manette chargée.
 
 **Firmware / capteurs**
-- **Capteur AS5600** (I²C, angle 12 bits) : vitesse = dérivée à **500 Hz**, wrap géré, **3,3 V natif**. Cinématique **connue** → constantes hardcodées exactes (`AS5600_CPR=4096`, `GEAR_RATIO=1`, `WHEEL_DIAM_M=0,3048`). **Conversion entièrement déterminée** ; ne reste qu'à **vérifier au banc** que l'affichage colle au réel.
-- **Détection de panne capteur** : PWM actif (>10 %) mais 0 rotation > 1 s → défaut (couvre blocage moteur / courroie cassée).
-- **PID pré-réglés** (extrapolés du modèle : K≈13 km/h/commande, τ≈1,1 s) — limiteur 0,15/0,14, frein 0,12/0,08/0,003 ; à **affiner au banc**.
-- **Seuils de défaut accélérateur fixes** (`THR_FAULT_RAW_*`) : à ajuster selon la pédale.
+- **2 capteurs AS5600** (I²C, angle 12 bits, un par bus) : vitesse = dérivée à **500 Hz**, wrap géré, **3,3 V natif**. Cinématique **connue** → constantes hardcodées exactes (`AS5600_CPR=4096`, `GEAR_RATIO=1`, `WHEEL_DIAM_M=0,3048`). **Conversion entièrement déterminée** ; reste à **vérifier au banc**.
+- **Détection de panne capteur** : PWM actif (>10 %) mais 0 rotation > 1 s → défaut (couvre blocage moteur / courroie cassée), par roue.
+- **PID pré-réglés** (extrapolés du modèle) — limiteur 0,15/0,14, frein 0,12/0,08/0,003 ; à **affiner au banc**, par roue.
+- **Anti-renversement à régler empiriquement** : `turn_gain`, `a_lat_max`, `turn_rate`, `thr_ramp_per_s` dépendent de la voie réelle, de la hauteur du CG et de l'adhérence → commencer prudent.
 - **Frein = PID vers 0** (plugging) : efficace mais **génère des pics de courant** (pas de régénération) → s'appuie sur la limitation de courant du driver.
 
 **Électrique / puissance**
@@ -728,6 +729,9 @@ Points à **traiter / valider avant tout usage réel**.
 - **2 batteries en parallèle** : packs à même charge, **diodes idéales + 1 fusible/pack**.
 
 **Mécanique**
-- **Pas de différentiel** → léger ripage des pneus en virage.
+- **Skid steer = ripage en virage serré** : les pneus glissent latéralement quand on tourne fort (frottement, usure, perte d'énergie). Pivot sur place = ripage maximal ; à éviter sur surface abrasive. Il existe bien un **différentiel de commande** entre les 2 roues, mais **pas de différentiel mécanique** côté essieu.
+- **Tricycle = stabilité plus faible** qu'un 4 roues : l'anti-renversement firmware est **indispensable** ; ne pas surélever le CG.
 - **Plastique sous contrainte** (jante, plancher CP 6 mm) → risque de fissuration ; renforcer.
 - **Pneus PVC dur** → faible adhérence ; vitesse modérée.
+</content>
+</invoke>

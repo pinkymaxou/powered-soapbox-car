@@ -2,7 +2,10 @@ idf_component_register(
     SRCS
         "main.cpp"
         "controller.cpp"
+        "ads1115.cpp"
         "hardware.cpp"
+        "input.cpp"
+        "input_bp32.c"
         "leds.cpp"
         "config.cpp"
         "webserver.cpp"
@@ -13,7 +16,6 @@ idf_component_register(
         esp_driver_ledc
         esp_driver_i2c
         esp_driver_rmt
-        esp_adc
         esp_app_format
         spi_flash
         nvs_flash
@@ -22,6 +24,8 @@ idf_component_register(
         esp_event
         esp_netif
         esp_http_server
+        bluepad32
+        btstack
 )
 
 # Assets web : compressés en gzip au build puis embarqués en binaire.

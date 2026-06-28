@@ -21,6 +21,7 @@
 #include <string>
 
 #include "config.hpp"
+#include "input.hpp"
 #include "ringbuffer.hpp"
 #include "esp_app_desc.h"
 #include "esp_chip_info.h"
@@ -57,13 +58,19 @@ constexpr int  STA_RETRY_MS = 5000;   // délai avant nouvelle tentative de conn
 
 // Noms des commandes WebSocket (client → serveur) et réponses
 constexpr char CMD_REBOOT[]    = "reboot";
-constexpr char CMD_CALIBRATE[] = "calibrate";
 constexpr char CMD_WIFISET[]   = "wifiset";
 constexpr char CMD_WIFIGET[]   = "wifiget";
 constexpr char CMD_HIST[]      = "hist";
 constexpr char CMD_SET[]       = "\"set\"";
 constexpr char CMD_STATUS[]    = "status";
 constexpr char CMD_SYSINFO[]   = "sysinfo";
+// Manette Bluetooth
+constexpr char CMD_PADINFO[]   = "padinfo";
+constexpr char CMD_PADUNPAIR[] = "padunpair";
+constexpr char CMD_PADPAIR[]   = "padpair";
+constexpr char CMD_CALSTART[]  = "calstart";
+constexpr char CMD_CALFINISH[] = "calfinish";
+constexpr char CMD_CALCANCEL[] = "calcancel";
 constexpr char REPLY_OK[]      = "{\"type\":\"ok\"}";
 
 httpd_handle_t     m_server = nullptr;
@@ -165,7 +172,7 @@ constexpr int HIST_SPEED_N = 60;    // 1 min @ 1 s (graphique vitesse dédié)
 constexpr int HIST_BATT_N  = 360;   // 30 min @ 5 s
 struct
 {
-    Ring<HIST_FAST_N>  accel, pwml, pwmr;
+    Ring<HIST_FAST_N>  accel, pwml, pwmr, rpml, rpmr;   // rpml/rpmr : tr/min roue (0..250)
     Ring<HIST_SPEED_N> spd;
     Ring<HIST_BATT_N>  batt;
     int tick = 0;
@@ -188,13 +195,26 @@ uint8_t u8x10(float v)   // valeur physique ×10 (résolution 0,1 ; bornée 0..2
     return static_cast<uint8_t>(s + 0.5f);
 }
 
+// Vitesse roue (km/h) → tr/min, bornée 0..250 (rentre dans un octet ; ~14,3 km/h max avant saturation).
+uint8_t rpmU8(float kmh)
+{
+    const float circ_m = 3.14159265f * hw::WHEEL_DIAM_M;            // circonférence roue (m)
+    float rpm = (fabsf(kmh) * 1000.f / 60.f) / circ_m;             // m/min ÷ circonférence
+    if (rpm < 0.f) rpm = 0.f;
+    if (rpm > 250.f) rpm = 250.f;
+    return static_cast<uint8_t>(rpm + 0.5f);
+}
+
 void histSample(void*)
 {
     xSemaphoreTake(m_hist_mtx, portMAX_DELAY);
-    m_hist.accel.push(pctU8(g_status.m_throttle.load() * 100.f));            // %
+    m_hist.accel.push(pctU8(fabsf(g_status.m_fwd.load()) * 100.f));          // % (consigne avance)
     m_hist.pwml.push(pctU8(fabsf(g_status.m_out_l.load()) * 100.f));         // %
     m_hist.pwmr.push(pctU8(fabsf(g_status.m_out_r.load()) * 100.f));         // %
-    m_hist.spd.push(u8x10(g_status.m_speed.load()));                        // km/h ×10
+    m_hist.rpml.push(rpmU8(g_status.m_speed_l.load()));                      // tr/min roue G
+    m_hist.rpmr.push(rpmU8(g_status.m_speed_r.load()));                      // tr/min roue D
+    m_hist.spd.push(u8x10(0.5f * (fabsf(g_status.m_speed_l.load()) +         // km/h ×10 (moyenne)
+                                  fabsf(g_status.m_speed_r.load()))));
     if (0 == (m_hist.tick % 5))   // batterie toutes les 5 s
     {
         m_hist.batt.push(u8x10(g_status.m_vbat.load()));                    // V ×10
@@ -210,6 +230,8 @@ std::string buildHistJson()
     m_hist.accel.appendJson(out, "accel"); out += ',';
     m_hist.pwml.appendJson(out, "pwml");   out += ',';
     m_hist.pwmr.appendJson(out, "pwmr");   out += ',';
+    m_hist.rpml.appendJson(out, "rpml");   out += ',';
+    m_hist.rpmr.appendJson(out, "rpmr");   out += ',';
     m_hist.spd.appendJson(out, "spd");     out += ',';
     m_hist.batt.appendJson(out, "batt");
     xSemaphoreGive(m_hist_mtx);
@@ -237,20 +259,43 @@ std::string buildConfigJson()
 
 std::string buildStatusJson()
 {
-    char buf[400];
+    char buf[576];
     snprintf(buf, sizeof(buf),
-             "{\"type\":\"status\",\"state\":%d,\"fault\":%d,"
-             "\"thr_raw\":%d,\"throttle\":%.3f,\"vbat\":%.2f,\"speed\":%.2f,"
-             "\"btn_start\":%s,\"btn_rev\":%s,"
-             "\"out_l\":%.3f,\"out_r\":%.3f,\"brake\":%s,\"rev_led\":%s}",
-             g_status.m_state.load(), g_status.m_fault.load(),
-             g_status.m_thr_raw.load(), g_status.m_throttle.load(), g_status.m_vbat.load(),
-             g_status.m_speed.load(),
-             g_status.m_btn_start.load() ? "true" : "false",
-             g_status.m_btn_rev.load() ? "true" : "false",
+             "{\"type\":\"status\",\"state\":%d,\"fault\":%d,\"vbat\":%.2f,"
+             "\"speed_l\":%.2f,\"speed_r\":%.2f,\"fwd\":%.3f,\"turn\":%.3f,"
+             "\"out_l\":%.3f,\"out_r\":%.3f,\"brake\":%s,\"arming\":%s,\"btn_start\":%s,"
+             "\"pad_conn\":%s,\"pad_batt\":%d,\"pad_x\":%.3f,\"pad_y\":%.3f,"
+             "\"pad_cx\":%.3f,\"pad_cy\":%.3f,\"pad_zl\":%.2f,\"pad_zr\":%.2f,"
+             "\"pad_rx2\":%.3f,\"pad_ry2\":%.3f,\"pad_btns\":%u}",
+             g_status.m_state.load(), g_status.m_fault.load(), g_status.m_vbat.load(),
+             g_status.m_speed_l.load(), g_status.m_speed_r.load(),
+             g_status.m_fwd.load(), g_status.m_turn.load(),
              g_status.m_out_l.load(), g_status.m_out_r.load(),
              g_status.m_brake.load() ? "true" : "false",
-             g_status.m_rev_led.load() ? "true" : "false");
+             g_status.m_arming.load() ? "true" : "false",
+             g_status.m_btn_start.load() ? "true" : "false",
+             g_status.m_pad_conn.load() ? "true" : "false",
+             g_status.m_pad_batt.load(),
+             g_status.m_pad_x.load(), g_status.m_pad_y.load(),
+             g_status.m_pad_cx.load(), g_status.m_pad_cy.load(),
+             g_status.m_pad_zl.load(), g_status.m_pad_zr.load(),
+             g_status.m_pad_rx2.load(), g_status.m_pad_ry2.load(),
+             g_status.m_pad_btns.load());
+    return buf;
+}
+
+// Infos manette (onglet Manette) : connexion, modèle, batterie, calibration, appairage.
+std::string buildPadJson()
+{
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+             "{\"type\":\"pad\",\"conn\":%s,\"name\":\"%s\",\"batt\":%d,"
+             "\"calibrated\":%s,\"calstate\":%d,\"pairing\":%s}",
+             g_status.m_pad_conn.load() ? "true" : "false",
+             input::name(), input::battery(),
+             input::calibrated() ? "true" : "false",
+             input::calState(),
+             input::pairing() ? "true" : "false");
     return buf;
 }
 
@@ -476,10 +521,34 @@ esp_err_t wsHandler(httpd_req_t* req)
         esp_restart();   // ne revient pas ; au boot → désarmé
         return ESP_OK;
     }
-    if (std::string::npos != body.find(CMD_CALIBRATE))
+    if (std::string::npos != body.find(CMD_PADUNPAIR))
     {
-        g_status.m_cmd.store(1);
-        return wsReply(req, REPLY_OK);
+        input::unpair();
+        return wsReply(req, buildPadJson());
+    }
+    if (std::string::npos != body.find(CMD_PADPAIR))
+    {
+        input::startPairing();   // ⚠️ efface la calibration
+        return wsReply(req, buildPadJson());
+    }
+    if (std::string::npos != body.find(CMD_CALSTART))
+    {
+        input::calStart();
+        return wsReply(req, buildPadJson());
+    }
+    if (std::string::npos != body.find(CMD_CALFINISH))
+    {
+        input::calFinish();
+        return wsReply(req, buildPadJson());
+    }
+    if (std::string::npos != body.find(CMD_CALCANCEL))
+    {
+        input::calCancel();
+        return wsReply(req, buildPadJson());
+    }
+    if (std::string::npos != body.find(CMD_PADINFO))
+    {
+        return wsReply(req, buildPadJson());
     }
     if (std::string::npos != body.find(CMD_WIFISET))
     {

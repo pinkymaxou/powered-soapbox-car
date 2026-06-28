@@ -27,7 +27,11 @@ constexpr int               PWM_FREQ_HZ = 18000;
 constexpr ledc_timer_bit_t  PWM_RES     = LEDC_TIMER_12_BIT;
 constexpr int               PWM_MAX     = 4095;
 
-constexpr int ADC_OVERSAMPLE = 16;
+constexpr int ADC_OVERSAMPLE = 8;   // nb de lectures ADS1115 moyennées (lisse le résidu de bruit)
+
+// Convertisseur A/N externe ADS1115 (16 bits, I2C) — remplace l'ADC interne de l'ESP32.
+// Sur le bus 0 (avec l'AS5600 gauche). Adresse réglée par ADDR ; 0x48 = ADDR→GND.
+constexpr uint8_t ADS1115_ADDR = 0x48;
 
 // Capteur d'angle AS5600 (I2C, 12 bits absolu = 4096 counts/tour). Cinématique CONNUE :
 // AS5600 = 1 tour / 16 tours moteur (= sortie gearbox), puis courroie 1:1 jusqu'à la roue
@@ -35,8 +39,9 @@ constexpr int ADC_OVERSAMPLE = 16;
 // Alim 3,3 V natif → AUCUN level-shift. Vitesse = dérivée de l'angle (Δcounts × CTRL_HZ) avec
 // gestion du wrap 0↔4095 ; le SIGNE de Δ donne le sens. À 500 Hz : aucune ambiguïté.
 constexpr float AS5600_CPR    = 4096.0f;  // counts par tour (12 bits)
-constexpr float GEAR_RATIO    = 1.0f;     // capteur ≡ vitesse roue (gearbox 1:16 puis courroie 1:1)
+constexpr float GEAR_RATIO    = 1.0f;     // capteur ≡ vitesse roue (à ajuster selon l'entraînement avant)
 constexpr float WHEEL_DIAM_M  = 0.3048f;  // roue 12" (connue)
+constexpr float TRACK_M       = 0.84f;    // voie avant (m) — estime le lacet ω ≈ (vD−vG)/voie
 
 constexpr int     I2C_FREQ_HZ       = 400000;  // Fast-mode (le capteur supporte jusqu'à 1 MHz)
 constexpr uint8_t AS5600_ADDR       = 0x36;    // adresse I2C fixe (un seul capteur par bus)
@@ -79,6 +84,10 @@ struct KartConfig
     float vmax_kp;
     float vmax_ki;
     float vmax_kd;
+    float turn_gain;     // part du différentiel à fond de manche X (0..1)
+    float a_lat_max;     // accélération latérale max tolérée (m/s²) — anti-renversement
+    float turn_rate;     // pente max du virage (Δ/s) — adoucit les coups de manche brusques
+    float use_encoders;  // 1 = asservissement vitesse/frein/défaut via AS5600 ; 0 = ignore les encodeurs
     float allow_reverse;
     float arm_hold_ms;
     float disarm_s;
@@ -111,19 +120,28 @@ struct KartStatus
 {
     std::atomic<int>   m_state{static_cast<int>(State::Lockout)};
     std::atomic<int>   m_fault{static_cast<int>(Fault::None)};
-    std::atomic<int>   m_thr_raw{0};
-    std::atomic<float> m_throttle{0.f};
     std::atomic<float> m_vbat{0.f};
-    std::atomic<float> m_speed{0.f};   // vitesse unique (capteur AS5600 sur l'essieu)
+    std::atomic<float> m_speed_l{0.f};   // vitesse roue avant gauche (AS5600 #1, km/h)
+    std::atomic<float> m_speed_r{0.f};   // vitesse roue avant droite (AS5600 #2, km/h)
+    std::atomic<float> m_fwd{0.f};       // consigne d'avance après mix/limites [-1..1]
+    std::atomic<float> m_turn{0.f};      // consigne de virage après anti-renversement [-1..1]
     std::atomic<bool>  m_btn_start{false};
-    std::atomic<bool>  m_btn_rev{false};
-    std::atomic<float> m_out_l{0.f};
-    std::atomic<float> m_out_r{0.f};
+    std::atomic<float> m_out_l{0.f};     // PWM moteur gauche [-1..1]
+    std::atomic<float> m_out_r{0.f};     // PWM moteur droite [-1..1]
     std::atomic<bool>  m_brake{false};
-    std::atomic<bool>  m_rev_led{false};
     std::atomic<bool>  m_arming{false};
     std::atomic<bool>  m_estop{false};
-    std::atomic<int>   m_cmd{0};
+    std::atomic<bool>  m_pad_conn{false}; // manette connectée
+    std::atomic<int>   m_pad_batt{-1};    // batterie manette 0..100 (-1 inconnu)
+    std::atomic<float> m_pad_x{0.f};      // stick BRUT virage [-1..1] (position physique, cercle)
+    std::atomic<float> m_pad_y{0.f};      // stick BRUT avance [-1..1] (position physique, cercle)
+    std::atomic<float> m_pad_cx{0.f};     // consigne virage COMPENSÉE cercle→carré [-1..1]
+    std::atomic<float> m_pad_cy{0.f};     // consigne avance COMPENSÉE cercle→carré [-1..1]
+    std::atomic<float> m_pad_zl{0.f};     // gâchette analogique gauche ZL [0..1] (affichage)
+    std::atomic<float> m_pad_zr{0.f};     // gâchette analogique droite ZR [0..1] (affichage)
+    std::atomic<float> m_pad_rx2{0.f};    // stick DROIT X [-1..1] (affichage seulement)
+    std::atomic<float> m_pad_ry2{0.f};    // stick DROIT Y [-1..1] (affichage seulement)
+    std::atomic<unsigned> m_pad_btns{0};  // masque : boutons | (misc<<16) | (dpad<<24) (affichage)
 };
 
 // ───────────────────────── Globaux ─────────────────────────

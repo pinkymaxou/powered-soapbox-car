@@ -1,19 +1,17 @@
-// hardware.cpp — Implémentation de l'accès matériel.
-// Les instances/handles des drivers (ADC, LEDC, I2C) vivent ici en statique ;
-// le reste du firmware passe par les fonctions libres du namespace `board`.
+// hardware.cpp — Accès matériel (variante différentielle : 2 moteurs avant + 2 AS5600).
+// Les handles des drivers (ADC, LEDC, 2× I2C) vivent ici en statique ; le reste du firmware
+// passe par les fonctions libres du namespace `board`.
 #include "hardware.hpp"
 
 #include <cmath>
 
+#include "ads1115.hpp"
 #include "config.hpp"
 #include "pinout.hpp"
 
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/ledc.h"
-#include "esp_adc/adc_cali.h"
-#include "esp_adc/adc_cali_scheme.h"
-#include "esp_adc/adc_oneshot.h"
 #include "esp_log.h"
 
 static const char* TAG = "board";
@@ -28,12 +26,10 @@ static inline float clampf(float v, float lo, float hi)
 
 namespace
 {
-// État matériel (instances des drivers)
-adc_oneshot_unit_handle_t m_adc = nullptr;
-adc_cali_handle_t         m_cali = nullptr;
-i2c_master_bus_handle_t   m_i2c_bus = nullptr;
-i2c_master_dev_handle_t   m_as5600 = nullptr;
-int                       m_angle_last = -1;   // dernier angle brut AS5600 (-1 = non initialisé)
+i2c_master_bus_handle_t   m_bus[2] = {nullptr, nullptr};   // bus 0 = roue G, bus 1 = roue D
+i2c_master_dev_handle_t   m_as[2]  = {nullptr, nullptr};   // AS5600 par bus
+int                       m_angle_last[2] = {-1, -1};      // dernier angle brut par capteur
+Ads1115                   m_ads;                           // ADC externe (bus 0), Vbat sur A0
 bool                      m_led_on = false;
 
 void dirPin(gpio_num_t pin, Dir d)
@@ -55,27 +51,16 @@ void initLED()
     gpio_config(&io);
 }
 
-void initADC()
+// ADC externe ADS1115 (sur le bus 0). Vbat suivie en continu sur A0 en ±4,096 V
+// (résolution 125 µV) : la tension à la broche (≤ 3,3 V via le diviseur) tient largement.
+void initExtAdc()
 {
-    adc_oneshot_unit_init_cfg_t init_cfg{};
-    init_cfg.unit_id = ADC_UNIT_1;
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_cfg, &m_adc));
-
-    adc_oneshot_chan_cfg_t chan_cfg{};
-    chan_cfg.atten = ADC_ATTEN_DB_12;
-    chan_cfg.bitwidth = ADC_BITWIDTH_DEFAULT;
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(m_adc, pins::THROTTLE, &chan_cfg));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(m_adc, pins::VBAT, &chan_cfg));
-
-    adc_cali_line_fitting_config_t cali_cfg{};
-    cali_cfg.unit_id = ADC_UNIT_1;
-    cali_cfg.atten = ADC_ATTEN_DB_12;
-    cali_cfg.bitwidth = ADC_BITWIDTH_DEFAULT;
-    if (ESP_OK != adc_cali_create_scheme_line_fitting(&cali_cfg, &m_cali))
+    if (!m_ads.begin(m_bus[0], hw::ADS1115_ADDR, hw::I2C_FREQ_HZ))
     {
-        m_cali = nullptr;
-        ESP_LOGW(TAG, "Calibration ADC indisponible (tension approximative)");
+        ESP_LOGW(TAG, "ADS1115 indisponible : mesure Vbat à 0");
+        return;
     }
+    m_ads.startContinuous(pins::ads::VBAT, Ads1115::Gain::FS_4V096, Ads1115::Rate::SPS_128);
 }
 
 void initMotors()
@@ -111,58 +96,76 @@ void initMotors()
     board::motorsStop();
 }
 
-void initEncoder()
+// Deux bus I2C indépendants, un capteur AS5600 (0x36) par bus.
+void initEncoders()
 {
-    // Bus I2C maître sur SDA/SCL (pull-ups internes activés en plus des 4,7 kΩ externes).
-    i2c_master_bus_config_t bus{};
-    bus.i2c_port = I2C_NUM_0;
-    bus.sda_io_num = pins::I2C_SDA;
-    bus.scl_io_num = pins::I2C_SCL;
-    bus.clk_source = I2C_CLK_SRC_DEFAULT;
-    bus.glitch_ignore_cnt = 7;
-    bus.flags.enable_internal_pullup = true;
-    if (ESP_OK != i2c_new_master_bus(&bus, &m_i2c_bus))
+    struct { i2c_port_t port; gpio_num_t sda; gpio_num_t scl; } cfg[2] = {
+        {I2C_NUM_0, pins::I2C0_SDA, pins::I2C0_SCL},
+        {I2C_NUM_1, pins::I2C1_SDA, pins::I2C1_SCL},
+    };
+    for (int i = 0; i < 2; ++i)
     {
-        ESP_LOGW(TAG, "Bus I2C indisponible : pas de capteur de vitesse");
-        return;
-    }
-    i2c_device_config_t dev{};
-    dev.dev_addr_length = I2C_ADDR_BIT_LEN_7;
-    dev.device_address = hw::AS5600_ADDR;
-    dev.scl_speed_hz = hw::I2C_FREQ_HZ;
-    if (ESP_OK != i2c_master_bus_add_device(m_i2c_bus, &dev, &m_as5600))
-    {
-        ESP_LOGW(TAG, "AS5600 non détecté (0x%02X)", hw::AS5600_ADDR);
-        m_as5600 = nullptr;
+        i2c_master_bus_config_t bus{};
+        bus.i2c_port = cfg[i].port;
+        bus.sda_io_num = cfg[i].sda;
+        bus.scl_io_num = cfg[i].scl;
+        bus.clk_source = I2C_CLK_SRC_DEFAULT;
+        bus.glitch_ignore_cnt = 7;
+        bus.flags.enable_internal_pullup = true;
+        if (ESP_OK != i2c_new_master_bus(&bus, &m_bus[i]))
+        {
+            ESP_LOGW(TAG, "Bus I2C %d indisponible : pas de capteur roue %c", i, i ? 'D' : 'G');
+            continue;
+        }
+        i2c_device_config_t dev{};
+        dev.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+        dev.device_address = hw::AS5600_ADDR;
+        dev.scl_speed_hz = hw::I2C_FREQ_HZ;
+        if (ESP_OK != i2c_master_bus_add_device(m_bus[i], &dev, &m_as[i]))
+        {
+            ESP_LOGW(TAG, "AS5600 roue %c non ajouté", i ? 'D' : 'G');
+            m_as[i] = nullptr;
+        }
     }
 }
 
-// Lit l'angle brut 12 bits (0..4095). Retourne -1 sur erreur / capteur absent.
-int readAngleRaw()
+// Angle brut 12 bits (0..4095) du capteur `i`. Retourne -1 si absent/erreur.
+int readAngleRaw(int i)
 {
-    if (!m_as5600) return -1;
+    if (!m_as[i]) return -1;
     const uint8_t reg = hw::AS5600_REG_RAWANG;
     uint8_t buf[2] = {0, 0};
-    if (ESP_OK != i2c_master_transmit_receive(m_as5600, &reg, 1, buf, 2, 20))
+    if (ESP_OK != i2c_master_transmit_receive(m_as[i], &reg, 1, buf, 2, 20))
     {
         return -1;
     }
     return ((buf[0] & 0x0F) << 8) | buf[1];
 }
 
-void initButtonsOutputs()
+// Δangle signé du capteur `i` depuis le dernier appel, wrap 0↔4095 → [-2048..2047].
+int angleDelta(int i)
+{
+    const int cur = readAngleRaw(i);
+    if (cur < 0) return 0;
+    if (m_angle_last[i] < 0)
+    {
+        m_angle_last[i] = cur;
+        return 0;
+    }
+    int d = cur - m_angle_last[i];
+    m_angle_last[i] = cur;
+    if (d > 2048)  d -= 4096;
+    if (d < -2048) d += 4096;
+    return d;
+}
+
+void initButton()
 {
     gpio_config_t in{};
     in.mode = GPIO_MODE_INPUT;
-    in.pin_bit_mask = (1ULL << pins::START_BTN) | (1ULL << pins::REVERSE_BTN);
+    in.pin_bit_mask = (1ULL << pins::START_BTN);
     in.pull_up_en = GPIO_PULLUP_ENABLE;
     gpio_config(&in);
-
-    gpio_config_t out{};
-    out.mode = GPIO_MODE_OUTPUT;
-    out.pin_bit_mask = (1ULL << pins::REVERSE_LED);
-    gpio_config(&out);
-    gpio_set_level(pins::REVERSE_LED, 0);
 }
 
 // Anti-rebond : un état ne change qu'après BTN_DEBOUNCE_TICKS lectures stables.
@@ -172,7 +175,6 @@ struct Debounce
     int  count = 0;
 };
 Debounce m_db_start;
-Debounce m_db_rev;
 
 bool debounce(Debounce& d, bool raw)
 {
@@ -188,35 +190,6 @@ bool debounce(Debounce& d, bool raw)
     return d.state;
 }
 
-int adcRawAvg(adc_channel_t ch, int n)
-{
-    long acc = 0;
-    for (int k = 0; k < n; ++k)
-    {
-        int raw = 0;
-        adc_oneshot_read(m_adc, ch, &raw);
-        acc += raw;
-    }
-    return n ? static_cast<int>(acc / n) : 0;
-}
-
-// Δangle signé depuis le dernier appel, avec gestion du wrap 0↔4095 → [-2048..2047].
-// Le signe donne le sens de rotation. Retourne 0 si capteur absent (pas de fausse vitesse).
-int angleDelta()
-{
-    const int cur = readAngleRaw();
-    if (cur < 0) return 0;
-    if (m_angle_last < 0)
-    {
-        m_angle_last = cur;
-        return 0;
-    }
-    int d = cur - m_angle_last;
-    m_angle_last = cur;
-    if (d > 2048)  d -= 4096;
-    if (d < -2048) d += 4096;
-    return d;
-}
 
 void motorApply(ledc_channel_t ch, gpio_num_t dir, float v, uint32_t cap)
 {
@@ -229,10 +202,10 @@ void motorApply(ledc_channel_t ch, gpio_num_t dir, float v, uint32_t cap)
 void board::init()
 {
     initLED();
-    initADC();
     initMotors();
-    initEncoder();   // bus I2C + capteur d'angle AS5600
-    initButtonsOutputs();
+    initEncoders();   // 2 bus I2C + 2 capteurs AS5600
+    initExtAdc();     // ADS1115 sur le bus 0 (après création des bus)
+    initButton();
     board::led(false);
 }
 
@@ -247,20 +220,29 @@ void board::ledToggle()
     board::led(!m_led_on);
 }
 
-int board::throttleRaw(int n)
-{
-    return adcRawAvg(pins::THROTTLE, n);
-}
-
 float board::vbatVolts(int n)
 {
-    const int raw = adcRawAvg(pins::VBAT, n);
-    int mv = 0;
-    if (m_cali && ESP_OK == adc_cali_raw_to_voltage(m_cali, raw, &mv))
+    if (!m_ads.ok())
     {
-        return mv / 1000.0f;
+        return -1.0f;   // capteur absent → tension inconnue (le contrôleur saute la LVC)
     }
-    return (raw / 4095.0f) * 3.3f;
+    // Moyenne de n lectures du registre de conversion (mode continu) → tension à la broche A0.
+    long acc = 0;
+    int  got = 0;
+    for (int k = 0; k < n; ++k)
+    {
+        int16_t raw = 0;
+        if (m_ads.readRaw(raw))
+        {
+            acc += raw;
+            ++got;
+        }
+    }
+    if (0 == got)
+    {
+        return 0.0f;
+    }
+    return m_ads.toVolts(static_cast<int16_t>(acc / got));
 }
 
 void board::motorsSet(float l, float r, uint32_t cap)
@@ -269,63 +251,37 @@ void board::motorsSet(float l, float r, uint32_t cap)
     motorApply(LEDC_CHANNEL_1, pins::DIR_R, r, cap);
 }
 
-void board::motorsBrake(float strength, uint32_t cap)
-{
-    const uint32_t duty = static_cast<uint32_t>(clampf(strength, 0.f, 1.f) * cap);
-    dirPin(pins::DIR_L, Dir::Reverse);
-    dirPin(pins::DIR_R, Dir::Reverse);
-    setDuty(LEDC_CHANNEL_0, duty);
-    setDuty(LEDC_CHANNEL_1, duty);
-}
-
 void board::motorsStop()
 {
     setDuty(LEDC_CHANNEL_0, 0);
     setDuty(LEDC_CHANNEL_1, 0);
 }
 
-int board::encLeftDelta()
-{
-    return angleDelta();   // Δcounts AS5600 (signé) depuis le dernier appel
-}
-
-int board::encRightDelta()
-{
-    return 0;   // réserve : 2e capteur = 2e bus I2C (adresse AS5600 fixe), non câblé
-}
+int board::encLeftDelta()  { return angleDelta(0); }
+int board::encRightDelta() { return angleDelta(1); }
 
 void board::pollButtons()
 {
     debounce(m_db_start, pins::BTN_ACTIVE == gpio_get_level(pins::START_BTN));
-    debounce(m_db_rev,   pins::BTN_ACTIVE == gpio_get_level(pins::REVERSE_BTN));
 }
 
 bool board::btnStart()
 {
     return m_db_start.state;
 }
-bool board::btnReverse()
-{
-    return m_db_rev.state;
-}
-
-void board::reverseLED(bool on)
-{
-    gpio_set_level(pins::REVERSE_LED, on ? 1 : 0);
-}
 
 void board::powerLatch()
 {
     // Actif BAS : tirer la LED de l'opto vers la masse → l'opto envoie le +20 V sur la gate.
-    gpio_set_level(pins::POWER_HOLD, 0);   // mettre l'état AVANT de configurer en sortie
+    gpio_set_level(pins::POWER_HOLD, 0);
     gpio_config_t io{};
     io.pin_bit_mask = (1ULL << pins::POWER_HOLD);
     io.mode = GPIO_MODE_OUTPUT;
     gpio_config(&io);
-    gpio_set_level(pins::POWER_HOLD, 0);   // maintient l'alimentation (sink opto)
+    gpio_set_level(pins::POWER_HOLD, 0);
 }
 
 void board::powerOff()
 {
-    gpio_set_level(pins::POWER_HOLD, 1);   // relâche la LED de l'opto → coupure
+    gpio_set_level(pins::POWER_HOLD, 1);
 }

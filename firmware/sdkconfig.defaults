@@ -11,8 +11,26 @@ CONFIG_LWIP_IPV6_AUTOCONFIG=y
 # Taille réelle de la flash de la carte (ESP32-WROOM 4 Mo)
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
-# Place pour Wi-Fi + serveur HTTP
-CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+# Table de partitions custom : Wi-Fi + Bluetooth → app ~2,75 Mo (flash 4 Mo), sans OTA
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Bluetooth (manette via Bluepad32/BTstack) + coexistence Wi-Fi/BT (radio partagée)
+CONFIG_BT_ENABLED=y
+CONFIG_BT_CONTROLLER_ONLY=y
+CONFIG_BTDM_CTRL_MODE_BTDM=y
+CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN=5
+CONFIG_BTDM_CTRL_BLE_MAX_CONN=5
+CONFIG_BTDM_CTRL_MODEM_SLEEP=n
+CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
+# Wi-Fi + BT + coexistence saturent l'IRAM : on déplace le code Wi-Fi optimisé en flash
+# (petite perte de débit Wi-Fi, sans impact sur la commande de la manette/des moteurs).
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+# Bluepad32
+CONFIG_BLUEPAD32_MAX_DEVICES=4
+CONFIG_BLUEPAD32_PLATFORM_CUSTOM=y
+CONFIG_BTSTACK_AUDIO=n
 
 # Support WebSocket dans le serveur HTTP
 CONFIG_HTTPD_WS_SUPPORT=y

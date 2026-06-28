@@ -9,7 +9,7 @@
 <nav class="tabs">
  <button class="tab active" data-tab="dash">Tableau de bord</button>
  <button class="tab" data-tab="cfg">Configuration</button>
- <button class="tab" data-tab="calib">Calibration</button>
+ <button class="tab" data-tab="pad">Manette</button>
  <button class="tab" data-tab="wifi">Wi-Fi</button>
  <button class="tab" data-tab="pins">Brochage</button>
  <button class="tab" data-tab="sys">Système</button>
@@ -17,7 +17,8 @@
 <div class="wrap">
 
  <section id="dash" class="panel">
-  <div class="chart-title">Accélérateur · PWM — 10 min</div>
+  <div id="why" class="why" hidden></div>
+  <div class="chart-title">Avance · PWM (%) · RPM roues — 10 min</div>
   <canvas id="chart" width="520" height="180"></canvas>
   <div class="chart-title">🏎️ Vitesse — 1 min</div>
   <canvas id="spdchart" width="520" height="90"></canvas>
@@ -37,11 +38,35 @@
   <button type="button" onclick="save()">💾 Enregistrer</button>
  </section>
 
- <section id="calib" class="panel" hidden>
-  <p class="note">Calibration de l'accélérateur — possible <b>uniquement désarmé et à l'arrêt</b>.<br>
-  Après avoir cliqué : <b>appuyer à FOND</b> sur l'accélérateur, puis <b>relâcher</b> quand l'état passe en attente. Les valeurs min/max sont enregistrées automatiquement.</p>
-  <button class="warn" onclick="calib()">▶ Lancer la calibration</button>
-  <div class="status" id="calstatus">État : —</div>
+ <section id="pad" class="panel" hidden>
+  <div class="status" id="padinfo">Manette : …</div>
+  <div class="padlive">
+   <div><div class="chart-title">🕹️ Stick gauche</div><canvas id="padview" width="150" height="150"></canvas>
+    <div class="padlegend"><span style="color:#3cf">●</span> physique · <span style="color:#fa0">●</span> compensé</div></div>
+   <div><div class="chart-title">🕹️ Stick droit</div><canvas id="padview2" width="150" height="150"></canvas>
+    <div class="padlegend">affichage seulement</div></div>
+   <div><div class="chart-title">✛ Croix (D-pad)</div><canvas id="dpadview" width="96" height="96"></canvas></div>
+   <div><div class="chart-title">Boutons</div><div id="padbtns" class="padbtns"></div>
+    <div class="padtrig">
+     <div class="trig"><span>ZL</span><div class="track"><div class="fill" id="zlf"></div></div></div>
+     <div class="trig"><span>ZR</span><div class="track"><div class="fill" id="zrf"></div></div></div>
+    </div>
+    <div class="padraw" id="padraw">btns —</div></div>
+  </div>
+  <div class="row">
+   <button onclick="padPair()">🔗 Appairer une manette</button>
+   <button class="danger" onclick="padUnpair()">✖ Désappairer</button>
+  </div>
+  <p class="note">⚠️ L'appairage <b>efface la calibration</b> : il faudra recalibrer. La manette doit être en mode appairage (souvent maintenir le bouton de synchro).</p>
+  <hr>
+  <p class="note"><b>Calibration manette — OBLIGATOIRE pour rouler.</b><br>
+  1) Manche au repos → « Démarrer ». 2) Bouger les 2 sticks <b>à fond dans tous les sens</b>. 3) « Terminer ».</p>
+  <div class="row">
+   <button class="warn" onclick="calStart()">▶ Démarrer la calibration</button>
+   <button onclick="calFinish()">✓ Terminer</button>
+   <button class="alt" onclick="calCancel()">Annuler</button>
+  </div>
+  <div class="status" id="calstatus">Calibration : —</div>
  </section>
 
  <section id="wifi" class="panel" hidden>
@@ -58,27 +83,23 @@
  <section id="pins" class="panel" hidden>
   <table class="pins">
    <tr><th>GPIO</th><th>Fonction</th><th>Sens</th></tr>
-   <tr><td>25</td><td>PWM moteur gauche</td><td>sortie</td></tr>
-   <tr><td>26</td><td>DIR moteur gauche</td><td>sortie</td></tr>
-   <tr><td>32</td><td>PWM moteur droite</td><td>sortie</td></tr>
-   <tr><td>33</td><td>DIR moteur droite</td><td>sortie</td></tr>
-   <tr><td>34</td><td>Accélérateur (potentiomètre)</td><td>entrée ADC</td></tr>
-   <tr><td>39</td><td>Tension batterie (pont 100k/15k)</td><td>entrée ADC</td></tr>
-   <tr><td>16</td><td>Bouton démarrage / armement</td><td>entrée (pull-up)</td></tr>
-   <tr><td>21</td><td>Bouton marche arrière (momentané)</td><td>entrée (pull-up)</td></tr>
-   <tr><td>18</td><td>I²C SDA — capteur d'angle AS5600</td><td>E/S</td></tr>
-   <tr><td>19</td><td>I²C SCL — capteur d'angle AS5600</td><td>E/S</td></tr>
+   <tr><td>25 / 26</td><td>PWM / DIR moteur AVANT gauche</td><td>sortie</td></tr>
+   <tr><td>32 / 33</td><td>PWM / DIR moteur AVANT droite</td><td>sortie</td></tr>
+   <tr><td>18 / 19</td><td>I²C bus 0 (SDA/SCL) — AS5600 roue G (0x36) + ADS1115 (0x48)</td><td>E/S</td></tr>
+   <tr><td>27 / 14</td><td>I²C bus 1 (SDA/SCL) — AS5600 roue D (0x36)</td><td>E/S</td></tr>
+   <tr><td>16</td><td>Bouton armement (START)</td><td>entrée (pull-up)</td></tr>
    <tr><td>13</td><td>POWER_HOLD (maintien d'alim, actif bas)</td><td>sortie</td></tr>
    <tr><td>17</td><td>Ruban LED WS2812B (data)</td><td>sortie</td></tr>
-   <tr><td>4</td><td>LED du bouton marche arrière</td><td>sortie</td></tr>
    <tr><td>2</td><td>LED d'état (onboard)</td><td>sortie</td></tr>
-   <tr><th colspan="3">Réserves futures (câblées, non utilisées) — 3,3 V</th></tr>
-   <tr><td>27 / 14</td><td>Encodeur 1 — A / B (quadrature 3,3 V)</td><td>entrées</td></tr>
-   <tr><td>35 / 36</td><td>Encodeur 2 — A / B (entrées seules)</td><td>entrées</td></tr>
-   <tr><td>22 / 23</td><td>2 boutons auxiliaires</td><td>entrées (pull-up)</td></tr>
+   <tr><th colspan="3">ADC externe ADS1115 (I²C bus 0, 3,3 V)</th></tr>
+   <tr><td>A0</td><td>Tension batterie (pont 100k/15k) — continu</td><td>entrée ADC</td></tr>
+   <tr><td>A1 / A2</td><td>Joystick X / Y — FUTUR (non câblé)</td><td>entrées ADC</td></tr>
+   <tr><th colspan="3">Réserve : encodeurs quadrature AMT103-V FUTUR (non câblé)</th></tr>
+   <tr><td>34 / 35</td><td>Encodeur roue G — A / B</td><td>entrées (input-only)</td></tr>
+   <tr><td>36 / 39</td><td>Encodeur roue D — A / B</td><td>entrées (input-only)</td></tr>
   </table>
-  <p class="note">Arrêt d'urgence : coupe-courant matériel de tout le système (pas de GPIO).<br>
-  Frein : aucun contact — relâcher l'accélérateur déclenche le frein électrique.</p>
+  <p class="note">Pilotage = <b>manette Bluetooth</b> (onglet Manette). Tricycle : 2 roues avant motrices + roulette arrière.<br>
+  Manette déconnectée ou non calibrée → <b>freinage / refus de rouler</b>. Arrêt d'urgence = coupe-courant matériel.</p>
  </section>
 
  <section id="sys" class="panel" hidden>
@@ -88,8 +109,11 @@
 
 </div>
 <script>
-const ST=["IDLE","CALIBRATION","ARMÉ","DÉFAUT"];
-const FA=["—","E-STOP","BATTERIE BASSE","ACCÉLÉRATEUR","NON CALIBRÉ","ENCODEUR"];
+// Reflètent les enums C++ State / Fault (config.hpp) — index = valeur.
+const STATE={LOCKOUT:0,CALIBRATE:1,RUN:2,FAULT:3};
+const FAULT={NONE:0,ESTOP:1,LVC:2,THROTTLE:3,NOT_CALIBRATED:4,ENCODER:5};
+const ST=["IDLE","CALIBRATION","ARMÉ","DÉFAUT"];                       // libellés par STATE
+const FA=["—","E-STOP","BATTERIE BASSE","ACCÉLÉRATEUR","NON CALIBRÉ","ENCODEUR"];  // libellés par FAULT
 let ws,timer,histTimer,built=false;
 let speedScale=15;   // km/h ≙ 100 % (barres de vitesse), réglé depuis la config
 let battLow=15, battFull=21;   // V à 0 % / 100 %, dérivés du nombre de cellules (config)
@@ -101,26 +125,31 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  document.querySelectorAll('.panel').forEach(p=>p.hidden=(p.id!==t.dataset.tab));
  if(t.dataset.tab==='wifi') loadWifi();
  if(t.dataset.tab==='sys') loadSys();
+ if(t.dataset.tab==='pad') loadPad();
 });
 
 // ── Graphiques (Chart.js, embarqué/servi par l'ESP32 ; données conservées en RAM) ──
 // Principal : accél + PWM en % sur 10 min. Vitesse : km/h (0–16) sur 1 min. Batterie : V sur 30 min.
 let chMain, chSpd, chBatt;
-const dset=(label,color)=>({label,borderColor:color,backgroundColor:color,data:[],borderWidth:1.5,fill:false,tension:.15});
-function mkChart(id,datasets,ymin,ymax,unit,dec,aspect,legend){
+const dset=(label,color,yID)=>({label,borderColor:color,backgroundColor:color,data:[],borderWidth:1.5,fill:false,tension:.15,yAxisID:yID||'y'});
+function mkChart(id,datasets,ymin,ymax,unit,dec,aspect,legend,y2){
+ const scales={
+   x:{type:'linear',min:0,max:1,grid:{color:'#262626'},border:{color:'#444'},ticks:{display:false}},
+   y:{min:ymin,max:ymax,grid:{color:'#262626'},border:{color:'#444'},
+      ticks:{color:'#888',stepSize:(ymax-ymin)/4,callback:v=>v.toFixed(dec)+unit}}};
+ if(y2){scales.y2={position:'right',min:0,max:y2.max,grid:{display:false},border:{color:'#444'},
+      ticks:{color:'#888',stepSize:y2.max/4,callback:v=>v.toFixed(0)+y2.unit}};}
  return new Chart(document.getElementById(id),{
   type:'line', data:{datasets},
   options:{responsive:true,maintainAspectRatio:true,aspectRatio:aspect,animation:false,parsing:false,normalized:true,
    elements:{point:{radius:0}},
    plugins:{legend:{display:legend,labels:{color:'#bbb',boxWidth:12,boxHeight:2,font:{size:11}}}},
-   scales:{
-    x:{type:'linear',min:0,max:1,grid:{color:'#262626'},border:{color:'#444'},ticks:{display:false}},
-    y:{min:ymin,max:ymax,grid:{color:'#262626'},border:{color:'#444'},
-       ticks:{color:'#888',stepSize:(ymax-ymin)/4,callback:v=>v.toFixed(dec)+unit}}}}
+   scales}
  });
 }
 function initCharts(){
- chMain=mkChart('chart',[dset('Accél %','#3cf'),dset('PWM G','#6f6'),dset('PWM D','#fa0')],0,100,'%',0,2.9,true);
+ chMain=mkChart('chart',[dset('Avance %','#3cf'),dset('PWM G','#2a2'),dset('PWM D','#fa0'),
+   dset('RPM G','#9e9','y2'),dset('RPM D','#fc6','y2')],0,100,'%',0,2.9,true,{max:250,unit:' tr'});
  chSpd =mkChart('spdchart',[dset('Vitesse','#f6f')],0,16,' km/h',0,5.8,false);
  chBatt=mkChart('battchart',[dset('Batterie','#3d9')],battLow,battFull,' V',1,5.8,false);
 }
@@ -133,6 +162,8 @@ function applyHist(m){
  if(Array.isArray(m.accel))setSeries(chMain,0,m.accel);   // %
  if(Array.isArray(m.pwml)) setSeries(chMain,1,m.pwml);
  if(Array.isArray(m.pwmr)) setSeries(chMain,2,m.pwmr);
+ if(Array.isArray(m.rpml)) setSeries(chMain,3,m.rpml);   // tr/min roue G (axe droit)
+ if(Array.isArray(m.rpmr)) setSeries(chMain,4,m.rpmr);   // tr/min roue D (axe droit)
  chMain.update('none');
  if(Array.isArray(m.spd)){ setSeries(chSpd,0,m.spd.map(v=>v/10)); chSpd.update('none'); }   // ×10 → km/h
  if(Array.isArray(m.batt)){ setSeries(chBatt,0,m.batt.map(v=>v/10)); chBatt.update('none'); } // ×10 → V
@@ -140,26 +171,29 @@ function applyHist(m){
 
 const OUI=v=>v?'OUI':'non';
 const clamp01=v=>Math.max(0,Math.min(100,v));
-const dirTxt=v=>v>0.001?'▲ av':(v<-0.001?'▼ ar/frein':'– arrêt');
+const dirTxt=v=>v>0.001?'▲ avant':(v<-0.001?'▼ arrière':'– arrêt');
 const battPct=v=>clamp01((v-battLow)/(battFull-battLow)*100);   // selon nb de cellules
 
 // Barres : id, libellé, couleur, valeur 0–100, texte affiché
+// bip = barre bipolaire (centre = 0, droite = +, gauche = −) ; sv = valeur signée -100..100.
 const BARS=[
- {id:'accel',label:'Accélérateur', color:'#3cf', v:s=>s.throttle*100,            t:s=>(s.throttle*100).toFixed(0)+' %'},
- {id:'pwml', label:'PWM moteur G',  color:'#6f6', v:s=>Math.abs(s.out_l)*100,     t:s=>(Math.abs(s.out_l)*100).toFixed(0)+' % '+dirTxt(s.out_l)},
- {id:'pwmr', label:'PWM moteur D',  color:'#fa0', v:s=>Math.abs(s.out_r)*100,     t:s=>(Math.abs(s.out_r)*100).toFixed(0)+' % '+dirTxt(s.out_r)},
- {id:'spd',  label:'Vitesse',       color:'#f6f', v:s=>s.speed/speedScale*100,    t:s=>s.speed.toFixed(1)+' km/h'},
- {id:'batt', label:'Batterie',      color:'#3d9', v:s=>battPct(s.vbat),           t:s=>s.vbat.toFixed(2)+' V'},
+ {id:'fwd',  label:'Avance',        color:'#3cf', bip:1, sv:s=>s.fwd*100,        t:s=>(s.fwd*100).toFixed(0)+'% '+dirTxt(s.fwd)},
+ {id:'turn', label:'Virage',        color:'#8cf', bip:1, sv:s=>s.turn*100,       t:s=>(s.turn*100).toFixed(0)+'% '+(s.turn>.001?'▶ droite':(s.turn<-.001?'◀ gauche':'–'))},
+ {id:'pwml', label:'PWM moteur G',  color:'#6f6', bip:1, sv:s=>s.out_l*100,      t:s=>(s.out_l*100).toFixed(0)+'% '+dirTxt(s.out_l)},
+ {id:'pwmr', label:'PWM moteur D',  color:'#fa0', bip:1, sv:s=>s.out_r*100,      t:s=>(s.out_r*100).toFixed(0)+'% '+dirTxt(s.out_r)},
+ {id:'spdl', label:'Vitesse G',     color:'#f6f', bip:1, sv:s=>s.speed_l/16*100, t:s=>s.speed_l.toFixed(1)+' km/h'},
+ {id:'spdr', label:'Vitesse D',     color:'#f9f', bip:1, sv:s=>s.speed_r/16*100, t:s=>s.speed_r.toFixed(1)+' km/h'},
+ {id:'batt', label:'Batterie',      color:'#3d9',        v:s=>battPct(s.vbat),    t:s=>s.vbat.toFixed(2)+' V'},
 ];
 function buildBars(){
  document.getElementById('bars').innerHTML=BARS.map(b=>
   `<div class="bar"><div class="lbl"><span>${b.label}</span><span id="${b.id}t">—</span></div>`+
-  `<div class="track"><div class="fill" id="${b.id}f" style="background:${b.color}"></div></div></div>`).join('');
+  `<div class="track${b.bip?' bip':''}"><div class="fill" id="${b.id}f" style="background:${b.color}"></div></div></div>`).join('');
 }
 // Indicateurs (pastilles) : boutons + sorties booléennes
 const INDS=[
- {k:'btn_start',l:'START'},{k:'btn_rev',l:'REVERSE'},
- {k:'brake',l:'FREIN ÉLEC'},{k:'rev_led',l:'LED RECUL'}
+ {k:'pad_conn',l:'MANETTE'},{k:'arming',l:'ARMÉ'},
+ {k:'brake',l:'FREIN'},{k:'btn_start',l:'START'},{k:'estop',l:'E-STOP'}
 ];
 function buildInds(){
  document.getElementById('ind').innerHTML=INDS.map(i=>`<span class="pill" id="i_${i.k}">${i.l}</span>`).join('');
@@ -169,19 +203,106 @@ function updateInds(s){
 }
 function updateBars(s){
  BARS.forEach(b=>{
-   document.getElementById(b.id+'f').style.width=clamp01(b.v(s)).toFixed(0)+'%';
+   const f=document.getElementById(b.id+'f');
+   if(b.bip){
+     const v=Math.max(-100,Math.min(100,b.sv(s)));
+     const half=Math.abs(v)/2;                       // 0..50 % de la piste (chaque moitié)
+     f.style.left=(v>=0?50:50-half)+'%';
+     f.style.width=half+'%';
+   }else{
+     f.style.left='0%';
+     f.style.width=clamp01(b.v(s)).toFixed(0)+'%';
+   }
    document.getElementById(b.id+'t').textContent=b.t(s);
  });
+}
+// ── Manette : pavé joystick (position du stick) + état des boutons (en direct, via status) ──
+// Bits = uni_gamepad buttons (0-9) | misc<<16. Labels « Switch » ; T/O/M1/M2 = boutons
+// spécifiques à ta manette → presse-les et regarde quel témoin / quel bit (hex brut) s'allume.
+const PADBTNS=[['A',0x01],['B',0x02],['X',0x04],['Y',0x08],['L',0x10],['R',0x20],
+ ['ZL',0x40],['ZR',0x80],['L3',0x100],['R3',0x200],
+ ['⌂',0x10000],['−',0x20000],['+',0x40000],['⦿',0x80000]];
+function buildPadBtns(){
+ const e=document.getElementById('padbtns'); if(!e)return;
+ e.innerHTML=PADBTNS.map(b=>`<span class="pill" id="pb_${b[1]}">${b[0]}</span>`).join('');
+}
+function updatePadBtns(mask){
+ mask=mask||0;
+ PADBTNS.forEach(b=>{const el=document.getElementById('pb_'+b[1]); if(el)el.classList.toggle('on',(mask&b[1])!==0);});
+}
+function drawPad(s){
+ const c=document.getElementById('padview'); if(!c)return;
+ const g=c.getContext('2d'), w=c.width, h=c.height, cx=w/2, cy=h/2, r=w/2-12;
+ g.clearRect(0,0,w,h);
+ g.lineWidth=1;
+ g.strokeStyle='#555'; g.strokeRect(cx-r,cy-r,2*r,2*r);             // carré = cible compensée
+ g.strokeStyle='#333'; g.beginPath(); g.arc(cx,cy,r,0,7); g.stroke(); // cercle = limite physique
+ g.strokeStyle='#2a2a2a'; g.beginPath(); g.moveTo(cx,cy-r);g.lineTo(cx,cy+r); g.moveTo(cx-r,cy);g.lineTo(cx+r,cy); g.stroke();
+ const X=v=>cx+(v||0)*r, Y=v=>cy-(v||0)*r;   // y vers le haut = avance
+ // trait physique → compensé
+ g.strokeStyle='#777'; g.beginPath(); g.moveTo(X(s.pad_x),Y(s.pad_y)); g.lineTo(X(s.pad_cx),Y(s.pad_cy)); g.stroke();
+ const dot=(x,y,col,rad)=>{g.beginPath(); g.arc(X(x),Y(y),rad,0,7); g.fillStyle=col; g.fill();};
+ dot(s.pad_cx,s.pad_cy,'#fa0',6);   // consigne compensée (carré)
+ dot(s.pad_x,s.pad_y,s.estop?'#f55':(s.pad_conn?'#3cf':'#666'),5);   // position physique (cercle)
+}
+// Stick droit : affichage simple (1 point, cercle, sans compensation ni calibration).
+function drawStick2(s){
+ const c=document.getElementById('padview2'); if(!c)return;
+ const g=c.getContext('2d'), w=c.width,h=c.height, cx=w/2,cy=h/2, r=w/2-10;
+ g.clearRect(0,0,w,h);
+ g.strokeStyle='#333'; g.lineWidth=1; g.beginPath(); g.arc(cx,cy,r,0,7); g.stroke();
+ g.strokeStyle='#2a2a2a'; g.beginPath(); g.moveTo(cx,cy-r);g.lineTo(cx,cy+r); g.moveTo(cx-r,cy);g.lineTo(cx+r,cy); g.stroke();
+ const px=cx+(s.pad_rx2||0)*r, py=cy-(s.pad_ry2||0)*r;
+ g.strokeStyle='#777'; g.lineWidth=2; g.beginPath(); g.moveTo(cx,cy); g.lineTo(px,py); g.stroke();
+ g.beginPath(); g.arc(px,py,7,0,7); g.fillStyle=s.pad_conn?'#6cf':'#666'; g.fill();
+}
+// Croix directionnelle : bits dpad = (pad_btns>>24) : UP=1, DOWN=2, RIGHT=4, LEFT=8.
+function drawDpad(s){
+ const c=document.getElementById('dpadview'); if(!c)return;
+ const g=c.getContext('2d'), w=c.width,h=c.height, cx=w/2,cy=h/2, a=24, off=24;
+ g.clearRect(0,0,w,h);
+ const dp=(s.pad_btns||0)>>>24;
+ const seg=(on,x,y)=>{g.fillStyle=on?'#6cf':'#333'; g.fillRect(x-a/2,y-a/2,a,a);};
+ seg(0,cx,cy);             // centre
+ seg(dp&1,cx,cy-off);      // haut
+ seg(dp&2,cx,cy+off);      // bas
+ seg(dp&4,cx+off,cy);      // droite
+ seg(dp&8,cx-off,cy);      // gauche
+}
+// Pourquoi le véhicule ne peut pas bouger (peut cumuler plusieurs raisons).
+function whyBlocked(s){
+ const b=[];
+ if(!s.pad_conn) b.push("Manette déconnectée");
+ if(s.estop) b.push("Arrêt d'urgence manette actif (bouton B)");
+ if(s.fault===FAULT.LVC) b.push("Tension batterie trop basse (LVC)");
+ if(s.fault===FAULT.ENCODER) b.push("Défaut capteur de roue (blocage / courroie ?)");
+ if(s.fault===FAULT.NOT_CALIBRATED) b.push("Manette NON calibrée → onglet Manette, calibration obligatoire");
+ if(s.pad_conn && !s.estop && !s.arming) b.push("Non armé : maintenir START ~1 s (manche au centre)");
+ return b;
 }
 function showStatus(s){
  const st=ST[s.state]||s.state;
  const hs=document.getElementById('hdrstate'); hs.textContent=st; hs.className='hdr-state s'+s.state;
- const cs=document.getElementById('calstatus'); if(cs)cs.textContent='État : '+st+(s.fault?('  ·  '+(FA[s.fault]||'')):'');
  updateBars(s);
  updateInds(s);
+ drawPad(s);
+ drawStick2(s);
+ drawDpad(s);
+ updatePadBtns(s.pad_btns);
+ const zl=document.getElementById('zlf'); if(zl) zl.style.width=((s.pad_zl||0)*100).toFixed(0)+'%';
+ const zr=document.getElementById('zrf'); if(zr) zr.style.width=((s.pad_zr||0)*100).toFixed(0)+'%';
+ const pr=document.getElementById('padraw'); if(pr) pr.textContent='btns 0x'+((s.pad_btns||0)>>>0).toString(16).padStart(5,'0');
+ const why=document.getElementById('why');
+ if(s.state===STATE.RUN){ why.hidden=true; }   // ARMÉ/Run = peut rouler
+ else{
+   const b=whyBlocked(s);
+   why.hidden=false;
+   why.innerHTML="🚫 <b>Le véhicule ne peut pas bouger</b>"+
+     (b.length?(" :<ul><li>"+b.join("</li><li>")+"</li></ul>"):" (état : "+st+")");
+ }
  document.getElementById('status').textContent=
-  `Défaut : ${FA[s.fault]||s.fault}\n`+
-  `Accélérateur (brut ADC) : ${s.thr_raw}`;
+  `État : ${st}${s.fault?('  ·  défaut : '+(FA[s.fault]||s.fault)):''}\n`+
+  `Manette : ${s.pad_conn?'connectée':'déconnectée'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}`;
 }
 
 // ── Formulaire de configuration (auto-généré depuis le schéma) ──
@@ -224,15 +345,28 @@ function connect(){
    else if(m.type==='status')showStatus(m);
    else if(m.type==='hist')applyHist(m);
    else if(m.type==='wifi')showWifi(m);
-   else if(m.type==='sysinfo')showSys(m);};
+   else if(m.type==='sysinfo')showSys(m);
+   else if(m.type==='pad')showPad(m);};
  ws.onclose=()=>{clearInterval(timer);clearInterval(histTimer);document.getElementById('status').textContent='Reconnexion…';setTimeout(connect,1000);};
 }
 function reload(){if(ws&&ws.readyState===1)ws.send('{"type":"get"}');}
 function save(){const o={type:'set'};
  document.querySelectorAll('#f input').forEach(i=>o[i.name]=parseFloat(i.value));
  if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
-function calib(){if(confirm("Lancer la calibration ? Appuyer à FOND sur l'accélérateur, puis relâcher.")
-   &&ws&&ws.readyState===1)ws.send('{"type":"calibrate"}');}
+function sendPad(cmd){if(ws&&ws.readyState===1)ws.send('{"type":"'+cmd+'"}');}
+function loadPad(){sendPad('padinfo');}
+function padPair(){if(confirm("Appairer une nouvelle manette ?\nCela EFFACE la calibration (il faudra recalibrer)."))sendPad('padpair');}
+function padUnpair(){if(confirm("Désappairer la manette ? (efface aussi la calibration)"))sendPad('padunpair');}
+function calStart(){sendPad('calstart');}
+function calFinish(){sendPad('calfinish');}
+function calCancel(){sendPad('calcancel');}
+function showPad(m){
+ document.getElementById('padinfo').textContent=
+  `Manette : ${m.conn?'connectée':'déconnectée'}`+(m.name?(' — '+m.name):'')+
+  (m.batt>=0?(' · batterie '+m.batt+'%'):'');
+ const cal=m.calstate===1?'⏺ collecte des extrêmes — bouger les sticks à fond':(m.calibrated?'✅ calibrée':'❌ NON calibrée (obligatoire pour rouler)');
+ document.getElementById('calstatus').textContent='Calibration : '+cal+(m.pairing?'  ·  appairage ouvert':'');
+}
 function reboot(){if(confirm("Redémarrer le système ? Il redémarrera DÉSARMÉ.")
    &&ws&&ws.readyState===1)ws.send('{"type":"reboot"}');}
 function showWifi(m){
@@ -268,5 +402,5 @@ function saveWifi(){
  if(confirm("Enregistré. Redémarrer maintenant pour appliquer ?")
    &&ws&&ws.readyState===1)ws.send('{"type":"reboot"}');
 }
-initCharts();buildBars();buildInds();connect();
+initCharts();buildBars();buildInds();buildPadBtns();connect();
 </script></body></html>

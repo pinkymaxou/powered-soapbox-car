@@ -7,10 +7,12 @@ FreeRTOS à **1000 Hz** ; priorités **0 (idle) → 24 (max)**, un nombre **plus
 
 | Tâche | Priorité | Cœur | Pile (o) | Période | Rôle | Source |
 |---|:--:|:--:|:--:|---|---|---|
-| **`control`** | **6** | **1** (APP) | 6144 | **500 Hz** | Boucle d'asservissement : throttle→PWM, frein PID, limiteur, LVC, machine à états ; **abonnée au watchdog 5 s** | `controller.cpp` (`kartStart`) |
+| **`control`** | **6** | **1** (APP) | 6144 | **500 Hz** | Boucle d'asservissement : **mélange différentiel** (manette→2 PWM), **anti-renversement**, frein PID + limiteur **par roue**, LVC, machine à états ; **abonnée au watchdog 5 s** | `controller.cpp` (`kartStart`) |
 | **`leds`** | **3** | **0** (PRO) | 3072 | ~20 Hz | Affichage d'état sur le ruban WS2812B (RMT) | `leds.cpp` (`ledsStart`) |
+| **`bt`** | **5** | **0** (PRO) | 8192 | (boucle) | **Boucle BTstack / Bluepad32** : pile Bluetooth, appairage et trames manette | `input_bp32.c` (`inputbp_start`) |
 
-> Les deux sont créées par `xTaskCreatePinnedToCore(...)`. Le **contrôle est isolé sur le cœur 1** pour ne pas être perturbé par la pile Wi-Fi/réseau (cœur 0) → cadence 500 Hz régulière.
+> `control` et `leds` sont créées par `xTaskCreatePinnedToCore(...)`. Le **contrôle est isolé sur le cœur 1** pour ne pas être perturbé par les piles Wi-Fi/réseau **et Bluetooth** (cœur 0) → cadence 500 Hz régulière.
+> La tâche `bt` exécute `btstack_run_loop_execute()` (bloquante) ; la pile BT crée en plus ses propres tâches système (contrôleur BT, BTC/BTU) sur le cœur 0.
 
 ## Tâches du framework ESP-IDF (créées automatiquement, dépendances)
 

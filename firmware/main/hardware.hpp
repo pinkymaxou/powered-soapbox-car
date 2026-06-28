@@ -7,34 +7,26 @@
 namespace board
 {
 
-void init();   // initialise LED, ADC, moteurs (LEDC+DIR), capteur d'angle AS5600 (I2C), boutons, sorties
+void init();   // initialise LED, moteurs (LEDC+DIR), 2× AS5600 (I2C), ADS1115 (Vbat), bouton START
 
 // LED d'état (onboard)
 void led(bool on);
 void ledToggle();
 
-// Lectures analogiques
-int   throttleRaw(int oversample);   // brut ADC de l'accélérateur
-float vbatVolts(int oversample);     // tension à la broche (AVANT le ratio du diviseur)
+// Lecture analogique (via ADC externe ADS1115) — tension à la broche A0 (AVANT le ratio du diviseur).
+float vbatVolts(int oversample);     // oversample = nb de lectures moyennées
 
-// Moteurs (l, r ∈ [-1..1] ; cap = duty max = plafond PWM)
+// Moteurs (l, r ∈ [-1..1], indépendants ; cap = duty max = plafond PWM)
 void motorsSet(float l, float r, uint32_t cap);
-void motorsBrake(float strength, uint32_t cap);   // frein électrique (plugging)
 void motorsStop();
 
-// Capteur d'angle (AS5600) : Δcounts signé (12 bits, 4096/tour) depuis le dernier appel.
-// encRightDelta() = 0 (réserve, 2e bus I2C non câblé).
-int encLeftDelta();
-int encRightDelta();
+// Capteurs d'angle AS5600 (un par roue avant) : Δcounts signé (12 bits) depuis le dernier appel.
+int encLeftDelta();    // roue avant gauche  (bus I2C 0)
+int encRightDelta();   // roue avant droite  (bus I2C 1)
 
-// Boutons : échantillonner pollButtons() une fois par tick (anti-rebond),
-// puis lire l'état débruité via btnStart()/btnReverse()/btnCal().
+// Bouton START : pollButtons() une fois par tick (anti-rebond), puis btnStart().
 void pollButtons();
 bool btnStart();
-bool btnReverse();
-
-// Sorties annexes
-void reverseLED(bool on);
 
 // Maintien d'alimentation (latch). powerLatch() : à appeler le plus tôt possible au boot
 // pour que l'ESP tienne sa propre alimentation après le relâché du bouton externe.
