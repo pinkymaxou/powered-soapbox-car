@@ -1,10 +1,11 @@
-# Cible ESP32-S3, flash 16 Mo, PSRAM Octal (framebuffer RGB), 240 MHz.
+# Cible ESP32-S3, flash 8 Mo, PSRAM 8 Mo Octal (framebuffer RGB), 240 MHz.
 CONFIG_IDF_TARGET="esp32s3"
 
-CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
 
-# PSRAM Octal — indispensable pour le framebuffer 800×480×2 (~750 Ko)
+# PSRAM Octal 80 MHz — framebuffer 800×480×2 (~750 Ko). Bande passante suffisante pour
+# alimenter le DMA RGB jusqu'à ~30 MHz pclk. (120 MHz exigerait flash 120 MHz = instable.)
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_SPEED_80M=y
@@ -12,5 +13,6 @@ CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_FREERTOS_HZ=1000
 
-# LVGL : couleur 16 bits (RGB565)
+# LVGL : couleur 16 bits (RGB565) + grande police pour l'horloge
 CONFIG_LV_COLOR_DEPTH_16=y
+CONFIG_LV_FONT_MONTSERRAT_28=y

@@ -1,9 +1,10 @@
 // Firmware de TEST — ESP32-S3 + écran tactile RGB 4,3" (800×480).
-// Objectif : afficher un CARRÉ ROUGE en bas-gauche via LVGL pour valider la dalle.
+// Affiche un CARRÉ ROUGE en bas-gauche (test dalle) + une HORLOGE (NTP) en haut-droite.
 //
 // Chaîne : CH422G (I²C) allume le rétroéclairage + relâche les resets → panneau RGB
-// (esp_lcd) → LVGL (esp_lvgl_port). Brochage : voir doc/HARDWARE.md.
+// (esp_lcd) → LVGL (esp_lvgl_port). Wi-Fi + NTP via wifi_web. Brochage : voir doc/HARDWARE.md.
 #include <string.h>
+#include <time.h>
 
 #include "driver/i2c_master.h"
 #include "esp_lcd_panel_ops.h"
@@ -13,6 +14,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
+#include "periph.h"
+#include "wifi_web.h"
 
 static const char* TAG = "lcd43";
 
@@ -27,6 +30,16 @@ static const int RGB_DATA_GPIO[16] = {14, 38, 18, 17, 10, 39, 0, 45, 48, 47, 21,
 
 #define LCD_H_RES 800
 #define LCD_V_RES 480
+
+// Pixel clock — levier principal du taux de rafraîchissement. On le pousse au max stable.
+// refresh ≈ pclk / ((H+hpw+hbp+hfp) · (V+vpw+vbp+vfp)). Blanking serré = plus de Hz.
+#define LCD_PCLK_HZ (30 * 1000 * 1000)
+#define H_PW 4
+#define H_BP 8
+#define H_FP 8
+#define V_PW 4
+#define V_BP 8
+#define V_FP 8
 
 // CH422G : adresses « commande » I²C (interface multi-adresses).
 #define CH422G_WR_SET 0x24   // registre de configuration système
@@ -47,7 +60,9 @@ static void ch422g_enable_display(i2c_master_bus_handle_t bus)
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus, &devc, &dev_io));
 
     const uint8_t set = 0x01;   // IO0..7 en sortie push-pull
-    const uint8_t io = 0xFF;    // toutes les EXIO HAUT (rétroéclairage ON, resets relâchés)
+    // EXIO HAUT sauf EXIO4 (= SD_CS/enable, actif BAS) ; EXIO5 HAUT = mode CAN.
+    // bit2 = rétroéclairage ON, bit4 = 0 (SD activée), bit5 = 1 (transceiver en mode CAN).
+    const uint8_t io = 0xEF;
     ESP_ERROR_CHECK(i2c_master_transmit(dev_set, &set, 1, 100));
     ESP_ERROR_CHECK(i2c_master_transmit(dev_io, &io, 1, 100));
     ESP_LOGI(TAG, "CH422G : rétroéclairage activé, resets relâchés");
@@ -59,7 +74,7 @@ static esp_lcd_panel_handle_t rgb_panel_init(void)
         .clk_src = LCD_CLK_SRC_DEFAULT,
         .data_width = 16,
         .num_fbs = 2,                                 // double framebuffer en PSRAM (anti-déchirure)
-        .bounce_buffer_size_px = LCD_H_RES * 10,      // accélère le DMA depuis la PSRAM
+        .bounce_buffer_size_px = LCD_H_RES * 30,      // gros tampon interne → absorbe les à-coups PSRAM
         .dma_burst_size = 64,
         .de_gpio_num = PIN_RGB_DE,
         .pclk_gpio_num = PIN_RGB_PCLK,
@@ -67,18 +82,19 @@ static esp_lcd_panel_handle_t rgb_panel_init(void)
         .hsync_gpio_num = PIN_RGB_HSYNC,
         .disp_gpio_num = -1,
         .timings = {
-            .pclk_hz = 16 * 1000 * 1000,
+            .pclk_hz = LCD_PCLK_HZ,
             .h_res = LCD_H_RES,
             .v_res = LCD_V_RES,
-            .hsync_pulse_width = 4,
-            .hsync_back_porch = 8,
-            .hsync_front_porch = 8,
-            .vsync_pulse_width = 4,
-            .vsync_back_porch = 8,
-            .vsync_front_porch = 8,
+            .hsync_pulse_width = H_PW,
+            .hsync_back_porch = H_BP,
+            .hsync_front_porch = H_FP,
+            .vsync_pulse_width = V_PW,
+            .vsync_back_porch = V_BP,
+            .vsync_front_porch = V_FP,
             .flags.pclk_active_neg = true,
         },
         .flags.fb_in_psram = true,
+        .flags.bb_invalidate_cache = true,   // invalide le cache après lecture (libère la bande passante)
     };
     for (int i = 0; i < 16; ++i) cfg.data_gpio_nums[i] = RGB_DATA_GPIO[i];
 
@@ -86,12 +102,19 @@ static esp_lcd_panel_handle_t rgb_panel_init(void)
     ESP_ERROR_CHECK(esp_lcd_new_rgb_panel(&cfg, &panel));
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel));
-    ESP_LOGI(TAG, "Panneau RGB %dx%d initialisé", LCD_H_RES, LCD_V_RES);
+
+    const int h_total = LCD_H_RES + H_PW + H_BP + H_FP;
+    const int v_total = LCD_V_RES + V_PW + V_BP + V_FP;
+    const float refresh = (float)LCD_PCLK_HZ / (h_total * v_total);
+    ESP_LOGI(TAG, "Panneau RGB %dx%d — pclk %.1f MHz → refresh ≈ %.1f Hz",
+             LCD_H_RES, LCD_V_RES, LCD_PCLK_HZ / 1e6f, refresh);
     return panel;
 }
 
-// Carré rouge en bas-gauche sur fond noir.
-static void ui_red_square(void)
+static lv_obj_t* s_clock = NULL;
+
+// Carré rouge en bas-gauche + horloge en haut-droite (fond noir).
+static void ui_build(void)
 {
     lvgl_port_lock(0);
     lv_obj_t* scr = lv_screen_active();
@@ -103,7 +126,33 @@ static void ui_red_square(void)
     lv_obj_align(sq, LV_ALIGN_BOTTOM_LEFT, 0, 0);
     lv_obj_set_style_bg_color(sq, lv_color_hex(0xFF0000), 0);
     lv_obj_set_style_bg_opa(sq, LV_OPA_COVER, 0);
+
+    s_clock = lv_label_create(scr);
+    lv_obj_set_style_text_color(s_clock, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_clock, &lv_font_montserrat_28, 0);
+    lv_label_set_text(s_clock, "--:--:--");
+    lv_obj_align(s_clock, LV_ALIGN_TOP_RIGHT, -12, 10);
     lvgl_port_unlock();
+}
+
+// Met à jour l'horloge chaque seconde (— tant que le NTP n'a pas synchronisé).
+static void clock_task(void* arg)
+{
+    char buf[16];
+    while (true)
+    {
+        const time_t now = time(NULL);
+        struct tm tm;
+        localtime_r(&now, &tm);
+        if (tm.tm_year > (2020 - 1900)) strftime(buf, sizeof(buf), "%H:%M:%S", &tm);
+        else strcpy(buf, "--:--:--");
+        if (lvgl_port_lock(100))
+        {
+            lv_label_set_text(s_clock, buf);
+            lvgl_port_unlock();
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }
 
 void app_main(void)
@@ -153,6 +202,16 @@ void app_main(void)
         return;
     }
 
-    ui_red_square();
-    ESP_LOGI(TAG, "Carré rouge affiché (bas-gauche). Test écran prêt.");
+    ui_build();
+    ESP_LOGI(TAG, "Carré rouge + horloge affichés. Test écran prêt.");
+
+    // Wi-Fi (AP+STA) + page web de configuration + NTP.
+    wifi_web_start();
+
+    // Périphériques de test : carte SD + bus CAN.
+    sd_init();
+    can_init();
+
+    // Tâche d'horloge (rafraîchit le label chaque seconde).
+    xTaskCreate(clock_task, "clock", 3072, NULL, 4, NULL);
 }

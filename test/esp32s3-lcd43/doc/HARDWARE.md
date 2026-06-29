@@ -55,6 +55,31 @@ Adresses I²C (à confirmer par un scan — c'est le 1er test du fabricant) :
 
 > ⚠️ Le rétroéclairage passe par **EXIO2** du CH422G : sans init du CH422G, l'écran reste **noir**.
 
+## Carte SD (TF) — SDMMC 1 bit
+
+| Signal | GPIO |
+|---|---|
+| CLK | **12** |
+| CMD (MOSI) | **11** |
+| D0 (MISO) | **13** |
+| Enable / CS | **EXIO4** du CH422G (actif bas) |
+
+Utilisée en **SDMMC 1 bit** (pas de CS dans le protocole). EXIO4 mis à **bas** à l'init.
+Si le montage échoue (`TIMEOUT`) : vérifier qu'une carte est insérée, la polarité d'EXIO4,
+et la présence de pull-ups sur CMD/D0.
+
+## Bus CAN — TWAI
+
+| Signal | GPIO |
+|---|---|
+| TX | **15** |
+| RX | **16** |
+| Mode transceiver | **EXIO5** du CH422G : **haut = CAN** (bas = USB) |
+
+Configuré **1 Mbit/s, identifiants étendus (29 bits)**, filtre accept-all. Émet une trame
+étendue de test (`0x12345678`) périodiquement. Si rien n'est reçu/émis sur l'analyseur :
+**intervertir TX/RX (15↔16)** et vérifier EXIO5 (mode CAN) + la résistance de terminaison.
+
 ## Note ST7701
 
 800×480 n'est pas une résolution native du ST7701 (480×864). Les cartes 4,3″ 800×480 de ce

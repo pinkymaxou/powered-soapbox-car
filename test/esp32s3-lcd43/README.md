@@ -9,10 +9,13 @@ noir, via **LVGL**. Sert de base aux futurs écrans (tableau de bord, etc.).
 
 ## Ce que fait le firmware
 
-1. Bus I²C (GPIO 8/9) → **CH422G** : active le rétroéclairage + relâche les resets
-   (sans ça, l'écran reste noir).
-2. **Panneau RGB** 16 bits 800×480 (esp_lcd) en PSRAM (double framebuffer + bounce buffer).
-3. **LVGL** (esp_lvgl_port) : carré rouge 120×120 px aligné en bas-gauche.
+1. Bus I²C (GPIO 8/9) → **CH422G** : rétroéclairage + relâche des resets + EXIO4 (SD) + EXIO5 (CAN).
+2. **Panneau RGB** 16 bits 800×480 (esp_lcd) en PSRAM (double FB + gros bounce buffer),
+   **pclk 30 MHz ≈ 73 Hz** (poussé pour le rafraîchissement max — voir `main.c`).
+3. **LVGL** (esp_lvgl_port) : carré rouge 120×120 px en bas-gauche + **horloge** en haut-droite.
+4. **Wi-Fi AP+STA** + **page web unique** (`http://192.168.4.1`) : SSID / mot de passe /
+   **case d'activation station** (persistés en NVS). **NTP** une fois connecté (fuseau Est).
+5. **Carte SD** (SDMMC 1 bit) montée sur `/sdcard`. **Bus CAN** (TWAI) **1 Mbit/s, IDs étendus**.
 
 ## Compilation / flash
 
