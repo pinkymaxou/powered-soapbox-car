@@ -1,0 +1,5 @@
+dependencies:
+  idf: ">=5.0"
+  lvgl/lvgl: "^9.2.0"
+  espressif/esp_lvgl_port: "^2.4.0"
+# CH422G (expandeur I²C) piloté directement en I²C dans main.c (pas de composant dédié sur IDF 6.1).
