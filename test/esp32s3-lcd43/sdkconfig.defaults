@@ -13,6 +13,23 @@ CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_FREERTOS_HZ=1000
 
+# Note : ne PAS activer CONFIG_LCD_RGB_ISR_IRAM_SAFE avec un framebuffer en PSRAM —
+# l'ISR lirait la PSRAM (région cachée) cache coupé → « Cache error » / boot loop.
+# Ne PAS activer CONFIG_LCD_RGB_RESTART_IN_VSYNC avec l'anti-tearing 2-FB → écran noir/blanc.
+
+# Anti-glitch RGB (cause racine : pendant une opération FLASH, le cache est coupé et le DMA
+# RGB ne peut plus lire le framebuffer en PSRAM — flash et PSRAM partagent le bus MSPI).
+# On réduit au minimum les accès flash et la contention PSRAM dus au Wi-Fi :
+CONFIG_ESP_WIFI_NVS_ENABLED=n              # le Wi-Fi n'écrit plus en NVS (flash) à l'exécution
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=n    # buffers Wi-Fi/LWIP en RAM interne, pas en PSRAM
+CONFIG_ESP_WIFI_IRAM_OPT=y                 # code Wi-Fi en IRAM (moins dépendant du cache flash)
+CONFIG_ESP_WIFI_RX_IRAM_OPT=y
+
+# ⭐ Solution de fond : Execute-in-Place depuis la PSRAM. Déplace .text/.rodata en PSRAM →
+# le CPU exécute depuis la PSRAM et ne cale plus quand la flash est occupée (écriture NVS/SD…)
+# → le DMA/refill RGB n'est plus interrompu → fin du scintillement.
+CONFIG_SPIRAM_XIP_FROM_PSRAM=y
+
 # LVGL : couleur 16 bits (RGB565) + grande police pour l'horloge
 CONFIG_LV_COLOR_DEPTH_16=y
 CONFIG_LV_FONT_MONTSERRAT_28=y

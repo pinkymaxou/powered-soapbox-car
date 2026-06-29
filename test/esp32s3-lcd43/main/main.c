@@ -33,7 +33,9 @@ static const int RGB_DATA_GPIO[16] = {14, 38, 18, 17, 10, 39, 0, 45, 48, 47, 21,
 
 // Pixel clock — levier principal du taux de rafraîchissement. On le pousse au max stable.
 // refresh ≈ pclk / ((H+hpw+hbp+hfp) · (V+vpw+vbp+vfp)). Blanking serré = plus de Hz.
-#define LCD_PCLK_HZ (30 * 1000 * 1000)
+// 16 MHz = valeur éprouvée pour cette dalle (configs officielles/communautaires). Au-delà,
+// la bande passante PSRAM 80 MHz ne suit pas le DMA RGB → underruns / glitchs / image qui saute.
+#define LCD_PCLK_HZ (16 * 1000 * 1000)
 #define H_PW 4
 #define H_BP 8
 #define H_FP 8
@@ -74,7 +76,7 @@ static esp_lcd_panel_handle_t rgb_panel_init(void)
         .clk_src = LCD_CLK_SRC_DEFAULT,
         .data_width = 16,
         .num_fbs = 2,                                 // double framebuffer en PSRAM (anti-déchirure)
-        .bounce_buffer_size_px = LCD_H_RES * 30,      // gros tampon interne → absorbe les à-coups PSRAM
+        .bounce_buffer_size_px = LCD_H_RES * 10,      // requis ici pour une image stable (anti-roll)
         .dma_burst_size = 64,
         .de_gpio_num = PIN_RGB_DE,
         .pclk_gpio_num = PIN_RGB_PCLK,
@@ -94,7 +96,6 @@ static esp_lcd_panel_handle_t rgb_panel_init(void)
             .flags.pclk_active_neg = true,
         },
         .flags.fb_in_psram = true,
-        .flags.bb_invalidate_cache = true,   // invalide le cache après lecture (libère la bande passante)
     };
     for (int i = 0; i < 16; ++i) cfg.data_gpio_nums[i] = RGB_DATA_GPIO[i];
 
@@ -112,6 +113,7 @@ static esp_lcd_panel_handle_t rgb_panel_init(void)
 }
 
 static lv_obj_t* s_clock = NULL;
+static void clock_timer_cb(lv_timer_t* t);
 
 // Carré rouge en bas-gauche + horloge en haut-droite (fond noir).
 static void ui_build(void)
@@ -132,27 +134,22 @@ static void ui_build(void)
     lv_obj_set_style_text_font(s_clock, &lv_font_montserrat_28, 0);
     lv_label_set_text(s_clock, "--:--:--");
     lv_obj_align(s_clock, LV_ALIGN_TOP_RIGHT, -12, 10);
+    lv_timer_create(clock_timer_cb, 1000, NULL);   // mise à jour dans la tâche LVGL
     lvgl_port_unlock();
 }
 
-// Met à jour l'horloge chaque seconde (— tant que le NTP n'a pas synchronisé).
-static void clock_task(void* arg)
+// Met à jour l'horloge chaque seconde. Appelée par un lv_timer → s'exécute DANS la tâche de
+// rendu LVGL (pas de tâche concurrente ni de verrou → évite toute « bataille » de redessin).
+static void clock_timer_cb(lv_timer_t* t)
 {
+    (void)t;
+    const time_t now = time(NULL);
+    struct tm tm;
+    localtime_r(&now, &tm);
     char buf[16];
-    while (true)
-    {
-        const time_t now = time(NULL);
-        struct tm tm;
-        localtime_r(&now, &tm);
-        if (tm.tm_year > (2020 - 1900)) strftime(buf, sizeof(buf), "%H:%M:%S", &tm);
-        else strcpy(buf, "--:--:--");
-        if (lvgl_port_lock(100))
-        {
-            lv_label_set_text(s_clock, buf);
-            lvgl_port_unlock();
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    if (tm.tm_year > (2020 - 1900)) strftime(buf, sizeof(buf), "%H:%M:%S", &tm);
+    else strcpy(buf, "--:--:--");
+    lv_label_set_text(s_clock, buf);
 }
 
 void app_main(void)
@@ -186,13 +183,13 @@ void app_main(void)
         .color_format = LV_COLOR_FORMAT_RGB565,
         .flags = {
             .buff_spiram = true,
-            .full_refresh = true,
+            .direct_mode = true,   // ne redessine que les zones modifiées (l'horloge) — plus léger que full_refresh
         },
     };
     const lvgl_port_display_rgb_cfg_t rgb_cfg = {
         .flags = {
-            .bb_mode = true,
-            .avoid_tearing = true,
+            .bb_mode = true,         // bounce buffer (requis ici pour une image stable)
+            .avoid_tearing = true,   // anti-déchirure par bascule des 2 framebuffers
         },
     };
     lv_display_t* disp = lvgl_port_add_disp_rgb(&disp_cfg, &rgb_cfg);
@@ -205,13 +202,10 @@ void app_main(void)
     ui_build();
     ESP_LOGI(TAG, "Carré rouge + horloge affichés. Test écran prêt.");
 
-    // Wi-Fi (AP+STA) + page web de configuration + NTP.
+    // Wi-Fi (AP+STA) + page web de configuration + NTP (power-save OFF pour limiter les glitchs).
     wifi_web_start();
 
     // Périphériques de test : carte SD + bus CAN.
     sd_init();
     can_init();
-
-    // Tâche d'horloge (rafraîchit le label chaque seconde).
-    xTaskCreate(clock_task, "clock", 3072, NULL, 4, NULL);
 }

@@ -253,6 +253,9 @@ void wifi_web_start(void)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
     ESP_ERROR_CHECK(esp_wifi_start());
+    // Power-save OFF : évite les réveils radio périodiques qui perturbent le DMA RGB
+    // (atténue les glitchs d'affichage dus à la contention PSRAM avec le Wi-Fi).
+    esp_wifi_set_ps(WIFI_PS_NONE);
 
     http_start();
     sta_connect_saved();
