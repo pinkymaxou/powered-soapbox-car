@@ -1,8 +1,10 @@
 // Firmware de TEST — ESP32-S3 + écran tactile RGB 4,3" (800×480).
-// Affiche un CARRÉ ROUGE en bas-gauche (test dalle) + une HORLOGE (NTP) en haut-droite.
+// Affiche un TABLEAU DE BORD véhicule (maquette LVGL : vitesse, puissance moteurs, joystick,
+// PARK/DRIVE/BRAKE, horloge NTP) — valeurs de démo, voir ui_dash.c.
 //
 // Chaîne : CH422G (I²C) allume le rétroéclairage + relâche les resets → panneau RGB
 // (esp_lcd) → LVGL (esp_lvgl_port). Wi-Fi + NTP via wifi_web. Brochage : voir doc/HARDWARE.md.
+#include <math.h>
 #include <string.h>
 #include <time.h>
 
@@ -15,6 +17,7 @@
 #include "freertos/task.h"
 #include "lvgl.h"
 #include "periph.h"
+#include "ui_dash.h"
 #include "wifi_web.h"
 
 static const char* TAG = "lcd43";
@@ -112,45 +115,7 @@ static esp_lcd_panel_handle_t rgb_panel_init(void)
     return panel;
 }
 
-static lv_obj_t* s_clock = NULL;
-static void clock_timer_cb(lv_timer_t* t);
-
-// Carré rouge en bas-gauche + horloge en haut-droite (fond noir).
-static void ui_build(void)
-{
-    lvgl_port_lock(0);
-    lv_obj_t* scr = lv_screen_active();
-    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
-
-    lv_obj_t* sq = lv_obj_create(scr);
-    lv_obj_remove_style_all(sq);
-    lv_obj_set_size(sq, 120, 120);
-    lv_obj_align(sq, LV_ALIGN_BOTTOM_LEFT, 0, 0);
-    lv_obj_set_style_bg_color(sq, lv_color_hex(0xFF0000), 0);
-    lv_obj_set_style_bg_opa(sq, LV_OPA_COVER, 0);
-
-    s_clock = lv_label_create(scr);
-    lv_obj_set_style_text_color(s_clock, lv_color_white(), 0);
-    lv_obj_set_style_text_font(s_clock, &lv_font_montserrat_28, 0);
-    lv_label_set_text(s_clock, "--:--:--");
-    lv_obj_align(s_clock, LV_ALIGN_TOP_RIGHT, -12, 10);
-    lv_timer_create(clock_timer_cb, 1000, NULL);   // mise à jour dans la tâche LVGL
-    lvgl_port_unlock();
-}
-
-// Met à jour l'horloge chaque seconde. Appelée par un lv_timer → s'exécute DANS la tâche de
-// rendu LVGL (pas de tâche concurrente ni de verrou → évite toute « bataille » de redessin).
-static void clock_timer_cb(lv_timer_t* t)
-{
-    (void)t;
-    const time_t now = time(NULL);
-    struct tm tm;
-    localtime_r(&now, &tm);
-    char buf[16];
-    if (tm.tm_year > (2020 - 1900)) strftime(buf, sizeof(buf), "%H:%M:%S", &tm);
-    else strcpy(buf, "--:--:--");
-    lv_label_set_text(s_clock, buf);
-}
+// L'UI (tableau de bord + horloge) est dans ui_dash.c.
 
 void app_main(void)
 {
@@ -199,8 +164,8 @@ void app_main(void)
         return;
     }
 
-    ui_build();
-    ESP_LOGI(TAG, "Carré rouge + horloge affichés. Test écran prêt.");
+    ui_dash_build();
+    ESP_LOGI(TAG, "Tableau de bord affiché. Test écran prêt.");
 
     // Wi-Fi (AP+STA) + page web de configuration + NTP (power-save OFF pour limiter les glitchs).
     wifi_web_start();
