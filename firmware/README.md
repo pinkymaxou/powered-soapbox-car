@@ -145,7 +145,7 @@ L'onglet **Wi-Fi** permet de saisir un SSID/mot de passe et d'**activer le mode 
 (mode AP+STA). Prise en compte **au redémarrage** ; reconnexion automatique toutes les 5 s.
 
 La page (6 onglets : **Tableau de bord / Configuration / Manette / Wi-Fi / Brochage /
-Système**) communique par **WebSocket** (`/ws`). État live à 4 Hz (badge d'état, barres,
+Système**) communique par **WebSocket** (`/ws`). État live à 20 Hz (badge d'état, barres,
 pastilles d'E/S) + **graphiques Chart.js gradués** alimentés par un **historique en RAM**
 côté ESP32. Le graphe **Avance · PWM** affiche en plus le **régime (tr/min) de chaque roue
 sur un 2ᵉ axe** (droite). L'onglet **Manette** regroupe : **bouton d'appairage**, **infos

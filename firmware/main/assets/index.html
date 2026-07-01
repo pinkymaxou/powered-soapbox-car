@@ -337,7 +337,7 @@ function connect(){
  ws.onopen=()=>{
    ws.send('{"type":"get"}'); ws.send('{"type":"hist"}');
    clearInterval(timer); clearInterval(histTimer);
-   timer=setInterval(()=>{if(ws.readyState===1)ws.send('{"type":"status"}');},250);      // état live 4 Hz
+   timer=setInterval(()=>{if(ws.readyState===1)ws.send('{"type":"status"}');},50);       // état live 20 Hz
    histTimer=setInterval(()=>{if(ws.readyState===1)ws.send('{"type":"hist"}');},2000);   // graphique (RAM serveur) 0,5 Hz
  };
  ws.onmessage=e=>{const m=JSON.parse(e.data);
