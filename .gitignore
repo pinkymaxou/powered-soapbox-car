@@ -5,4 +5,3 @@ doc/*.jpeg
 
 # Environnement Python pour les schémas (schemdraw)
 .venv-schem/
-firmware/components/
