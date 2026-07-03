@@ -1,5 +1,8 @@
 # Powered Soapbox Car — Kart électrique 2 places pour enfants
 
+[![Build firmware](https://github.com/pinkymaxou/powered-soapbox-car/actions/workflows/firmware.yml/badge.svg?branch=master)](https://github.com/pinkymaxou/powered-soapbox-car/actions/workflows/firmware.yml)
+[![Licence: 0BSD](https://img.shields.io/badge/licence-0BSD-blue.svg)](LICENSE)
+
 Projet de construction d'un **kart électrique biplace** pour enfants (~10 ans, 1,38–1,45 m), conçu pour être réalisable avec des **outils basiques** (perceuse, scie, clés) + une **imprimante 3D** pour les réducteurs. Chaque choix est expliqué pour pouvoir adapter selon le matériel disponible.
 
 > **Note :** ce kart est un **tricycle à entraînement différentiel**. Les **2 roues AVANT sont motrices et indépendantes** (un **moteur CC 12 V + réducteur + courroie par roue**) ; la **direction se fait par différence de vitesse** entre les deux roues (*differential / skid steer*) — **pas de volant, pas de colonne, pas de tringlerie**. La **roue arrière est libre** : une **roulette pivotante (caster) non motorisée** qui s'oriente toute seule → **3 roues au total**. Le kart est **biplace** (deux enfants **côte à côte**) et **piloté à la manette Bluetooth** (mélange « arcade » : un stick pour avancer/reculer et tourner) — **pas de pédale accélérateur ni de volant**. La propulsion vient des **2 moteurs avant** ; il n'y a **pas** de pédalier ni de chaîne.
