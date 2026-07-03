@@ -73,6 +73,8 @@ int64_t m_stuck_us = 0;
 bool    m_enc_fault = false;
 float   m_fwd_cmd = 0.f;   // consigne avance APRÈS limiteur de pente (état conservé entre ticks)
 float   m_turn_cmd = 0.f;  // consigne virage APRÈS limiteur de pente
+float   m_sl_ema = 0.f;    // vitesse roue G lissée (EMA)
+float   m_sr_ema = 0.f;    // vitesse roue D lissée (EMA)
 
 // Retours haptiques : détection de fronts + anti-spam.
 bool    m_armed_prev = false;
@@ -169,8 +171,12 @@ void tick()
     const float vraw = board::vbatVolts(hw::ADC_OVERSAMPLE);   // < 0 si capteur (ADS1115) absent
     const bool  vbat_valid = (vraw > 0.05f);
     const float vbat = vbat_valid ? vraw * cfg.vbat_div_ratio : 0.f;
-    const float sl = use_enc ? countsToKmh(board::encLeftDelta())  : 0.f;
-    const float sr = use_enc ? countsToKmh(board::encRightDelta()) : 0.f;
+    const float sl_raw = use_enc ? countsToKmh(board::encLeftDelta())  : 0.f;
+    const float sr_raw = use_enc ? countsToKmh(board::encRightDelta()) : 0.f;
+    // Lissage EMA : atténue la quantification du Δangle par tick à basse vitesse.
+    m_sl_ema += hw::SPEED_EMA_ALPHA * (sl_raw - m_sl_ema);
+    m_sr_ema += hw::SPEED_EMA_ALPHA * (sr_raw - m_sr_ema);
+    const float sl = m_sl_ema, sr = m_sr_ema;
     const float v_avg = 0.5f * (sl + sr);
     if (!use_enc) m_enc_fault = false;   // pas d'encodeurs → pas de défaut « capteur bloqué »
 
@@ -240,17 +246,16 @@ void tick()
 
     float out_l = 0.f, out_r = 0.f, fwd = 0.f, turn = 0.f;
     bool braking = false;
+    bool dyn_brake = false;   // true → court-circuit moteur (freinage dynamique passif)
 
     if (!can_drive)
     {
-        // FREINAGE : couvre déconnexion manette, e-stop, LVC, défaut, désarmé.
-        // Avec encodeurs : PID qui ramène chaque roue à 0. Sans : sortie nulle (PWM 0).
-        if (use_enc)
-        {
-            out_l = brakeWheel(m_brake_l, sl, cfg, hw::CTRL_DT_S);
-            out_r = brakeWheel(m_brake_r, sr, cfg, hw::CTRL_DT_S);
-        }
+        // NON ARMÉ / défaut / e-stop / manette déconnectée → FREINAGE DYNAMIQUE (court-circuit
+        // moteur). État par défaut au repos ; ne nécessite ni encodeurs ni asservissement.
+        dyn_brake = true;
         braking = true;
+        m_brake_l.reset();
+        m_brake_r.reset();
         m_speed_pid.reset();
         m_fwd_cmd = 0.f;     // repart en douceur au prochain armement
         m_turn_cmd = 0.f;
@@ -299,7 +304,9 @@ void tick()
 
         if (fabsf(fwd) < 1e-3f && fabsf(turn) < 1e-3f)
         {
-            // Manche centré → frein (PID → 0 avec encodeurs, sinon sortie nulle).
+            // ARMÉ + manche centré → FREINAGE ACTIF (PID de plugging) si encodeurs présents ;
+            // sinon repli sur le freinage dynamique (court-circuit).
+            braking = true;
             if (use_enc)
             {
                 out_l = brakeWheel(m_brake_l, sl, cfg, hw::CTRL_DT_S);
@@ -307,10 +314,8 @@ void tick()
             }
             else
             {
-                out_l = 0.f;
-                out_r = 0.f;
+                dyn_brake = true;
             }
-            braking = true;
         }
         else
         {
@@ -319,7 +324,8 @@ void tick()
         setState(State::Run, Fault::None);
     }
 
-    board::motorsSet(out_l, out_r, cap);
+    if (dyn_brake) board::motorsBrake();                  // court-circuit moteur (freinage dynamique)
+    else           board::motorsSet(out_l, out_r, cap);   // pilotage / plugging actif
     if (use_enc) updateEncStuck(now, 0.5f * (out_l + out_r), v_avg);
 
     // Désarmement auto après inactivité.

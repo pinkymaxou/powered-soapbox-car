@@ -52,9 +52,10 @@ std::atomic<float> m_cy{0.f};
 std::atomic<float> m_hx{1.f};
 std::atomic<float> m_hy{1.f};
 
-// Collecte des extrêmes pendant la calibration.
+// Collecte des extrêmes pendant la calibration. Atomiques : écrits par la tâche BT
+// (inputbp_on_data) et lus/initialisés par la tâche web (calStart/calFinish).
 std::atomic<int>   m_cal_state{0};   // 0 = inactif, 1 = collecte
-float m_min_x, m_max_x, m_min_y, m_max_y;
+std::atomic<float> m_min_x{0.f}, m_max_x{0.f}, m_min_y{0.f}, m_max_y{0.f};
 
 void calSave()
 {
@@ -105,12 +106,12 @@ extern "C" void inputbp_on_data(float x, float y, int estop, int start, uint32_t
     m_zr.store(zr);
     m_rx2.store(rx2);
     m_ry2.store(ry2);
-    if (1 == m_cal_state.load())   // collecte des extrêmes
+    if (1 == m_cal_state.load())   // collecte des extrêmes (seul écrivain ici)
     {
-        if (x < m_min_x) m_min_x = x;
-        if (x > m_max_x) m_max_x = x;
-        if (y < m_min_y) m_min_y = y;
-        if (y > m_max_y) m_max_y = y;
+        if (x < m_min_x.load()) m_min_x.store(x);
+        if (x > m_max_x.load()) m_max_x.store(x);
+        if (y < m_min_y.load()) m_min_y.store(y);
+        if (y > m_max_y.load()) m_max_y.store(y);
     }
 }
 

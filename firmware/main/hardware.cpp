@@ -257,6 +257,16 @@ void board::motorsStop()
     setDuty(LEDC_CHANNEL_1, 0);
 }
 
+void board::motorsBrake()
+{
+    // Freinage dynamique passif : rapport cyclique nul + DIR bas sur les 2 canaux → les deux
+    // sorties de chaque pont sont basses → moteur court-circuité (résiste au mouvement).
+    setDuty(LEDC_CHANNEL_0, 0);
+    setDuty(LEDC_CHANNEL_1, 0);
+    dirPin(pins::DIR_L, Dir::Reverse);
+    dirPin(pins::DIR_R, Dir::Reverse);
+}
+
 int board::encLeftDelta()  { return angleDelta(0); }
 int board::encRightDelta() { return angleDelta(1); }
 
@@ -284,4 +294,19 @@ void board::powerLatch()
 void board::powerOff()
 {
     gpio_set_level(pins::POWER_HOLD, 1);
+}
+
+void board::motorsIdleEarly()
+{
+    // PWM/DIR en sortie à l'état BAS (0 % de rapport cyclique) dès le boot, avant l'init LEDC,
+    // pour ne pas laisser les broches flotter (le driver pourrait envoyer une impulsion parasite).
+    gpio_config_t io{};
+    io.pin_bit_mask = (1ULL << pins::PWM_L) | (1ULL << pins::DIR_L) |
+                      (1ULL << pins::PWM_R) | (1ULL << pins::DIR_R);
+    io.mode = GPIO_MODE_OUTPUT;
+    gpio_config(&io);
+    gpio_set_level(pins::PWM_L, 0);
+    gpio_set_level(pins::DIR_L, 0);
+    gpio_set_level(pins::PWM_R, 0);
+    gpio_set_level(pins::DIR_R, 0);
 }

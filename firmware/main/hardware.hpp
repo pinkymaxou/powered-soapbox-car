@@ -19,6 +19,9 @@ float vbatVolts(int oversample);     // oversample = nb de lectures moyennées
 // Moteurs (l, r ∈ [-1..1], indépendants ; cap = duty max = plafond PWM)
 void motorsSet(float l, float r, uint32_t cap);
 void motorsStop();
+// Freinage dynamique : court-circuite les moteurs (sorties basses) → résiste au mouvement.
+// État PAR DÉFAUT du contrôleur au repos (plutôt que roue libre).
+void motorsBrake();
 
 // Capteurs d'angle AS5600 (un par roue avant) : Δcounts signé (12 bits) depuis le dernier appel.
 int encLeftDelta();    // roue avant gauche  (bus I2C 0)
@@ -27,6 +30,10 @@ int encRightDelta();   // roue avant droite  (bus I2C 1)
 // Bouton START : pollButtons() une fois par tick (anti-rebond), puis btnStart().
 void pollButtons();
 bool btnStart();
+
+// À appeler AU TOUT DÉBUT du boot : force les broches PWM/DIR à l'état bas (moteurs à l'arrêt)
+// avant l'init complète, pour éviter tout mouvement parasite pendant que les GPIO flottent.
+void motorsIdleEarly();
 
 // Maintien d'alimentation (latch). powerLatch() : à appeler le plus tôt possible au boot
 // pour que l'ESP tienne sa propre alimentation après le relâché du bouton externe.

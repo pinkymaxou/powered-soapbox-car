@@ -59,6 +59,9 @@ constexpr float REVERSE_FACTOR       = 0.5f;
 constexpr float EBRAKE_MIN_KMH       = 0.5f;
 constexpr float ENC_STUCK_PWM        = 0.10f;
 constexpr int   ENC_STUCK_MS         = 1000;
+// Lissage vitesse (moyenne exponentielle) : à 500 Hz le Δangle par tick est quantifié
+// (≈0,4 km/h/count). α ~0,25 → constante de temps ~4 ticks (8 ms), lisse sans lag notable.
+constexpr float SPEED_EMA_ALPHA      = 0.25f;
 constexpr int   BTN_DEBOUNCE_TICKS   = 3;
 } // namespace hw
 

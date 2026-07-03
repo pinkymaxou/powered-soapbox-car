@@ -11,7 +11,8 @@
 
 extern "C" void app_main()
 {
-    board::powerLatch();   // EN PREMIER : tenir l'alimentation (le bouton externe est momentané)
+    board::motorsIdleEarly();  // EN PREMIER : broches moteur à l'arrêt (évite tout à-coup au boot)
+    board::powerLatch();       // tenir l'alimentation (le bouton externe est momentané)
 
     const esp_err_t nv = nvs_flash_init();
     if (ESP_ERR_NVS_NO_FREE_PAGES == nv || ESP_ERR_NVS_NEW_VERSION_FOUND == nv)
