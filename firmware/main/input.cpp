@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include "control_math.hpp"
 #include "esp_log.h"
 #include "nvs.h"
 
@@ -182,18 +183,9 @@ input::State input::get()
     s.x = std::clamp(s.x, -1.f, 1.f);
     s.y = std::clamp(s.y, -1.f, 1.f);
 
-    // Compensation cercle→carré : le stick physique est borné par un CERCLE (x²+y²≤1) ;
-    // en diagonale pleine chaque axe ne dépasse pas ~0,71. On étire radialement (à direction
-    // constante) pour que les coins du CARRÉ soient atteignables → avance ET virage à fond
-    // simultanément. Facteur = magnitude / max(|x|,|y|) (=1 sur les axes, =√2 en diagonale).
-    const float ax = fabsf(s.x), ay = fabsf(s.y);
-    const float m = (ax > ay) ? ax : ay;
-    if (m > 1e-3f)
-    {
-        const float scale = sqrtf(s.x * s.x + s.y * s.y) / m;
-        s.x = std::clamp(s.x * scale, -1.f, 1.f);
-        s.y = std::clamp(s.y * scale, -1.f, 1.f);
-    }
+    // Compensation cercle→carré (voir control_math.hpp) : rend les coins du carré atteignables
+    // → avance ET virage à fond simultanément.
+    ctl::squareMap(s.x, s.y);
     return s;
 }
 

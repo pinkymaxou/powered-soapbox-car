@@ -127,6 +127,33 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
     }
 }
 
+// Échappe une chaîne pour l'injecter dans du JSON (guillemets, antislash, contrôles).
+// Nécessaire pour les textes non maîtrisés : nom de la manette, SSID saisi par l'utilisateur.
+std::string jsonEscape(const char* in)
+{
+    std::string out;
+    for (const char* p = in; p && *p; ++p)
+    {
+        const unsigned char c = static_cast<unsigned char>(*p);
+        if ('"' == c || '\\' == c)
+        {
+            out += '\\';
+            out += static_cast<char>(c);
+        }
+        else if (c < 0x20)   // caractères de contrôle → \u00XX
+        {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "\\u%04x", c);
+            out += buf;
+        }
+        else
+        {
+            out += static_cast<char>(c);
+        }
+    }
+    return out;
+}
+
 // Extrait une chaîne JSON "clé":"valeur" (pas de gestion des échappements).
 std::string jsonStr(const std::string& s, const char* key)
 {
@@ -162,7 +189,8 @@ std::string buildWifiJson()
     char buf[200];
     snprintf(buf, sizeof(buf),
              "{\"type\":\"wifi\",\"enabled\":%s,\"ssid\":\"%s\",\"connected\":%s,\"ip\":\"%s\"}",
-             enabled ? "true" : "false", ssid, m_sta_connected.load() ? "true" : "false", m_sta_ip);
+             enabled ? "true" : "false", jsonEscape(ssid).c_str(),
+             m_sta_connected.load() ? "true" : "false", m_sta_ip);
     return buf;
 }
 
@@ -292,7 +320,7 @@ std::string buildPadJson()
              "{\"type\":\"pad\",\"conn\":%s,\"name\":\"%s\",\"batt\":%d,"
              "\"calibrated\":%s,\"calstate\":%d,\"pairing\":%s}",
              g_status.m_pad_conn.load() ? "true" : "false",
-             input::name(), input::battery(),
+             jsonEscape(input::name()).c_str(), input::battery(),
              input::calibrated() ? "true" : "false",
              input::calState(),
              input::pairing() ? "true" : "false");

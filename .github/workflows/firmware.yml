@@ -9,6 +9,14 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Tests de la logique pure (PID, math de contrôle, buffer circulaire) — rapides, sans IDF.
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tests hôte (g++)
+        run: firmware/test_host/run_tests.sh
+
   build:
     runs-on: ubuntu-latest
     # Image Docker officielle ESP-IDF 6.1 (branche release/v6.1, comme en local).

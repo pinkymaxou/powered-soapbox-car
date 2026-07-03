@@ -10,6 +10,7 @@
 #include <cmath>
 
 #include "config.hpp"
+#include "control_math.hpp"
 #include "hardware.hpp"
 #include "input.hpp"
 #include "pid.hpp"
@@ -21,16 +22,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-static const char* TAG = "kart";
-
 namespace
 {
-constexpr float PI_F = 3.14159265358979f;
+using ctl::clampf;
+using ctl::deadzone;
+using ctl::mixArcade;
+using ctl::slew;
 
-inline float clampf(float v, float lo, float hi)
-{
-    return v < lo ? lo : (v > hi ? hi : v);
-}
+constexpr float PI_F = 3.14159265358979f;
 
 // Δcounts AS5600 (12 bits, 4096/tour) sur un tick → km/h SIGNÉE (le signe donne le sens).
 float countsToKmh(int delta)
@@ -40,23 +39,7 @@ float countsToKmh(int delta)
     return wheel_rps * PI_F * hw::WHEEL_DIAM_M * 3.6f;
 }
 
-float deadzone(float v, float dz)
-{
-    if (fabsf(v) <= dz) return 0.f;
-    const float s = (v > 0.f) ? 1.f : -1.f;
-    return s * (fabsf(v) - dz) / (1.f - dz);   // remappe [dz..1] → [0..1]
-}
-
-// Limiteur de pente : rapproche `current` de `target` d'au plus rate·dt par tick.
-// Empêche les variations brusques (coup de manche « trop sec »).
-float slew(float target, float current, float rate, float dt)
-{
-    const float step = rate * dt;
-    const float diff = target - current;
-    if (diff > step)  return current + step;
-    if (diff < -step) return current - step;
-    return target;
-}
+// (deadzone / slew / clampf / mixArcade : voir control_math.hpp — testés sur l'hôte.)
 
 // ── État interne de la boucle ──
 Pid     m_brake_l;       // frein roue gauche (consigne vitesse 0, sortie signée)
@@ -285,8 +268,7 @@ void tick()
         m_turn_cmd = turn;   // garde l'état borné (pas de windup de la rampe au-delà de la limite)
 
         // Mix arcade différentiel (pivot sur place possible si fwd≈0).
-        out_l = clampf(fwd - turn * cfg.turn_gain, -1.f, 1.f);
-        out_r = clampf(fwd + turn * cfg.turn_gain, -1.f, 1.f);
+        mixArcade(fwd, turn, cfg.turn_gain, out_l, out_r);
 
         // Plafond de vitesse global (préserve le ratio de virage) via PID sur la vitesse moyenne.
         // Sans encodeurs : pas d'asservissement vitesse → on s'appuie sur le plafond PWM (duty_cap).
