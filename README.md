@@ -735,3 +735,15 @@ Points à **traiter / valider avant tout usage réel**.
 - **Pneus PVC dur** → faible adhérence ; vitesse modérée.
 </content>
 </invoke>
+
+---
+
+## Licence
+
+Code et documentation du projet sous **licence 0BSD** (voir [`LICENSE`](LICENSE)) : utilisation,
+copie, modification et redistribution libres, **pour tout usage, sans aucune condition**.
+
+Exception : les **composants tiers vendorés** conservent leur propre licence —
+[`firmware/components/`](firmware/components/README.md) (bluepad32 : Apache-2.0 ; **btstack :
+licence BlueKitchen**, usage commercial soumis à leurs conditions) et `firmware/main/assets/chart.min.js`
+(Chart.js : MIT).
