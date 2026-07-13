@@ -75,7 +75,7 @@ flowchart TB
 | **Places** | 2, banquette unique côte à côte ; **conducteur à gauche** (manette) |
 | **Direction** | **Différentielle (skid steer)** : différence de vitesse entre les 2 roues avant ; **pivot sur place** possible ; **aucune pièce de direction mécanique** |
 | **Propulsion** | **2 moteurs CC 12 V (~172 W / 0,23 HP)** AVANT **indépendants** (un par roue) — **PWM/DIR par roue** |
-| **Transmission** | Réducteurs **imprimés 3D 1:16** + **poulies vissées sur les roues avant + courroies** |
+| **Transmission** | Réducteurs **imprimés 3D 1:16** (2 étages 4:1, pignon moteur 16T/24 DP — voir [`doc/reducteur.md`](doc/reducteur.md)) + **poulies vissées sur les roues avant + courroies** |
 | **Roues** | **2 × motrices avant Ø30 cm (12")** (jante plastique, roulement 1/2") + **1 roulette arrière pivotante libre** |
 | **Pilotage** | **Manette Bluetooth** (stick : Y = avance/recul, X = virage) ; **calibration obligatoire** ; joystick analogique réservé (futur) |
 | **Électronique** | **ESP32** → **driver double canal 20 A / 6–30 V** (PWM + DIR / canal), **PWM bridé ~50 %** ; **baie technique à l'AVANT** (près des 2 moteurs, câblage de puissance court) |
@@ -113,9 +113,15 @@ flowchart TB
 | Hauteur de dossier (assise → haut) | **34 cm** | Soutient le dos des deux enfants |
 | **Roues motrices avant (×2 identiques)** | **Ø30 cm (12")**, jante plastique + pneu PVC dur | Mêmes roues à gauche/droite → plan simplifié |
 | **Roulette arrière (×1)** | **Roulette pivotante (caster) Ø ~12,5 cm (5")**, hauteur montée ~15 cm, charge ≥ 50 kg | Non motorisée, s'oriente librement ; hauteur de montage choisie pour garder le châssis **de niveau** avec l'essieu avant (centre à 15 cm) |
-| Moyeu / fixation roues avant | **Roulement métal, alésage 1/2"**, moyeu large ~3,8 cm | Tourne **libre** sur un boulon à épaulement fixe (fournis) |
+| Moyeu / fixation roues avant | **Roulement métal, alésage 1/2"**, moyeu large ~3,8 cm | Tourne **libre** sur un **essieu mort traversant : tige filetée 1/2″ × 36″** (grade **8.8/B7**, pas de la quincaillerie), **locknuts + rondelles à chaque bout**, entretoises pour figer la position latérale (alignement courroie), supports châssis au plus près des moyeux (≤ 3–5 cm, flexion) |
 
 **Idée directrice :** assise basse + **voie avant large (84 cm)** = un engin **qui reste stable** malgré le format tricycle et deux enfants côte à côte. L'anti-renversement firmware complète la géométrie.
+
+> **Découplage voie / caisse** : l'habitacle n'a pas besoin d'être aussi large que la voie —
+> châssis en **T** : **traverse avant large** portant les **paliers d'essieu au plus près des
+> roues** (≤ 3–5 cm, sinon la tige filetée fléchit), longerons étroits derrière. L'espace le
+> long de l'essieu entre longeron et roue loge le **moteur + réducteur + courroie** de chaque
+> côté. ⚠️ Si la voie change, mettre à jour `hw::TRACK_M` dans le firmware (anti-renversement).
 
 ---
 
@@ -254,7 +260,7 @@ Paramètres web : **`turn_gain`** (autorité de virage), **`a_lat_max`** (accél
 | | **1 × roulette arrière pivotante (caster)** | Roulette **libre**, non motorisée ; **Ø ~12,5 cm (5")**, hauteur montée ~15 cm, **charge ≥ 50 kg** |
 | | Boulons à épaulement (roues avant) | **Fournis avec les roues** (épaulement 1/2", filetage 3/8") |
 | **Propulsion** | **2 moteurs CC 12 V** (un par roue **avant**) | ~172 W (0,23 HP), 19,6 A, 4615 tr/min ; **indépendants** |
-| | 2 réducteurs 3D | Rapport **1:16**, imprimés (PETG/ABS/nylon) |
+| | 2 réducteurs 3D | Rapport **1:16** (2 étages 4:1, [conception](doc/reducteur.md)), imprimés (PETG/ABS/nylon) |
 | | Poulies + courroies | Poulie **vissée sur chaque roue avant** + courroie vers le gearbox (**1:1**) |
 | | **2 × capteur d'angle AS5600** + aimant diamétral | un par roue avant, **1 par bus I²C** ; magnétique sans contact, **12 bits absolu I²C** (adresse fixe 0x36), **3,3 V natif** (aucun level-shift), pull-ups 4,7 kΩ |
 | **Pilotage** | **Manette Bluetooth** | stick : Y = avance/recul, X = virage ; bouton **B** = arrêt d'urgence, bouton **START** = armement ; **calibration obligatoire** |
@@ -336,7 +342,7 @@ flowchart LR
 | Courant total | ~**40 A** → 2 batteries en parallèle (~20 A/pack) |
 | Énergie batterie / autonomie | ~90–100 Wh → **~10–20 min** selon l'usage |
 
-**Transmission gearbox → roue :** poulie **vissée sur la roue** (plusieurs rayons, grandes rondelles / contre-platine pour ne pas fendre le plastique), **courroie 1:1** avec réglage de tension (trous oblongs / galet), **carter fermé**. La roue tourne sur **son boulon à épaulement + roulement** ; le moteur ne fait que l'entraîner.
+**Transmission gearbox → roue :** poulie **vissée côté intérieur de la roue** (plusieurs rayons, grandes rondelles / contre-platine pour ne pas fendre le plastique), **courroie 1:2** (rapport de dents exact — voir [`doc/reducteur.md`](doc/reducteur.md)) avec réglage de tension (trous oblongs / galet), **carter fermé**. La roue tourne **libre sur l'essieu traversant** ; le moteur ne fait que l'entraîner. **Épaisseur de moyeu à mesurer avant la coupe finale de la tige** ; **entretoises ajustables** pour amener le plan de la poulie de roue en face de la poulie de boîte (alignement courroie = réglage critique), fixation de la boîte à trous oblongs pour le réglage fin.
 
 ### Commande électronique — ESP32
 
