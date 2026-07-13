@@ -56,6 +56,12 @@ plus que ~2,9 N·m en sortie au lieu de ~5,8 N·m.
   | 32T | **20 mm** | ~16 MPa (Ft ≈ 80 N) |
   | 64T sortie | **20 mm minimum** (22 = marge d'alignement) | ~13 MPa ; ⚠️ largeur utile étage 2 = min(32T, 64T) — à 15 mm la 32T remonte à ~21 MPa |
 - Encombrement moteur→sortie : 42,33 + 50,80 ≈ **93 mm** (axes repliables en angle).
+- **Rodage & lubrification** : (1) rodage **à sec** 10–15 min à vide, basse vitesse — les
+  crêtes de couches se polissent, la poussière tombe (graisser trop tôt = pâte abrasive) ;
+  (2) **nettoyer** la poussière ; (3) **fine couche** de graisse **PTFE ou silicone** sur les
+  flancs de dents (pas de bain ; lithium toléré, **jamais** de dégrippant/solvant sur l'ASA) ;
+  (4) après quelques heures : resserrer les vis des flasques (fluage), contrôler l'usure.
+  Roulements 6805 graissés à vie ; **aucune graisse côté courroie**.
 - **Carter en 2 parties** : coque principale + **plaque dévissable** (insertion des engrenages
   puis fermeture). Impératifs plaque : **2 pions de centrage** (les vis seules ont du jeu →
   l'entraxe doit répéter à ~0,1 mm), logements de roulements **épaulés** (captifs plaque
