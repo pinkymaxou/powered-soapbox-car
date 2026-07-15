@@ -10,7 +10,7 @@
 // `explode` écarte les pièces dans la vue assemblage.
 
 part = "assembly";
-explode = 0;            // mm d'écartement vertical entre étages (vue assemblage)
+explode = 0;            // mm d'écartement vertical (vue assemblage) — 0 = empilement réel
 
 // ───────────────────────── Paramètres denture ─────────────────────────
 DP   = 24;              // diametral pitch (impérial)
@@ -54,13 +54,15 @@ module gear2d(z)
 {
     rr = _rr(z); ra = _ra(z); rb = _rb(z);
     r0 = max(rr, rb);            // départ du profil en développante
+    ri = rr - 0.6;               // ancrage SOUS le cercle de pied : chevauchement franc avec
+                                 // le corps → pas de faces coplanaires (z-fighting en aperçu F5)
     N  = 14;                     // points par flanc
     flank = [for (i = [0:N]) let(r = r0 + (ra - r0) * i / N) _pol(r, -_half(z, r))];
     tooth = concat(
-        (rr < rb) ? [_pol(rr, -_half(z, rb))] : [],          // raccord radial sous le cercle de base
+        [_pol(ri, -_half(z, r0))],
         flank,
         [for (i = [0:N]) let(r = ra - (ra - r0) * i / N) _pol(r, _half(z, r))],
-        (rr < rb) ? [_pol(rr, _half(z, rb))] : []
+        [_pol(ri, _half(z, r0))]
     );
     union()
     {
@@ -175,7 +177,9 @@ module assembly()
     color("gold")     translate([E1, 0, CLR + explode])       rotate(180 / 64) compound_gear();
     color("orange")   translate([E1 + E2, 0, CLR + 2*explode]) rotate(180 / 64 * (1 + 32 / 64)) output_gear();
     inner = CLR + T64_1 + GAP + T64_OUT + CLR;                                     // hauteur intérieure
-    color("gray", 0.35) translate([0, 0, inner + 3*explode]) plate_front();
+    // Couvercle TRANSLUCIDE. ⚠️ L'aperçu (F5/OpenCSG) trie mal la transparence → surfaces
+    // « bizarres » ; utiliser le RENDU COMPLET (F6) pour un affichage correct.
+    color("lightsteelblue", 0.30) translate([0, 0, inner + 3*explode]) plate_front();
 }
 
 // ───────────────────── Sélecteur ─────────────────────
