@@ -27,6 +27,13 @@ plus que ~2,9 N·m en sortie au lieu de ~5,8 N·m.
 > Régénérable : `. .venv-schem/bin/activate && python doc/schematics/gearbox.py`
 > (vue en plan aux entraxes réels + coupe axiale de l'empilement).
 
+**Modèle 3D paramétrique** : [`doc/cad/gearbox.scad`](cad/gearbox.scad) (OpenSCAD, autonome —
+générateur de denture en développante inclus, toutes les cotes de cette page en paramètres).
+Sélecteur `part` : `assembly` / `compound` (64T+32T) / `output` / `back` / `front` /
+`pinion_test` (pignon d'essai 16T pour valider le 24 DP) → export STL direct.
+
+![Rendu OpenSCAD](cad/gearbox_scad.png)
+
 **Boîte 1:8 retenue — tout en 24 DP** (réutilise le dessin de la 64T) :
 
 | Engrènement | Rapport | Entraxe | Pièces |
