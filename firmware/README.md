@@ -1,9 +1,4 @@
-# Firmware ESP32 — Kart à entraînement différentiel (branche `experiment`)
-
-> ⚠️ **Branche expérimentale.** Cette branche explore une architecture **radicalement
-> différente** du kart « de production » décrit dans le [README racine](../README.md)
-> (4 roues, direction par bielle, 2 moteurs arrière, pédale accélérateur).
-> Ici : **tricycle à entraînement différentiel**.
+# Firmware ESP32 — Kart à entraînement différentiel
 
 Firmware **ESP-IDF 6.1** (C++) pilotant **2 moteurs avant indépendants** (un par roue) :
 la **direction se fait par différence de vitesse** entre les deux roues (*differential /
@@ -37,12 +32,9 @@ idf.py build
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
-> **Composants vendorés** (dans [`components/`](components/), ignorés par git) : `bluepad32`,
-> `btstack`, `cmd_nvs`, `cmd_system`. Bluepad32/BTstack ne sont pas dans le registre de
-> composants → ils ont été clonés puis intégrés (`integrate_btstack.py`) et **adaptés à
-> IDF 6.1** (le composant `driver` y est scindé en `esp_driver_*` ; sources legacy
-> `uni_mouse_quadrature.c` / plateformes intégrées retirées, facteur d'échelle souris stubé).
-> Voir [`components/bluepad32/CMakeLists.txt`](components/bluepad32/CMakeLists.txt).
+> **Composants vendorés** (dans [`components/`](components/), **commités** — un clone frais
+> compile sans étape manuelle) : `bluepad32`, `btstack`, `cmd_nvs`, `cmd_system`, **patchés
+> pour IDF 6.1**. Provenance et détail des patches : [`components/README.md`](components/README.md).
 
 ### Bluetooth + Wi-Fi : configuration radio
 
@@ -182,11 +174,13 @@ Priorités / cœurs / piles : [`main/rtos.hpp`](main/rtos.hpp) · [`../doc/firmw
 ## Boucle de contrôle (500 Hz)
 
 1. Lit la manette (`input::get()` → `x`, `y`, `connected`, `estop`, `start`).
-2. Lit les **2 vitesses de roue** (chaque AS5600, dérivée d'angle 12 bits signée → km/h).
+2. Lit les **2 vitesses de roue** (chaque AS5600, dérivée d'angle 12 bits signée → **m/s**).
+   **Vitesse véhicule = moyenne signée des deux roues** : deux roues égales en sens inverse
+   (pivot sur place) → **0 m/s**. C'est elle qui alimente le limiteur et la télémétrie.
 3. **Limiteur de pente** sur avance et virage (anti à-coups), puis **mélange arcade**
    `(avance y, virage x)` → consignes roue gauche / droite, après **bridage anti-renversement**.
 4. Par roue : **PID de freinage** (ramène à 0 quand consigne nulle) + **PID limiteur de
-   vitesse** (plafonne à `speed_limit_kmh`), sortie **plafonnée** (`duty_cap_frac`).
+   vitesse** (plafonne la vitesse véhicule à `speed_limit_ms`, en m/s), sortie **plafonnée** (`duty_cap_frac`).
 5. **PWM + DIR indépendants** vers les 2 canaux du driver.
 
 `can_drive` exige : manette **connectée**, **calibrée**, **armée**, pas d'arrêt d'urgence,
@@ -231,10 +225,11 @@ max m/s²), **`turn_rate`** (douceur du virage, Δ/s), **`thr_ramp_per_s`** (dou
 ## ⚠️ À ajuster avant la première mise en route
 
 - **Capteurs de vitesse** : cinématique **hardcodée** dans `config.hpp` (`namespace hw`) —
-  `AS5600_CPR = 4096`, `GEAR_RATIO = 1`, `WHEEL_DIAM_M = 0,3048` (roue 12″). **2 AS5600**,
+  `AS5600_CPR = 4096`, `GEAR_RATIO = 2` (aimant en sortie de boîte 1:8, courroie 1:2),
+  `WHEEL_DIAM_M = 0,254` (roue 10″). **2 AS5600**,
   **un par bus I²C** (adresse fixe `0x36` → un seul capteur par bus). À **vérifier au banc**.
 - **Manette** : appairer (onglet Manette) puis **calibrer** — obligatoire pour rouler.
-- **Réglages web** : `vbat_div_ratio` (au multimètre), `speed_limit_kmh`, `duty_cap_frac`,
+- **Réglages web** : `vbat_div_ratio` (au multimètre), `speed_limit_ms` (m/s), `duty_cap_frac`,
   `turn_gain` / `a_lat_max` (anti-renversement). Commencer **roues en l'air**, vitesse basse.
 - **PID** : `vmax_*` (limiteur de vitesse) et `pid_*` (frein) par roue — pré-réglés
   (limiteur ≈ 0,15/0,14, frein ≈ 0,12/0,08/0,003), à **affiner au banc**.

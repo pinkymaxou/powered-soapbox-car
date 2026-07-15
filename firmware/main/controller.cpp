@@ -31,12 +31,13 @@ using ctl::slew;
 
 constexpr float PI_F = 3.14159265358979f;
 
-// Δcounts AS5600 (12 bits, 4096/tour) sur un tick → km/h SIGNÉE (le signe donne le sens).
-float countsToKmh(int delta)
+// Δcounts AS5600 (12 bits, 4096/tour) sur un tick → vitesse roue en m/s, SIGNÉE (sens inclus).
+// Tient compte du réducteur (GEAR_RATIO = tours capteur par tour de roue) et de la roue 10".
+float countsToMps(int delta)
 {
     const float sensor_rps = (static_cast<float>(delta) / hw::AS5600_CPR) * hw::CTRL_HZ;
     const float wheel_rps = sensor_rps / hw::GEAR_RATIO;
-    return wheel_rps * PI_F * hw::WHEEL_DIAM_M * 3.6f;
+    return wheel_rps * PI_F * hw::WHEEL_DIAM_M;
 }
 
 // (deadzone / slew / clampf / mixArcade : voir control_math.hpp — testés sur l'hôte.)
@@ -98,20 +99,20 @@ void updateLVC(float vbat, const KartConfig& cfg)
     }
 }
 
-// Freine une roue : PID vitesse → 0 (sortie signée, peut inverser). Renvoie la commande appliquée.
-float brakeWheel(Pid& pid, float speed_kmh, const KartConfig& cfg, float dt)
+// Freine une roue : PID vitesse → 0 (sortie signée, peut inverser). Vitesse en m/s.
+float brakeWheel(Pid& pid, float speed_ms, const KartConfig& cfg, float dt)
 {
-    if (fabsf(speed_kmh) <= hw::EBRAKE_MIN_KMH)
+    if (fabsf(speed_ms) <= hw::EBRAKE_MIN_MPS)
     {
         pid.reset();
         return 0.f;
     }
-    return pid.update(0.f, speed_kmh, dt, cfg.pid_kp, cfg.pid_ki, cfg.pid_kd, -1.f, 1.f);
+    return pid.update(0.f, speed_ms, dt, cfg.pid_kp, cfg.pid_ki, cfg.pid_kd, -1.f, 1.f);
 }
 
-void updateEncStuck(int64_t now, float cmd, float speed_kmh)
+void updateEncStuck(int64_t now, float cmd, float speed_ms)
 {
-    if (fabsf(cmd) > hw::ENC_STUCK_PWM && fabsf(speed_kmh) <= 0.05f)
+    if (fabsf(cmd) > hw::ENC_STUCK_PWM && fabsf(speed_ms) <= 0.05f)
     {
         if (0 == m_stuck_us) m_stuck_us = now;
         else if ((now - m_stuck_us) > static_cast<int64_t>(hw::ENC_STUCK_MS) * 1000) m_enc_fault = true;
@@ -122,11 +123,12 @@ void updateEncStuck(int64_t now, float cmd, float speed_kmh)
     }
 }
 
-void publish(float sl, float sr, float vbat, const input::State& in)
+void publish(float sl, float sr, float v_veh, float vbat, const input::State& in)
 {
     g_status.m_vbat.store(vbat);
     g_status.m_speed_l.store(sl);
     g_status.m_speed_r.store(sr);
+    g_status.m_speed_ms.store(v_veh);   // vitesse véhicule signée (m/s), 0 en pivot
     g_status.m_pad_conn.store(in.connected);
     g_status.m_pad_batt.store(input::battery());
     g_status.m_btn_start.store(board::btnStart() || in.start);   // START physique OU manette
@@ -154,13 +156,15 @@ void tick()
     const float vraw = board::vbatVolts(hw::ADC_OVERSAMPLE);   // < 0 si capteur (ADS1115) absent
     const bool  vbat_valid = (vraw > 0.05f);
     const float vbat = vbat_valid ? vraw * cfg.vbat_div_ratio : 0.f;
-    const float sl_raw = use_enc ? countsToKmh(board::encLeftDelta())  : 0.f;
-    const float sr_raw = use_enc ? countsToKmh(board::encRightDelta()) : 0.f;
+    const float sl_raw = use_enc ? countsToMps(board::encLeftDelta())  : 0.f;
+    const float sr_raw = use_enc ? countsToMps(board::encRightDelta()) : 0.f;
     // Lissage EMA : atténue la quantification du Δangle par tick à basse vitesse.
     m_sl_ema += hw::SPEED_EMA_ALPHA * (sl_raw - m_sl_ema);
     m_sr_ema += hw::SPEED_EMA_ALPHA * (sr_raw - m_sr_ema);
-    const float sl = m_sl_ema, sr = m_sr_ema;
-    const float v_avg = 0.5f * (sl + sr);
+    const float sl = m_sl_ema, sr = m_sr_ema;   // vitesses roues SIGNÉES (m/s)
+    // Vitesse VÉHICULE (m/s) = moyenne signée des deux roues : deux roues égales en sens
+    // inverse (pivot sur place) → 0 m/s. C'est elle qui sert aux ajustements de conduite.
+    const float v_veh = 0.5f * (sl + sr);
     if (!use_enc) m_enc_fault = false;   // pas d'encodeurs → pas de défaut « capteur bloqué »
 
     // Capteur de tension absent → tension inconnue : on NE déclenche PAS la LVC (le BMS du
@@ -175,7 +179,7 @@ void tick()
         m_sag_start_us = 0;
         m_lvc_since_us = 0;
     }
-    publish(sl, sr, vbat, in);
+    publish(sl, sr, v_veh, vbat, in);
 
     const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(cfg.duty_cap_frac, 0.f, 1.f));
 
@@ -260,7 +264,7 @@ void tick()
 
         // 2) Anti-renversement : borne l'AMPLITUDE du virage pour que a_lat = v·ω reste
         //    ≤ a_lat_max (prédictif). a_lat ≈ 2·turn_gain·Vmax²·|fwd|·|turn| / voie.
-        const float vmax_mps = std::max(cfg.speed_limit_kmh, 1.f) / 3.6f;
+        const float vmax_mps = std::max(cfg.speed_limit_ms, 0.3f);
         const float denom = 2.f * std::max(cfg.turn_gain, 0.01f) * vmax_mps * vmax_mps * fabsf(fwd);
         float turn_max = 1.f;
         if (denom > 1e-3f) turn_max = clampf(cfg.a_lat_max * hw::TRACK_M / denom, 0.f, 1.f);
@@ -274,7 +278,7 @@ void tick()
         // Sans encodeurs : pas d'asservissement vitesse → on s'appuie sur le plafond PWM (duty_cap).
         if (use_enc)
         {
-            const float vcap = m_speed_pid.update(cfg.speed_limit_kmh, fabsf(v_avg), hw::CTRL_DT_S,
+            const float vcap = m_speed_pid.update(cfg.speed_limit_ms, fabsf(v_veh), hw::CTRL_DT_S,
                                                   cfg.vmax_kp, cfg.vmax_ki, cfg.vmax_kd, 0.f, 1.f);
             out_l *= vcap;
             out_r *= vcap;
@@ -308,7 +312,7 @@ void tick()
 
     if (dyn_brake) board::motorsBrake();                  // court-circuit moteur (freinage dynamique)
     else           board::motorsSet(out_l, out_r, cap);   // pilotage / plugging actif
-    if (use_enc) updateEncStuck(now, 0.5f * (out_l + out_r), v_avg);
+    if (use_enc) updateEncStuck(now, 0.5f * (out_l + out_r), v_veh);
 
     // Désarmement auto après inactivité.
     if (m_armed && (now - m_last_act_us) > static_cast<int64_t>(cfg.disarm_s) * 1000000) m_armed = false;

@@ -223,12 +223,11 @@ uint8_t u8x10(float v)   // valeur physique ×10 (résolution 0,1 ; bornée 0..2
     return static_cast<uint8_t>(s + 0.5f);
 }
 
-// Vitesse roue (km/h) → tr/min, bornée 0..250 (rentre dans un octet ; ~14,3 km/h max avant saturation).
-uint8_t rpmU8(float kmh)
+// Vitesse roue (m/s) → tr/min, bornée 0..250 (octet ; ~3,3 m/s max avant saturation en roue 10").
+uint8_t rpmU8(float ms)
 {
-    const float circ_m = 3.14159265f * hw::WHEEL_DIAM_M;            // circonférence roue (m)
-    float rpm = (fabsf(kmh) * 1000.f / 60.f) / circ_m;             // m/min ÷ circonférence
-    if (rpm < 0.f) rpm = 0.f;
+    const float circ_m = 3.14159265f * hw::WHEEL_DIAM_M;   // circonférence roue (m)
+    float rpm = fabsf(ms) * 60.f / circ_m;
     if (rpm > 250.f) rpm = 250.f;
     return static_cast<uint8_t>(rpm + 0.5f);
 }
@@ -241,8 +240,7 @@ void histSample(void*)
     m_hist.pwmr.push(pctU8(fabsf(g_status.m_out_r.load()) * 100.f));         // %
     m_hist.rpml.push(rpmU8(g_status.m_speed_l.load()));                      // tr/min roue G
     m_hist.rpmr.push(rpmU8(g_status.m_speed_r.load()));                      // tr/min roue D
-    m_hist.spd.push(u8x10(0.5f * (fabsf(g_status.m_speed_l.load()) +         // km/h ×10 (moyenne)
-                                  fabsf(g_status.m_speed_r.load()))));
+    m_hist.spd.push(u8x10(fabsf(g_status.m_speed_ms.load())));               // |v véhicule| m/s ×10 (0 en pivot)
     if (0 == (m_hist.tick % 5))   // batterie toutes les 5 s
     {
         m_hist.batt.push(u8x10(g_status.m_vbat.load()));                    // V ×10
@@ -290,12 +288,13 @@ std::string buildStatusJson()
     char buf[576];
     snprintf(buf, sizeof(buf),
              "{\"type\":\"status\",\"state\":%d,\"fault\":%d,\"vbat\":%.2f,"
-             "\"speed_l\":%.2f,\"speed_r\":%.2f,\"fwd\":%.3f,\"turn\":%.3f,"
+             "\"speed_ms\":%.2f,\"speed_l\":%.2f,\"speed_r\":%.2f,\"fwd\":%.3f,\"turn\":%.3f,"
              "\"out_l\":%.3f,\"out_r\":%.3f,\"brake\":%s,\"arming\":%s,\"btn_start\":%s,"
              "\"pad_conn\":%s,\"pad_batt\":%d,\"pad_x\":%.3f,\"pad_y\":%.3f,"
              "\"pad_cx\":%.3f,\"pad_cy\":%.3f,\"pad_zl\":%.2f,\"pad_zr\":%.2f,"
              "\"pad_rx2\":%.3f,\"pad_ry2\":%.3f,\"pad_btns\":%u}",
              g_status.m_state.load(), g_status.m_fault.load(), g_status.m_vbat.load(),
+             g_status.m_speed_ms.load(),
              g_status.m_speed_l.load(), g_status.m_speed_r.load(),
              g_status.m_fwd.load(), g_status.m_turn.load(),
              g_status.m_out_l.load(), g_status.m_out_r.load(),

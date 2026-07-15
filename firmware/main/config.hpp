@@ -33,14 +33,14 @@ constexpr int ADC_OVERSAMPLE = 8;   // nb de lectures ADS1115 moyennées (lisse 
 // Sur le bus 0 (avec l'AS5600 gauche). Adresse réglée par ADDR ; 0x48 = ADDR→GND.
 constexpr uint8_t ADS1115_ADDR = 0x48;
 
-// Capteur d'angle AS5600 (I2C, 12 bits absolu = 4096 counts/tour). Cinématique CONNUE :
-// AS5600 = 1 tour / 16 tours moteur (= sortie gearbox), puis courroie 1:1 jusqu'à la roue
-// → le capteur tourne EXACTEMENT à la vitesse roue ⇒ GEAR_RATIO = 1. Roue 12" = 0,3048 m.
+// Capteur d'angle AS5600 (I2C, 12 bits absolu = 4096 counts/tour). Cinématique (voir
+// doc/reducteur.md) : aimant sur la SORTIE DE BOÎTE (1:8), puis courroie 1:2 jusqu'à la roue
+// → le capteur fait 2 tours par tour de roue ⇒ GEAR_RATIO = 2. Roue 10" = 0,254 m.
 // Alim 3,3 V natif → AUCUN level-shift. Vitesse = dérivée de l'angle (Δcounts × CTRL_HZ) avec
 // gestion du wrap 0↔4095 ; le SIGNE de Δ donne le sens. À 500 Hz : aucune ambiguïté.
 constexpr float AS5600_CPR    = 4096.0f;  // counts par tour (12 bits)
-constexpr float GEAR_RATIO    = 1.0f;     // capteur ≡ vitesse roue (à ajuster selon l'entraînement avant)
-constexpr float WHEEL_DIAM_M  = 0.3048f;  // roue 12" (connue)
+constexpr float GEAR_RATIO    = 2.0f;     // tours capteur par tour de roue (sortie de boîte, courroie 1:2)
+constexpr float WHEEL_DIAM_M  = 0.254f;   // roue 10"
 constexpr float TRACK_M       = 0.84f;    // voie avant (m) — estime le lacet ω ≈ (vD−vG)/voie
 
 constexpr int     I2C_FREQ_HZ       = 400000;  // Fast-mode (le capteur supporte jusqu'à 1 MHz)
@@ -56,11 +56,11 @@ constexpr int   VBAT_SAG_DEBOUNCE_MS = 500;
 constexpr int   LVC_POWEROFF_MS      = 30000;  // coupure auto (powerOff) après 30 s sous le seuil
 constexpr float VBAT_WARN_DERATE     = 0.6f;
 constexpr float REVERSE_FACTOR       = 0.5f;
-constexpr float EBRAKE_MIN_KMH       = 0.5f;
+constexpr float EBRAKE_MIN_MPS       = 0.15f;  // en-dessous, on considère la roue arrêtée (frein PID)
 constexpr float ENC_STUCK_PWM        = 0.10f;
 constexpr int   ENC_STUCK_MS         = 1000;
 // Lissage vitesse (moyenne exponentielle) : à 500 Hz le Δangle par tick est quantifié
-// (≈0,4 km/h/count). α ~0,25 → constante de temps ~4 ticks (8 ms), lisse sans lag notable.
+// (~0,05 m/s par count avec GEAR_RATIO 2 / roue 10"). α ~0,25 → cte de temps ~4 ticks (8 ms).
 constexpr float SPEED_EMA_ALPHA      = 0.25f;
 constexpr int   BTN_DEBOUNCE_TICKS   = 3;
 } // namespace hw
@@ -69,7 +69,7 @@ constexpr int   BTN_DEBOUNCE_TICKS   = 3;
 // Tout est stocké en float (les entiers/bool aussi) → pointeur-vers-membre homogène.
 struct KartConfig
 {
-    float speed_limit_kmh;
+    float speed_limit_ms;   // limite de vitesse VÉHICULE (m/s)
     float duty_cap_frac;
     float thr_deadzone;
     float thr_top_margin;
@@ -124,8 +124,9 @@ struct KartStatus
     std::atomic<int>   m_state{static_cast<int>(State::Lockout)};
     std::atomic<int>   m_fault{static_cast<int>(Fault::None)};
     std::atomic<float> m_vbat{0.f};
-    std::atomic<float> m_speed_l{0.f};   // vitesse roue avant gauche (AS5600 #1, km/h)
-    std::atomic<float> m_speed_r{0.f};   // vitesse roue avant droite (AS5600 #2, km/h)
+    std::atomic<float> m_speed_l{0.f};   // vitesse roue avant gauche SIGNÉE (AS5600 #1, m/s)
+    std::atomic<float> m_speed_r{0.f};   // vitesse roue avant droite SIGNÉE (AS5600 #2, m/s)
+    std::atomic<float> m_speed_ms{0.f};  // vitesse VÉHICULE signée (m/s) = (vG+vD)/2 — pivot sur place → 0
     std::atomic<float> m_fwd{0.f};       // consigne d'avance après mix/limites [-1..1]
     std::atomic<float> m_turn{0.f};      // consigne de virage après anti-renversement [-1..1]
     std::atomic<bool>  m_btn_start{false};

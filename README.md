@@ -64,9 +64,9 @@ flowchart TB
     class SEP estop;
 ```
 
-**Gabarit :** longueur ~150–180 cm · largeur ~96 cm · **voie avant ~84 cm** · **2 roues motrices avant Ø30 cm + baie technique à l'avant** + **1 roulette arrière libre** · **séparation centrale = arrêt d'urgence** · assise basse 16 cm (anti-basculement).
+**Gabarit :** longueur ~150–180 cm · largeur ~96 cm · **voie avant ~84 cm** · **2 roues motrices avant Ø25,4 cm (10″) + baie technique à l'avant** + **1 roulette arrière libre** · **séparation centrale = arrêt d'urgence** · assise basse 16 cm (anti-basculement).
 
-> ⚠️ Réservé au **terrain plat, sous surveillance adulte**. Vitesse estimée ~8–13 km/h, autonomie ~10–20 min. **Un tricycle bascule plus facilement qu'un 4 roues** → anti-renversement logiciel (voir §3).
+> ⚠️ Réservé au **terrain plat, sous surveillance adulte**. Vitesse estimée ~8–11,5 km/h (~3,2 m/s), autonomie ~10–20 min. **Un tricycle bascule plus facilement qu'un 4 roues** → anti-renversement logiciel (voir §3).
 
 ## En bref
 
@@ -76,7 +76,7 @@ flowchart TB
 | **Direction** | **Différentielle (skid steer)** : différence de vitesse entre les 2 roues avant ; **pivot sur place** possible ; **aucune pièce de direction mécanique** |
 | **Propulsion** | **2 moteurs CC 12 V (~172 W / 0,23 HP)** AVANT **indépendants** (un par roue) — **PWM/DIR par roue** |
 | **Transmission** | Réducteurs **imprimés 3D 1:16** (2 étages 4:1, pignon moteur 16T/24 DP — voir [`doc/reducteur.md`](doc/reducteur.md)) + **poulies vissées sur les roues avant + courroies** |
-| **Roues** | **2 × motrices avant Ø30 cm (12")** (jante plastique, roulement 1/2") + **1 roulette arrière pivotante libre** |
+| **Roues** | **2 × motrices avant Ø25,4 cm (10″)** (jante plastique, roulement 1/2") + **1 roulette arrière pivotante libre** |
 | **Pilotage** | **Manette Bluetooth** (stick : Y = avance/recul, X = virage) ; **calibration obligatoire** ; joystick analogique réservé (futur) |
 | **Électronique** | **ESP32** → **driver double canal 20 A / 6–30 V** (PWM + DIR / canal), **PWM bridé ~50 %** ; **baie technique à l'AVANT** (près des 2 moteurs, câblage de puissance court) |
 | **Énergie** | **2 × packs 20 V / 5 Ah en parallèle** (diode-OR) + 2 adaptateurs vers bornes de puissance ; **logés à l'AVANT** dans la baie technique |
@@ -111,7 +111,7 @@ flowchart TB
 | Hauteur d'assise (sol → fond du siège) | **16 cm** | Centre de gravité **bas** = limite le renversement |
 | Garde au sol (sous châssis) | **8 cm** | Passe les petits obstacles sans talonner |
 | Hauteur de dossier (assise → haut) | **34 cm** | Soutient le dos des deux enfants |
-| **Roues motrices avant (×2 identiques)** | **Ø30 cm (12")**, jante plastique + pneu PVC dur | Mêmes roues à gauche/droite → plan simplifié |
+| **Roues motrices avant (×2 identiques)** | **Ø25,4 cm (10″)**, jante plastique + pneu PVC dur | Mêmes roues à gauche/droite → plan simplifié |
 | **Roulette arrière (×1)** | **Roulette pivotante (caster) Ø ~12,5 cm (5")**, hauteur montée ~15 cm, charge ≥ 50 kg | Non motorisée, s'oriente librement ; hauteur de montage choisie pour garder le châssis **de niveau** avec l'essieu avant (centre à 15 cm) |
 | Moyeu / fixation roues avant | **Roulement métal, alésage 1/2"**, moyeu large ~3,8 cm | Tourne **libre** sur un **essieu mort traversant : tige filetée 1/2″ × 36″** (grade **8.8/B7**, pas de la quincaillerie), **locknuts + rondelles à chaque bout**, entretoises pour figer la position latérale (alignement courroie), supports châssis au plus près des moyeux (≤ 3–5 cm, flexion) |
 
@@ -146,7 +146,7 @@ Repère 0 = essieu **avant** (roues motrices) ; cotes mesurées **vers l'arrièr
 
 ```mermaid
 flowchart LR
-    AV["🛞 Essieu AV motrice<br/>Ø30 cm — 0 cm"]
+    AV["🛞 Essieu AV motrice<br/>Ø25 cm — 0 cm"]
     BAY["🔋 Baie technique<br/>~0–30 cm"]
     ASS["Avant assise<br/>~65 cm"]
     DOS["Dossier<br/>~95 cm"]
@@ -256,7 +256,7 @@ Paramètres web : **`turn_gain`** (autorité de virage), **`a_lat_max`** (accél
 | | Plancher | Contreplaqué **6 mm**, ~140 × 90 cm, soutenu par la grille |
 | | Assise (zone chargée) | Contreplaqué **12 mm** sous la banquette |
 | | Supports moteurs avant / dossier | Bloc bois dur + platine ; dossier CP 6 mm |
-| **Roues** | **2 × roues motrices avant** identiques | **Ø30 cm (12")**, jante plastique + pneu PVC, roulement 1/2" |
+| **Roues** | **2 × roues motrices avant** identiques | **Ø25,4 cm (10″)**, jante plastique + pneu PVC, roulement 1/2" |
 | | **1 × roulette arrière pivotante (caster)** | Roulette **libre**, non motorisée ; **Ø ~12,5 cm (5")**, hauteur montée ~15 cm, **charge ≥ 50 kg** |
 | | Boulons à épaulement (roues avant) | **Fournis avec les roues** (épaulement 1/2", filetage 3/8") |
 | **Propulsion** | **2 moteurs CC 12 V** (un par roue **avant**) | ~172 W (0,23 HP), 19,6 A, 4615 tr/min ; **indépendants** |
@@ -338,7 +338,7 @@ flowchart LR
 | Paramètre | Valeur |
 |---|---|
 | Régime à ~50 % (≈ 10 V) | ~**3850 tr/min** moteur → **~240 tr/min roue** (÷16) |
-| Vitesse de pointe estimée | **~13 km/h** — limitée par firmware |
+| Vitesse de pointe estimée | **~3,2 m/s (11,5 km/h)** — limitée par firmware |
 | Courant total | ~**40 A** → 2 batteries en parallèle (~20 A/pack) |
 | Énergie batterie / autonomie | ~90–100 Wh → **~10–20 min** selon l'usage |
 
@@ -353,7 +353,7 @@ flowchart LR
 
 ### Capteurs de vitesse AS5600 (×2, sur I²C)
 
-Capteur d'angle **AS5600** : magnétique **sans contact**, **angle absolu 12 bits** (4096 points/tour) lu en **I²C**, avec un **aimant diamétral** en bout d'arbre. Il y a **un AS5600 par roue avant**, **un par bus I²C** (chaque AS5600 ayant l'adresse fixe **0x36**, ils ne peuvent pas cohabiter sur le même bus). **Cinématique connue** : le capteur fait **1 tour pour 16 tours moteur** (= sortie du gearbox **1:16**), et la **courroie est 1:1** jusqu'à la roue → **le capteur tourne exactement à la vitesse de la roue** ⇒ `GEAR_RATIO = 1`, **roue 12″ = 0,3048 m**. La conversion vitesse est **entièrement déterminée**. Ils servent à :
+Capteur d'angle **AS5600** : magnétique **sans contact**, **angle absolu 12 bits** (4096 points/tour) lu en **I²C**, avec un **aimant diamétral** en bout d'arbre. Il y a **un AS5600 par roue avant**, **un par bus I²C** (chaque AS5600 ayant l'adresse fixe **0x36**, ils ne peuvent pas cohabiter sur le même bus). **Cinématique connue** (voir [`doc/reducteur.md`](doc/reducteur.md)) : l'aimant est sur la **sortie de la boîte 1:8**, suivie d'une **courroie 1:2** → **le capteur fait 2 tours par tour de roue** ⇒ `GEAR_RATIO = 2`, **roue 10″ = 0,254 m**. La **vitesse véhicule** (m/s) = **moyenne signée** des 2 roues (pivot sur place → 0 m/s). La conversion est **entièrement déterminée**. Ils servent à :
 - **Mesurer la vitesse de chaque roue** → limiteur fiable ; **frein PID** vers 0 ; **sens** (signe de Δangle, broche DIR fixe la convention) ; **sécurité** (blocage : PWM actif sans rotation > 1 s → défaut).
 
 ✅ **3,3 V natif** (VDD5V/VDD3V3 reliées) → **SDA/SCL directement sur l'ESP32, AUCUN level-shift**. Câblage par capteur : **SDA, SCL, 3,3 V, GND** (+ aimant), pull-ups **4,7 kΩ** par bus.
@@ -659,7 +659,7 @@ Pour ajuster la distance **dossier ↔ avant d'assise** au gabarit de l'enfant :
 | Poste | Masse |
 |---|---:|
 | Bois (plancher CP 6 mm, châssis 2×3, supports, banquette, renforts) | ~18 kg |
-| 2 roues motrices avant Ø30 cm + 1 roulette arrière | ~2,5 kg |
+| 2 roues motrices avant Ø25,4 cm + 1 roulette arrière | ~2,2 kg |
 | Visserie / boulons à épaulement | 1,6 kg |
 | Propulsion (2 moteurs avant + 2 gearbox 3D + poulies/courroies) | 3,8 kg |
 | Électronique + batteries (2 packs 20 V, driver, ESP32, ADS1115, câblage) | 2,5 kg |
@@ -696,7 +696,7 @@ flowchart LR
 
 **Phase 5 — Électronique de commande.** ESP32 + breakout ; **buck 20→5 V** sur le rail +20 (l'ESP fabrique son 3,3 V) ; **ADS1115** (3,3 V) sur le bus 0, pont Vbat 100 k/15 k → A0 + condensateur ; **2× AS5600** : roue G sur **bus 0 (SDA18/SCL19)**, roue D sur **bus 1 (SDA27/SCL14)**, pull-ups 4,7 kΩ par bus + aimants centrés ; bouton START (GPIO16, pull-up) ; WS2812B (GPIO17). *(Réserves futures câblées non utilisées : 2× encodeur A/B 34/35 + 36/39 ; joystick sur A1/A2 de l'ADS1115.)* ✅ *Masses communes, 3,3 V/5 V présents, AS5600 détectés (0x36 sur chaque bus) + ADS1115 (0x48).*
 
-**Phase 6 — Firmware + réglages.** `idf.py build flash monitor` (voir [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://192.168.4.1`. **Appairer puis calibrer la manette** (obligatoire pour rouler) ; ajuster **`vbat_div_ratio`** au multimètre. Conversion vitesse **déjà déterminée** (AS5600 1:16 + courroie 1:1 → `GEAR_RATIO=1`, roue 12″) → **vérifier au banc** + **affiner les PID** par roue (limiteur ≈ 0,15/0,14, frein ≈ 0,12/0,08/0,003). Régler **limite de vitesse basse** + **anti-renversement** (`turn_gain`, `a_lat_max`, `turn_rate`, `thr_ramp_per_s`) + vérifier LVC. *(Boucle 500 Hz, IPv6, page Système : automatiques.)*
+**Phase 6 — Firmware + réglages.** `idf.py build flash monitor` (voir [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://192.168.4.1`. **Appairer puis calibrer la manette** (obligatoire pour rouler) ; ajuster **`vbat_div_ratio`** au multimètre. Conversion vitesse **déjà déterminée** (AS5600 en sortie de boîte 1:8 + courroie 1:2 → `GEAR_RATIO=2`, roue 10″, **vitesse véhicule en m/s**) → **vérifier au banc** + **affiner les PID** par roue (limiteur ≈ 0,54/0,50, frein ≈ 0,43/0,29/0,011 — en m/s). Régler **limite de vitesse basse** (`speed_limit_ms`) + **anti-renversement** (`turn_gain`, `a_lat_max`, `turn_rate`, `thr_ramp_per_s`) + vérifier LVC. *(Boucle 500 Hz, IPv6, page Système : automatiques.)*
 
 **Phase 7 — Essais progressifs (roues en l'air).** Armer (START physique ou manette), avance légère → sens correct de **chaque roue** (inverser M1A/M1B si besoin) ; pousser le stick à droite → vire à droite ; tester **frein par défaut**, **pivot sur place**, **désarmement**, **arrêt d'urgence manette (B)** et **déconnexion manette → freinage**, **e-stop matériel central** (coupe tout) ; provoquer les défauts (**LVC** simulée, **panne capteur** en débranchant un AS5600) → doit refuser/couper. Puis au sol : terrain plat, vitesse mini, anti-renversement actif, 1 enfant léger d'abord, limite **progressive**.
 
@@ -725,7 +725,7 @@ Points à **traiter / valider avant tout usage réel**.
 - **Dépendance à la manette** : si la manette se déconnecte, le kart **freine** (sécurité), mais le pilote perd le contrôle directionnel jusqu'à reconnexion → rouler à portée Bluetooth, manette chargée.
 
 **Firmware / capteurs**
-- **2 capteurs AS5600** (I²C, angle 12 bits, un par bus) : vitesse = dérivée à **500 Hz**, wrap géré, **3,3 V natif**. Cinématique **connue** → constantes hardcodées exactes (`AS5600_CPR=4096`, `GEAR_RATIO=1`, `WHEEL_DIAM_M=0,3048`). **Conversion entièrement déterminée** ; reste à **vérifier au banc**.
+- **2 capteurs AS5600** (I²C, angle 12 bits, un par bus) : vitesse = dérivée à **500 Hz**, wrap géré, **3,3 V natif**. Cinématique **connue** → constantes hardcodées exactes (`AS5600_CPR=4096`, `GEAR_RATIO=2`, `WHEEL_DIAM_M=0,254`). **Conversion entièrement déterminée** ; reste à **vérifier au banc**.
 - **Détection de panne capteur** : PWM actif (>10 %) mais 0 rotation > 1 s → défaut (couvre blocage moteur / courroie cassée), par roue.
 - **PID pré-réglés** (extrapolés du modèle) — limiteur 0,15/0,14, frein 0,12/0,08/0,003 ; à **affiner au banc**, par roue.
 - **Anti-renversement à régler empiriquement** : `turn_gain`, `a_lat_max`, `turn_rate`, `thr_ramp_per_s` dépendent de la voie réelle, de la hauteur du CG et de l'adhérence → commencer prudent.

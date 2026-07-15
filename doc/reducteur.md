@@ -18,7 +18,7 @@ et vérifier l'engrènement dent-dans-dent avec le pignon moteur.
 
 ## ⭐ Variante retenue : boîte 1:8 imprimée + courroie 1:2 vers la roue (= 1:16)
 
-Même réduction totale (≈13,8 km/h), mais le **dernier étage — le plus chargé — devient la
+Même réduction totale (~3,2 m/s en roue 10″), mais le **dernier étage — le plus chargé — devient la
 courroie** (encaisse les chocs, silencieuse, tolérante à l'alignement) : la boîte ne voit
 plus que ~2,9 N·m en sortie au lieu de ~5,8 N·m.
 
@@ -83,10 +83,10 @@ module 2 (15T→30T, entraxe 45 mm) — écartées au profit de la réutilisatio
 30T Ø47,7 → poulie roue 60T Ø95,5, vissée sur la jante 12″). Tension utile ≈ 100 N au couple
 max — très confortable pour une courroie de 15 mm.
 
-> ⚠️ **Impact firmware** : `hw::GEAR_RATIO` (config.hpp) suppose capteur AS5600 ≡ vitesse
-> roue (courroie 1:1 → `GEAR_RATIO = 1`). Avec la courroie 1:2, si l'aimant du capteur reste
-> sur la **sortie de boîte**, le capteur tourne 2× plus vite que la roue → mettre
-> **`GEAR_RATIO = 2`**. S'il est monté **sur la roue**, rien à changer.
+> ✅ **Firmware aligné** : `hw::GEAR_RATIO = 2` (aimant AS5600 sur la **sortie de boîte**,
+> courroie 1:2) et `WHEEL_DIAM_M = 0,254` (roue **10″**) sont appliqués dans config.hpp ;
+> la vitesse véhicule est calculée en **m/s** (moyenne signée des 2 roues — pivot → 0).
+> Si l'aimant est déplacé **sur la roue**, repasser `GEAR_RATIO` à 1.
 
 ---
 
@@ -147,8 +147,7 @@ Seul l'étage 1 doit matcher le pignon moteur ; l'étage 2 est libre → **modul
   tangentiels sur le 15T → ≈ 13 MPa en pied de dent (Lewis, m2 × 15 mm) → marge ≈ ×3 en
   **PETG** (nylon encore mieux pour le 15T). Le driver limite à 20 A → pas de couple de
   blocage démesuré.
-- Sortie : 4615/16 ≈ 288 tr/min à 12 V ; **~240 tr/min à PWM 50 % → ~13,8 km/h** (roue 12″)
-  — cohérent avec le README.
+- Sortie : 4615/16 ≈ 288 tr/min à 12 V ; **~240 tr/min à PWM 50 % → ~3,2 m/s (11,5 km/h)** en roue 10″.
 
 ### Impression / montage
 

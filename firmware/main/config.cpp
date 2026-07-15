@@ -19,7 +19,7 @@ constexpr char NVS_NS[] = "kart";
 // Source unique de vérité : nom (clé NVS/JSON), libellé, type, min/défaut/max, champ visé.
 const ParamDesc PARAMS[] =
 {
-    {"speed_limit_kmh", "Limite vitesse (km/h)",  PType::Float, 1.f,   12.f,   25.f,   &KartConfig::speed_limit_kmh},
+    {"speed_limit_ms",  "Limite vitesse (m/s)",   PType::Float, 0.3f,  3.3f,   7.f,    &KartConfig::speed_limit_ms},
     {"duty_cap_frac",   "Plafond PWM (0-1)",       PType::Float, 0.05f, 0.50f,  1.f,    &KartConfig::duty_cap_frac},
     {"thr_deadzone",    "Zone morte accel.",       PType::Float, 0.f,   0.06f,  0.30f,  &KartConfig::thr_deadzone},
     {"thr_top_margin",  "Marge haute accel.",      PType::Float, 0.f,   0.05f,  0.30f,  &KartConfig::thr_top_margin},
@@ -31,12 +31,14 @@ const ParamDesc PARAMS[] =
     {"vbat_cut_v",      "Vbat coupure LVC (V)",    PType::Float, 13.5f, 15.0f,  20.f,   &KartConfig::vbat_cut_v},
     {"vbat_recover_v",  "Vbat rearmement (V)",     PType::Float, 12.f,  16.0f,  20.5f,  &KartConfig::vbat_recover_v},
     {"cell_count",      "Cellules Li-ion (S)",     PType::Int,   1.f,   5.f,    14.f,   &KartConfig::cell_count},
-    {"pid_kp",          "Frein PID Kp",            PType::Float, 0.f,   0.120f, 2.f,    &KartConfig::pid_kp},
-    {"pid_ki",          "Frein PID Ki",            PType::Float, 0.f,   0.080f, 5.f,    &KartConfig::pid_ki},
-    {"pid_kd",          "Frein PID Kd",            PType::Float, 0.f,   0.003f, 1.f,    &KartConfig::pid_kd},
-    {"vmax_kp",         "Limiteur PID Kp",         PType::Float, 0.f,   0.150f, 2.f,    &KartConfig::vmax_kp},
-    {"vmax_ki",         "Limiteur PID Ki",         PType::Float, 0.f,   0.140f, 5.f,    &KartConfig::vmax_ki},
-    {"vmax_kd",         "Limiteur PID Kd",         PType::Float, 0.f,   0.f,    1.f,    &KartConfig::vmax_kd},
+    // PID en m/s (clés renommées : l'erreur a changé d'unité km/h→m/s, défauts ×3,6 — les
+    // anciennes clés NVS pid_*/vmax_* sont ignorées, les nouvelles partent des bons défauts).
+    {"brk_kp",          "Frein PID Kp (m/s)",      PType::Float, 0.f,   0.43f,  5.f,    &KartConfig::pid_kp},
+    {"brk_ki",          "Frein PID Ki (m/s)",      PType::Float, 0.f,   0.29f,  10.f,   &KartConfig::pid_ki},
+    {"brk_kd",          "Frein PID Kd (m/s)",      PType::Float, 0.f,   0.011f, 2.f,    &KartConfig::pid_kd},
+    {"vlim_kp",         "Limiteur PID Kp (m/s)",   PType::Float, 0.f,   0.54f,  5.f,    &KartConfig::vmax_kp},
+    {"vlim_ki",         "Limiteur PID Ki (m/s)",   PType::Float, 0.f,   0.50f,  10.f,   &KartConfig::vmax_ki},
+    {"vlim_kd",         "Limiteur PID Kd (m/s)",   PType::Float, 0.f,   0.f,    2.f,    &KartConfig::vmax_kd},
     {"turn_gain",       "Gain de virage (0-1)",    PType::Float, 0.f,   0.6f,   1.f,    &KartConfig::turn_gain},
     {"a_lat_max",       "Accel. lat. max (m/s2)",  PType::Float, 0.5f,  2.5f,   8.f,    &KartConfig::a_lat_max},
     {"turn_rate",       "Douceur virage (D/s)",    PType::Float, 0.3f,  3.0f,   20.f,   &KartConfig::turn_rate},
