@@ -111,9 +111,9 @@
 <script>
 // Reflètent les enums C++ State / Fault (config.hpp) — index = valeur.
 const STATE={LOCKOUT:0,CALIBRATE:1,RUN:2,FAULT:3};
-const FAULT={NONE:0,ESTOP:1,LVC:2,THROTTLE:3,NOT_CALIBRATED:4,ENCODER:5};
+const FAULT={NONE:0,ESTOP:1,LVC:2,NOT_CALIBRATED:3,ENCODER:4};
 const ST=["IDLE","CALIBRATION","ARMÉ","DÉFAUT"];                       // libellés par STATE
-const FA=["—","E-STOP","BATTERIE BASSE","ACCÉLÉRATEUR","NON CALIBRÉ","ENCODEUR"];  // libellés par FAULT
+const FA=["—","E-STOP","BATTERIE BASSE","NON CALIBRÉ","ENCODEUR"];  // libellés par FAULT
 let ws,timer,histTimer,built=false;
 let speedScale=3.3;  // m/s ≙ 100 % (barres de vitesse), réglé depuis la config
 let battLow=15, battFull=21;   // V à 0 % / 100 %, dérivés du nombre de cellules (config)

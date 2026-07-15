@@ -38,6 +38,17 @@ inline void mixArcade(float fwd, float turn, float gain, float& out_l, float& ou
     out_r = clampf(fwd + turn * gain, -1.f, 1.f);
 }
 
+// Anti-renversement « rampe » : limite de virage selon la vitesse VÉHICULE MESURÉE (m/s).
+// |v| ≤ v_full → ±100 % (pivot sur place permis, v≈0) ; puis décroissance LINÉAIRE jusqu'à
+// hi_limit (ex. 0,5 = ±50 %) atteint à v_max. Ex. v_full=0,5 : sous 0,5 m/s on tourne à fond.
+inline float turnLimit(float v_abs, float v_full, float v_max, float hi_limit)
+{
+    if (v_abs <= v_full) return 1.f;
+    const float span = (v_max - v_full > 0.1f) ? (v_max - v_full) : 0.1f;
+    const float f = clampf((v_abs - v_full) / span, 0.f, 1.f);
+    return 1.f + f * (hi_limit - 1.f);
+}
+
 // Compensation cercle→carré : le stick physique est borné par un CERCLE (x²+y²≤1) ; en
 // diagonale pleine chaque axe plafonne à ~0,71. Étire radialement (direction constante,
 // facteur |v|/max(|x|,|y|), =√2 en diagonale) pour rendre les coins du CARRÉ atteignables.

@@ -16,23 +16,42 @@
 **24 DP : 3,33 mm** vs module 1 : 3,14 mm ; ou imprimer un pignon d'essai 16T/24 DP
 et vérifier l'engrènement dent-dans-dent avec le pignon moteur.
 
-## ⭐ Variante retenue : boîte 1:8 imprimée + courroie 1:2 vers la roue (= 1:16)
+## ⭐ RÉVISION (retenue) : boîte 1:12,5 (16→80, 32→80) + poulies 25T→32T = **1:16,0 pile**
 
-Même réduction totale (~3,2 m/s en roue 10″), mais le **dernier étage — le plus chargé — devient la
-courroie** (encaisse les chocs, silencieuse, tolérante à l'alignement) : la boîte ne voit
-plus que ~2,9 N·m en sortie au lieu de ~5,8 N·m.
+| Engrènement | Rapport | Entraxe | Pièces |
+|---|---|---|---|
+| **16T moteur → 80T** | 5:1 | `96/48` = 2,0000″ = **50,80 mm** | 80T : Øp 84,7, Ø ext. **86,8 mm** |
+| **32T → 80T (sortie)** | 2,5:1 | `112/48` = 2,3333″ = **59,27 mm** | 32T solidaire de la 1ʳᵉ 80T (pignon composé) |
+| **Poulies 25T → 32T** | 1,28:1 | — | 25 et 32 **premiers entre eux** (usure répartie) |
 
-![Schéma du réducteur 1:8](schematics/gearbox.png)
+- **Total : 12,5 × 1,28 = 16,000** — vitesse ~3,2 m/s @ PWM 50 % (roue 10″), inchangée.
+- ⚠️ **Efforts en hausse à l'étage 2** : couple intermédiaire ×5 (1,8 N·m) → **Ft ≈ 106 N** sur
+  la 32T. À 20 mm d'épaisseur → ~21 MPa (limite ASA) : **passer l'étage 2 à 25 mm** (~17 MPa).
+- Tension de courroie plus élevée qu'avec les grandes poulies (~190 N au couple max sur une
+  25T HTD 5M) — toujours confortable pour une courroie de 15 mm.
+- Firmware : `GEAR_RATIO = 1,28` (aimant en sortie de boîte). Alternatives calculées :
+  25→34 = 1:17,0 ; 30→42 = 1:17,5 ; 25→36 = 1:18,0.
+
+![Schéma du réducteur](schematics/gearbox.png)
 
 > Régénérable : `. .venv-schem/bin/activate && python doc/schematics/gearbox.py`
 > (vue en plan aux entraxes réels + coupe axiale de l'empilement).
 
 **Modèle 3D paramétrique** : [`doc/cad/gearbox.scad`](cad/gearbox.scad) (OpenSCAD, autonome —
-générateur de denture en développante inclus, toutes les cotes de cette page en paramètres).
-Sélecteur `part` : `assembly` / `compound` (64T+32T) / `output` / `back` / `front` /
+générateur de denture en développante inclus, cotes de la révision en paramètres).
+Sélecteur `part` : `assembly` / `compound` (80T+32T) / `output` / `back` / `front` /
 `pinion_test` (pignon d'essai 16T pour valider le 24 DP) → export STL direct.
 
 ![Rendu OpenSCAD](cad/gearbox_scad.png)
+
+
+---
+
+## Itération précédente (référence) : boîte 1:8 imprimée + courroie 1:2 vers la roue (= 1:16)
+
+Même réduction totale (~3,2 m/s en roue 10″), mais le **dernier étage — le plus chargé — devient la
+courroie** (encaisse les chocs, silencieuse, tolérante à l'alignement) : la boîte ne voit
+plus que ~2,9 N·m en sortie au lieu de ~5,8 N·m.
 
 **Boîte 1:8 retenue — tout en 24 DP** (réutilise le dessin de la 64T) :
 
@@ -90,9 +109,9 @@ module 2 (15T→30T, entraxe 45 mm) — écartées au profit de la réutilisatio
 30T Ø47,7 → poulie roue 60T Ø95,5, vissée sur la jante 12″). Tension utile ≈ 100 N au couple
 max — très confortable pour une courroie de 15 mm.
 
-> ✅ **Firmware aligné** : `hw::GEAR_RATIO = 2` (aimant AS5600 sur la **sortie de boîte**,
-> courroie 1:2) et `WHEEL_DIAM_M = 0,254` (roue **10″**) sont appliqués dans config.hpp ;
-> la vitesse véhicule est calculée en **m/s** (moyenne signée des 2 roues — pivot → 0).
+> ✅ **Firmware aligné (révision 1:12,5 + poulies 1,28)** : `hw::GEAR_RATIO = 1,28` (aimant
+> AS5600 sur la **sortie de boîte**) et `WHEEL_DIAM_M = 0,254` (roue **10″**) appliqués dans
+> config.hpp ; vitesse véhicule en **m/s** (moyenne signée des 2 roues — pivot → 0).
 > Si l'aimant est déplacé **sur la roue**, repasser `GEAR_RATIO` à 1.
 
 ---

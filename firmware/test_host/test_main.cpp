@@ -85,6 +85,18 @@ static void test_square_map()
     CHECK(std::fabs(x) <= 1.f && std::fabs(y) <= 1.f);      // toujours borné
 }
 
+static void test_turn_limit()
+{
+    // Rampe anti-renversement : ±100 % sous v_full, décroissance linéaire jusqu'à hi à v_max.
+    CHECK(near(ctl::turnLimit(0.0f, 0.5f, 3.3f, 0.5f), 1.f));    // pivot sur place → 100 %
+    CHECK(near(ctl::turnLimit(0.5f, 0.5f, 3.3f, 0.5f), 1.f));    // au seuil → encore 100 %
+    CHECK(near(ctl::turnLimit(3.3f, 0.5f, 3.3f, 0.5f), 0.5f));   // à Vmax → 50 %
+    CHECK(near(ctl::turnLimit(9.0f, 0.5f, 3.3f, 0.5f), 0.5f));   // au-delà → plafonné à 50 %
+    const float mid = ctl::turnLimit(1.9f, 0.5f, 3.3f, 0.5f);    // milieu de rampe → ~75 %
+    CHECK(near(mid, 0.75f, 1e-3f));
+    CHECK(near(ctl::turnLimit(2.0f, 0.5f, 0.5f, 0.5f), 0.5f));   // span dégénéré → pas de division/0
+}
+
 // ───────────────────────── Pid ─────────────────────────
 static void test_pid()
 {
@@ -140,6 +152,7 @@ int main()
     test_slew();
     test_mix_arcade();
     test_square_map();
+    test_turn_limit();
     test_pid();
     test_ring();
 

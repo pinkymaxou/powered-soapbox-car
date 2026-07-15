@@ -19,9 +19,9 @@ sur 2 bus I²C), sécurités, **ruban WS2812B** et **configuration par Wi-Fi**.
 ```
 
 - **Mélange « arcade »** : `gauche = avance − virage·gain`, `droite = avance + virage·gain`.
-- **Anti-renversement** : un tricycle se renverse facilement → la **vitesse de virage est
-  bridée en fonction de la vitesse d'avance** pour borner l'accélération latérale
-  (`a_lat_max`). Voir [Anti-renversement](#anti-renversement).
+- **Anti-renversement** : un tricycle se renverse facilement → la **limite de virage suit
+  la vitesse mesurée** (rampe ±100 % → ±50 %) et le **recul est bridé**.
+  Voir [Anti-renversement](#anti-renversement-virage-trop-sec).
 
 ## Compilation / flash
 
@@ -206,26 +206,27 @@ défaut capteur**, **watchdog 5 s**, **PWM plafonné** (moteurs 12 V / batterie 
 Un tricycle (2 roues motrices + 1 roulette) bascule facilement si on tourne trop fort ou
 trop vite. Le virage est protégé sur **deux plans** :
 
-1. **Amplitude (anti-renversement prédictif)** — la valeur de virage admissible est bornée
-   pour que l'accélération latérale reste sous `a_lat_max` :
-
-   ```
-   a_lat ≈ 2·turn_gain·Vmax²·|avance|·|virage| / voie
-   → virage_max = a_lat_max · voie / (2·turn_gain·Vmax² · |avance|)
-   ```
-   Plus on va vite, plus le virage est **automatiquement réduit**.
-
+1. **Rampe vitesse→virage** (`ctl::turnLimit`, testée sur l'hôte) — la limite suit la
+   **vitesse véhicule MESURÉE** (m/s, moyenne signée des 2 roues) :
+   - `|v| ≤ turn_full_ms` (défaut 0,5 m/s) → virage **±100 %** — le **pivot sur place**
+     (v ≈ 0) reste pleinement autorisé ;
+   - au-delà, décroissance **linéaire** jusqu'à **`turn_hi`** (défaut ±50 %) atteinte à
+     `speed_limit_ms`.
+   ⚠️ S'appuie sur la vitesse mesurée : avec `use_encoders = 0`, v = 0 → pas de bridage.
 2. **Brusquerie (limiteur de pente / slew-rate)** — la consigne de virage ne peut pas varier
-   de plus de `turn_rate` unités/s : un coup de manche instantané est **lissé** au lieu de
-   provoquer un différentiel brutal. L'avance est lissée de même par `thr_ramp_per_s`.
+   de plus de `turn_rate` unités/s : un coup de manche instantané est **lissé**. L'avance est
+   lissée de même par `thr_ramp_per_s`.
 
-Paramètres web : **`turn_gain`** (autorité de virage 0–1), **`a_lat_max`** (accél. latérale
-max m/s²), **`turn_rate`** (douceur du virage, Δ/s), **`thr_ramp_per_s`** (douceur de l'avance).
+En complément, la **marche arrière est bridée** à `rev_limit` (défaut 50 %) pour éviter de
+reculer dangereusement (la roulette arrière ne guide pas en recul).
+
+Paramètres web : **`turn_gain`**, **`turn_full_ms`**, **`turn_hi`**, **`rev_limit`**,
+**`turn_rate`**, **`thr_ramp_per_s`**.
 
 ## ⚠️ À ajuster avant la première mise en route
 
 - **Capteurs de vitesse** : cinématique **hardcodée** dans `config.hpp` (`namespace hw`) —
-  `AS5600_CPR = 4096`, `GEAR_RATIO = 2` (aimant en sortie de boîte 1:8, courroie 1:2),
+  `AS5600_CPR = 4096`, `GEAR_RATIO = 1,28` (aimant en sortie de boîte 1:12,5, poulies 25T→32T),
   `WHEEL_DIAM_M = 0,254` (roue 10″). **2 AS5600**,
   **un par bus I²C** (adresse fixe `0x36` → un seul capteur par bus). À **vérifier au banc**.
 - **Manette** : appairer (onglet Manette) puis **calibrer** — obligatoire pour rouler.

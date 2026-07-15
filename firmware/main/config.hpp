@@ -1,5 +1,5 @@
 // config.hpp — Configuration : struct à champs nommés + table PARAMS pointant
-// vers chaque champ (pointeur-vers-membre). Accès ergonomique (cfg.speed_limit_kmh)
+// vers chaque champ (pointeur-vers-membre). Accès ergonomique (cfg.speed_limit_ms)
 // ET traitement générique (NVS / web / validation) en itérant PARAMS.
 #pragma once
 
@@ -34,33 +34,27 @@ constexpr int ADC_OVERSAMPLE = 8;   // nb de lectures ADS1115 moyennées (lisse 
 constexpr uint8_t ADS1115_ADDR = 0x48;
 
 // Capteur d'angle AS5600 (I2C, 12 bits absolu = 4096 counts/tour). Cinématique (voir
-// doc/reducteur.md) : aimant sur la SORTIE DE BOÎTE (1:8), puis courroie 1:2 jusqu'à la roue
-// → le capteur fait 2 tours par tour de roue ⇒ GEAR_RATIO = 2. Roue 10" = 0,254 m.
-// Alim 3,3 V natif → AUCUN level-shift. Vitesse = dérivée de l'angle (Δcounts × CTRL_HZ) avec
-// gestion du wrap 0↔4095 ; le SIGNE de Δ donne le sens. À 500 Hz : aucune ambiguïté.
+// doc/reducteur.md) : boîte 16T→80T puis 32T→80T = 1:12,5 ; aimant sur la SORTIE DE BOÎTE,
+// puis poulies 25T→32T (1,28:1) jusqu'à la roue → le capteur fait 1,28 tour par tour de roue
+// ⇒ GEAR_RATIO = 1,28 (réduction totale moteur→roue : 12,5 × 1,28 = 16,0 PILE).
+// Roue 10" = 0,254 m. Alim 3,3 V natif → AUCUN level-shift. Vitesse = dérivée de l'angle
+// (Δcounts × CTRL_HZ) avec wrap 0↔4095 ; le SIGNE de Δ donne le sens. 500 Hz : sans ambiguïté.
 constexpr float AS5600_CPR    = 4096.0f;  // counts par tour (12 bits)
-constexpr float GEAR_RATIO    = 2.0f;     // tours capteur par tour de roue (sortie de boîte, courroie 1:2)
+constexpr float GEAR_RATIO    = 1.28f;    // tours capteur par tour de roue (sortie de boîte, poulies 32/25)
 constexpr float WHEEL_DIAM_M  = 0.254f;   // roue 10"
-constexpr float TRACK_M       = 0.84f;    // voie avant (m) — estime le lacet ω ≈ (vD−vG)/voie
 
 constexpr int     I2C_FREQ_HZ       = 400000;  // Fast-mode (le capteur supporte jusqu'à 1 MHz)
 constexpr uint8_t AS5600_ADDR       = 0x36;    // adresse I2C fixe (un seul capteur par bus)
 constexpr uint8_t AS5600_REG_RAWANG = 0x0C;    // RAW ANGLE 12 bits (octets 0x0C MSB / 0x0D LSB)
 
-constexpr float THR_REST_FRAC        = 0.05f;
-constexpr int   THR_FAULT_RAW_LOW    = 60;
-constexpr int   THR_FAULT_RAW_HIGH   = 4030;
-constexpr int   THR_MIN_VALID_SPAN   = 600;
-constexpr float THR_BRAKE_RAMP_PER_S = 6.0f;
 constexpr int   VBAT_SAG_DEBOUNCE_MS = 500;
 constexpr int   LVC_POWEROFF_MS      = 30000;  // coupure auto (powerOff) après 30 s sous le seuil
 constexpr float VBAT_WARN_DERATE     = 0.6f;
-constexpr float REVERSE_FACTOR       = 0.5f;
 constexpr float EBRAKE_MIN_MPS       = 0.15f;  // en-dessous, on considère la roue arrêtée (frein PID)
 constexpr float ENC_STUCK_PWM        = 0.10f;
 constexpr int   ENC_STUCK_MS         = 1000;
 // Lissage vitesse (moyenne exponentielle) : à 500 Hz le Δangle par tick est quantifié
-// (~0,05 m/s par count avec GEAR_RATIO 2 / roue 10"). α ~0,25 → cte de temps ~4 ticks (8 ms).
+// (~0,08 m/s par count avec GEAR_RATIO 1,28 / roue 10"). α ~0,25 → cte de temps ~4 ticks (8 ms).
 constexpr float SPEED_EMA_ALPHA      = 0.25f;
 constexpr int   BTN_DEBOUNCE_TICKS   = 3;
 } // namespace hw
@@ -71,11 +65,8 @@ struct KartConfig
 {
     float speed_limit_ms;   // limite de vitesse VÉHICULE (m/s)
     float duty_cap_frac;
-    float thr_deadzone;
-    float thr_top_margin;
-    float thr_ramp_per_s;
-    float thr_min_raw;
-    float thr_max_raw;
+    float thr_deadzone;   // zone morte du manche (avance ET virage)
+    float thr_ramp_per_s; // limiteur de pente de l'AVANCE (douceur, Δ/s)
     float vbat_div_ratio;
     float vbat_warn_v;
     float vbat_cut_v;
@@ -88,7 +79,9 @@ struct KartConfig
     float vmax_ki;
     float vmax_kd;
     float turn_gain;     // part du différentiel à fond de manche X (0..1)
-    float a_lat_max;     // accélération latérale max tolérée (m/s²) — anti-renversement
+    float turn_full_ms;  // sous cette vitesse (m/s), virage ±100 % (pivot permis) — anti-renversement
+    float turn_hi;       // limite de virage (0..1) atteinte à speed_limit_ms (rampe linéaire)
+    float rev_limit;     // plafond d'avance en MARCHE ARRIÈRE (0..1) — recul bridé
     float turn_rate;     // pente max du virage (Δ/s) — adoucit les coups de manche brusques
     float use_encoders;  // 1 = asservissement vitesse/frein/défaut via AS5600 ; 0 = ignore les encodeurs
     float allow_reverse;
@@ -117,7 +110,7 @@ extern const int       PARAM_COUNT;
 
 // ───────────────────────── Télémétrie ─────────────────────────
 enum class State : int { Lockout = 0, Calibrate = 1, Run = 2, Fault = 3 };
-enum class Fault : int { None = 0, EStop = 1, Lvc = 2, Throttle = 3, NotCalibrated = 4, Encoder = 5 };
+enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4 };
 
 struct KartStatus
 {

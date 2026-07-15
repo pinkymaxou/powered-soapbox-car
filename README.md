@@ -237,10 +237,10 @@ flowchart TD
 1. **Mélange « arcade »** : le firmware combine l'avance (stick Y) et le virage (stick X) en deux consignes de roue : `gauche = avance − virage·gain` et `droite = avance + virage·gain`. Tourner le stick à droite = roue gauche plus rapide → le kart vire à droite.
 2. **Pivot sur place** : si l'avance ≈ 0 et qu'on pousse le stick latéralement, les deux roues tournent **en sens opposés** → le kart **tourne sur lui-même** (la roulette arrière pivote pour suivre).
 3. **Anti-renversement** : un tricycle bascule facilement, donc le virage est protégé sur **deux plans** :
-   - **Amplitude bornée selon la vitesse** : la valeur de virage admissible est réduite quand on va vite, pour garder l'accélération latérale sous un maximum (`a_lat_max`). Plus on roule vite, moins on peut braquer fort.
+   - **Rampe vitesse→virage (vitesse MESURÉE)** : sous `turn_full_ms` (~0,5 m/s, pivot sur place inclus), virage autorisé **±100 %** ; au-delà, la limite décroît **linéairement** jusqu'à `turn_hi` (±50 % par défaut) à la vitesse max. Plus on roule vite, moins on peut braquer fort. La **marche arrière est bridée** à `rev_limit` (50 % par défaut).
    - **Limiteur de pente (slew-rate)** : la consigne de virage ne peut pas varier de plus de `turn_rate` par seconde → un coup de manche brusque est **lissé** au lieu de provoquer un différentiel violent. L'avance est lissée de même (`thr_ramp_per_s`).
 
-Paramètres web : **`turn_gain`** (autorité de virage), **`a_lat_max`** (accél. latérale max), **`turn_rate`** (douceur du virage), **`thr_ramp_per_s`** (douceur de l'avance). Détails dans [`firmware/README.md`](firmware/README.md).
+Paramètres web : **`turn_gain`** (autorité de virage), **`turn_full_ms`** / **`turn_hi`** (rampe anti-renversement), **`rev_limit`** (recul bridé), **`turn_rate`** (douceur du virage), **`thr_ramp_per_s`** (douceur de l'avance). Détails dans [`firmware/README.md`](firmware/README.md).
 
 > **Conséquence du skid steer :** en virage serré, les roues **ripent** légèrement sur le sol (frottement de glissement) — c'est inhérent à ce type de direction. À vitesse modérée sur terrain plat, l'effet reste acceptable.
 
@@ -285,7 +285,7 @@ Paramètres web : **`turn_gain`** (autorité de virage), **`a_lat_max`** (accél
 
 ### Propulsion — 2 moteurs CC 12 V (avant)
 
-Chaque **roue avant** est entraînée par son **propre moteur CC à aimants permanents 12 V** via un **réducteur imprimé 3D au rapport 1:16** et une **courroie 1:1**. Les **deux moteurs sont commandés indépendamment** (PWM + DIR par canal) : c'est cette **différence de commande** qui assure la direction. **Chaque roue a son propre capteur AS5600** pour l'asservissement.
+Chaque **roue avant** est entraînée par son **propre moteur CC à aimants permanents 12 V** via un **réducteur imprimé 3D 1:12,5** (16→80, 32→80) et des **poulies 25T→32T (1,28:1)** — réduction totale **1:16,0**. Les **deux moteurs sont commandés indépendamment** (PWM + DIR par canal) : c'est cette **différence de commande** qui assure la direction. **Chaque roue a son propre capteur AS5600** pour l'asservissement.
 
 | Caractéristique | Valeur |
 |---|---|
@@ -316,8 +316,8 @@ flowchart LR
     PAD -. "Bluetooth (x,y)" .-> ESP
     ESP -- "PWM+DIR canal G (3,3 V)" --> DRV
     ESP -- "PWM+DIR canal D (3,3 V)" --> DRV
-    DRV -- "canal G (≤20 A)" --> M1 --> G1 -- "poulie + courroie 1:1" --> R1
-    DRV -- "canal D (≤20 A)" --> M2 --> G2 -- "poulie + courroie 1:1" --> R2
+    DRV -- "canal G (≤20 A)" --> M1 --> G1 -- "poulies 25T→32T (1,28:1)" --> R1
+    DRV -- "canal D (≤20 A)" --> M2 --> G2 -- "poulies 25T→32T (1,28:1)" --> R2
     M1 -. "vitesse roue G : AS5600 (I²C bus 0)" .-> ESP
     M2 -. "vitesse roue D : AS5600 (I²C bus 1)" .-> ESP
     R1 -. "le châssis pivote" .-> CAS
@@ -342,7 +342,7 @@ flowchart LR
 | Courant total | ~**40 A** → 2 batteries en parallèle (~20 A/pack) |
 | Énergie batterie / autonomie | ~90–100 Wh → **~10–20 min** selon l'usage |
 
-**Transmission gearbox → roue :** poulie **vissée côté intérieur de la roue** (plusieurs rayons, grandes rondelles / contre-platine pour ne pas fendre le plastique), **courroie 1:2** (rapport de dents exact — voir [`doc/reducteur.md`](doc/reducteur.md)) avec réglage de tension (trous oblongs / galet), **carter fermé**. La roue tourne **libre sur l'essieu traversant** ; le moteur ne fait que l'entraîner. **Épaisseur de moyeu à mesurer avant la coupe finale de la tige** ; **entretoises ajustables** pour amener le plan de la poulie de roue en face de la poulie de boîte (alignement courroie = réglage critique), fixation de la boîte à trous oblongs pour le réglage fin.
+**Transmission gearbox → roue :** poulie **vissée côté intérieur de la roue** (plusieurs rayons, grandes rondelles / contre-platine pour ne pas fendre le plastique), **poulies 25T→32T = 1,28:1** (rapport de dents exact — voir [`doc/reducteur.md`](doc/reducteur.md)) avec réglage de tension (trous oblongs / galet), **carter fermé**. La roue tourne **libre sur l'essieu traversant** ; le moteur ne fait que l'entraîner. **Épaisseur de moyeu à mesurer avant la coupe finale de la tige** ; **entretoises ajustables** pour amener le plan de la poulie de roue en face de la poulie de boîte (alignement courroie = réglage critique), fixation de la boîte à trous oblongs pour le réglage fin.
 
 ### Commande électronique — ESP32
 
@@ -353,7 +353,7 @@ flowchart LR
 
 ### Capteurs de vitesse AS5600 (×2, sur I²C)
 
-Capteur d'angle **AS5600** : magnétique **sans contact**, **angle absolu 12 bits** (4096 points/tour) lu en **I²C**, avec un **aimant diamétral** en bout d'arbre. Il y a **un AS5600 par roue avant**, **un par bus I²C** (chaque AS5600 ayant l'adresse fixe **0x36**, ils ne peuvent pas cohabiter sur le même bus). **Cinématique connue** (voir [`doc/reducteur.md`](doc/reducteur.md)) : l'aimant est sur la **sortie de la boîte 1:8**, suivie d'une **courroie 1:2** → **le capteur fait 2 tours par tour de roue** ⇒ `GEAR_RATIO = 2`, **roue 10″ = 0,254 m**. La **vitesse véhicule** (m/s) = **moyenne signée** des 2 roues (pivot sur place → 0 m/s). La conversion est **entièrement déterminée**. Ils servent à :
+Capteur d'angle **AS5600** : magnétique **sans contact**, **angle absolu 12 bits** (4096 points/tour) lu en **I²C**, avec un **aimant diamétral** en bout d'arbre. Il y a **un AS5600 par roue avant**, **un par bus I²C** (chaque AS5600 ayant l'adresse fixe **0x36**, ils ne peuvent pas cohabiter sur le même bus). **Cinématique connue** (voir [`doc/reducteur.md`](doc/reducteur.md)) : l'aimant est sur la **sortie de la boîte 1:12,5**, suivie de **poulies 1,28:1** → **le capteur fait 1,28 tour par tour de roue** ⇒ `GEAR_RATIO = 1,28`, **roue 10″ = 0,254 m**. La **vitesse véhicule** (m/s) = **moyenne signée** des 2 roues (pivot sur place → 0 m/s). La conversion est **entièrement déterminée**. Ils servent à :
 - **Mesurer la vitesse de chaque roue** → limiteur fiable ; **frein PID** vers 0 ; **sens** (signe de Δangle, broche DIR fixe la convention) ; **sécurité** (blocage : PWM actif sans rotation > 1 s → défaut).
 
 ✅ **3,3 V natif** (VDD5V/VDD3V3 reliées) → **SDA/SCL directement sur l'ESP32, AUCUN level-shift**. Câblage par capteur : **SDA, SCL, 3,3 V, GND** (+ aimant), pull-ups **4,7 kΩ** par bus.
@@ -696,7 +696,7 @@ flowchart LR
 
 **Phase 5 — Électronique de commande.** ESP32 + breakout ; **buck 20→5 V** sur le rail +20 (l'ESP fabrique son 3,3 V) ; **ADS1115** (3,3 V) sur le bus 0, pont Vbat 100 k/15 k → A0 + condensateur ; **2× AS5600** : roue G sur **bus 0 (SDA18/SCL19)**, roue D sur **bus 1 (SDA27/SCL14)**, pull-ups 4,7 kΩ par bus + aimants centrés ; bouton START (GPIO16, pull-up) ; WS2812B (GPIO17). *(Réserves futures câblées non utilisées : 2× encodeur A/B 34/35 + 36/39 ; joystick sur A1/A2 de l'ADS1115.)* ✅ *Masses communes, 3,3 V/5 V présents, AS5600 détectés (0x36 sur chaque bus) + ADS1115 (0x48).*
 
-**Phase 6 — Firmware + réglages.** `idf.py build flash monitor` (voir [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://192.168.4.1`. **Appairer puis calibrer la manette** (obligatoire pour rouler) ; ajuster **`vbat_div_ratio`** au multimètre. Conversion vitesse **déjà déterminée** (AS5600 en sortie de boîte 1:8 + courroie 1:2 → `GEAR_RATIO=2`, roue 10″, **vitesse véhicule en m/s**) → **vérifier au banc** + **affiner les PID** par roue (limiteur ≈ 0,54/0,50, frein ≈ 0,43/0,29/0,011 — en m/s). Régler **limite de vitesse basse** (`speed_limit_ms`) + **anti-renversement** (`turn_gain`, `a_lat_max`, `turn_rate`, `thr_ramp_per_s`) + vérifier LVC. *(Boucle 500 Hz, IPv6, page Système : automatiques.)*
+**Phase 6 — Firmware + réglages.** `idf.py build flash monitor` (voir [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://192.168.4.1`. **Appairer puis calibrer la manette** (obligatoire pour rouler) ; ajuster **`vbat_div_ratio`** au multimètre. Conversion vitesse **déjà déterminée** (AS5600 en sortie de boîte 1:12,5 + poulies 1,28:1 → `GEAR_RATIO=1,28`, roue 10″, **vitesse véhicule en m/s**) → **vérifier au banc** + **affiner les PID** par roue (limiteur ≈ 0,54/0,50, frein ≈ 0,43/0,29/0,011 — en m/s). Régler **limite de vitesse basse** (`speed_limit_ms`) + **anti-renversement** (`turn_gain`, `turn_full_ms`, `turn_hi`, `rev_limit`, `turn_rate`, `thr_ramp_per_s`) + vérifier LVC. *(Boucle 500 Hz, IPv6, page Système : automatiques.)*
 
 **Phase 7 — Essais progressifs (roues en l'air).** Armer (START physique ou manette), avance légère → sens correct de **chaque roue** (inverser M1A/M1B si besoin) ; pousser le stick à droite → vire à droite ; tester **frein par défaut**, **pivot sur place**, **désarmement**, **arrêt d'urgence manette (B)** et **déconnexion manette → freinage**, **e-stop matériel central** (coupe tout) ; provoquer les défauts (**LVC** simulée, **panne capteur** en débranchant un AS5600) → doit refuser/couper. Puis au sol : terrain plat, vitesse mini, anti-renversement actif, 1 enfant léger d'abord, limite **progressive**.
 
@@ -725,10 +725,10 @@ Points à **traiter / valider avant tout usage réel**.
 - **Dépendance à la manette** : si la manette se déconnecte, le kart **freine** (sécurité), mais le pilote perd le contrôle directionnel jusqu'à reconnexion → rouler à portée Bluetooth, manette chargée.
 
 **Firmware / capteurs**
-- **2 capteurs AS5600** (I²C, angle 12 bits, un par bus) : vitesse = dérivée à **500 Hz**, wrap géré, **3,3 V natif**. Cinématique **connue** → constantes hardcodées exactes (`AS5600_CPR=4096`, `GEAR_RATIO=2`, `WHEEL_DIAM_M=0,254`). **Conversion entièrement déterminée** ; reste à **vérifier au banc**.
+- **2 capteurs AS5600** (I²C, angle 12 bits, un par bus) : vitesse = dérivée à **500 Hz**, wrap géré, **3,3 V natif**. Cinématique **connue** → constantes hardcodées exactes (`AS5600_CPR=4096`, `GEAR_RATIO=1,28`, `WHEEL_DIAM_M=0,254`). **Conversion entièrement déterminée** ; reste à **vérifier au banc**.
 - **Détection de panne capteur** : PWM actif (>10 %) mais 0 rotation > 1 s → défaut (couvre blocage moteur / courroie cassée), par roue.
 - **PID pré-réglés** (extrapolés du modèle) — limiteur 0,15/0,14, frein 0,12/0,08/0,003 ; à **affiner au banc**, par roue.
-- **Anti-renversement à régler empiriquement** : `turn_gain`, `a_lat_max`, `turn_rate`, `thr_ramp_per_s` dépendent de la voie réelle, de la hauteur du CG et de l'adhérence → commencer prudent.
+- **Anti-renversement à régler empiriquement** : `turn_gain`, `turn_full_ms`, `turn_hi`, `rev_limit`, `turn_rate`, `thr_ramp_per_s` dépendent de la voie réelle, de la hauteur du CG et de l'adhérence → commencer prudent. NB : la rampe s'appuie sur la vitesse **mesurée** → avec `use_encoders=0`, pas de bridage de virage.
 - **Frein = PID vers 0** (plugging) : efficace mais **génère des pics de courant** (pas de régénération) → s'appuie sur la limitation de courant du driver.
 
 **Électrique / puissance**

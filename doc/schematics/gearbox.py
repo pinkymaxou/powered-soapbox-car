@@ -1,4 +1,4 @@
-# gearbox.py — Schéma du réducteur 1:8 imprimé (vue en plan + coupe axiale).
+# gearbox.py — Schéma du réducteur 1:12,5 imprimé (vue en plan + coupe axiale).
 # Cotes réelles (24 DP) — voir doc/reducteur.md. Régénérer :
 #   . .venv-schem/bin/activate && python doc/schematics/gearbox.py
 import matplotlib
@@ -14,15 +14,15 @@ def outer_d(z): return (z + 2) / DP * IN    # Ø extérieur
 
 # Axes (vue en plan, disposition alignée comme le prototype)
 A_MOT = (0.0, 0.0)                # axe moteur (pignon 16T)
-E1 = (16 + 64) / (2 * DP) * IN    # 42,33
-E2 = (32 + 64) / (2 * DP) * IN    # 50,80
-A_INT = (E1, 0.0)                 # axe intermédiaire (64T + 32T)
+E1 = (16 + 80) / (2 * DP) * IN    # 50,80
+E2 = (32 + 80) / (2 * DP) * IN    # 59,27
+A_INT = (E1, 0.0)                 # axe intermédiaire (80T + 32T)
 A_OUT = (E1 + E2, 0.0)            # axe de sortie (64T + poulie)
 
 C_PIN, C_64, C_32 = '#888888', '#e6b800', '#e6b800'
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 6.2))
-fig.suptitle("Réducteur 1:8 — 16T→64T (4:1) puis 32T→64T (2:1), denture 24 DP",
+fig.suptitle("Réducteur 1:12,5 — 16T→80T (5:1) puis 32T→80T (2,5:1), denture 24 DP",
              fontsize=13, fontweight='bold')
 
 # ───────────────────────── Vue en plan ─────────────────────────
@@ -37,18 +37,18 @@ def gear_plan(ax, center, z, color, label, label_dy):
                 ha='center', fontsize=8.5)
 
 gear_plan(ax1, A_MOT, 16, C_PIN, "16T moteur\nØp 16,9", -34)
-gear_plan(ax1, A_INT, 64, C_64, "64T (ép. 10)\nØp 67,7", 42)
+gear_plan(ax1, A_INT, 80, C_64, "80T (ép. 10)\nØp 84,7", 50)
 gear_plan(ax1, A_INT, 32, C_32, "32T (ép. 20)\nØp 33,9", -8)
-gear_plan(ax1, A_OUT, 64, C_64, "64T sortie\nØp 67,7", 42)
+gear_plan(ax1, A_OUT, 80, C_64, "80T sortie\nØp 84,7", 50)
 
 # Entraxes cotés
-for (x0, x1, txt) in [(A_MOT[0], A_INT[0], "42,33 (1.6667″)"),
-                      (A_INT[0], A_OUT[0], "50,80 (2.0000″)")]:
+for (x0, x1, txt) in [(A_MOT[0], A_INT[0], "50,80 (2.0000″)"),
+                      (A_INT[0], A_OUT[0], "59,27 (2.3333″)")]:
     y = -46
     ax1.annotate('', xy=(x1, y), xytext=(x0, y), arrowprops=dict(arrowstyle='<->', lw=1))
     ax1.text((x0 + x1) / 2, y - 5, txt, ha='center', fontsize=8.5)
 
-ax1.set_xlim(-30, 135); ax1.set_ylim(-62, 50)
+ax1.set_xlim(-30, 160); ax1.set_ylim(-70, 58)
 ax1.set_aspect('equal'); ax1.axis('off')
 
 # ───────────────────────── Coupe axiale ─────────────────────────
@@ -64,10 +64,10 @@ def rect(ax, x, y, w, h, **kw):
 
 # Plaques (arrière porte-moteur, avant dévissable)
 zfront = Z0 + T64 + T32 + GAP + 6
-rect(ax2, -20, Z0 - PLATE, 155, PLATE, facecolor='#333333')
-rect(ax2, -20, zfront, 155, PLATE, facecolor='#555555', hatch='//', edgecolor='black', lw=0.5)
-ax2.text(140, Z0 - PLATE / 2, "plaque arrière\n(+ moteur)", fontsize=7.5, va='center')
-ax2.text(140, zfront + PLATE / 2, "plaque avant\ndévissable", fontsize=7.5, va='center')
+rect(ax2, -22, Z0 - PLATE, 185, PLATE, facecolor='#333333')
+rect(ax2, -22, zfront, 185, PLATE, facecolor='#555555', hatch='//', edgecolor='black', lw=0.5)
+ax2.text(166, Z0 - PLATE / 2, "plaque arrière\n(+ moteur)", fontsize=7.5, va='center')
+ax2.text(166, zfront + PLATE / 2, "plaque avant\ndévissable", fontsize=7.5, va='center')
 
 # Moteur + pignon 16T (6,35 utile) au niveau de la 64T étage 1
 rect(ax2, A_MOT[0] - 17, Z0 - PLATE - 28, 34, 28, facecolor='#666666')
@@ -77,7 +77,7 @@ ax2.text(A_MOT[0], Z0 + 12, "16T\n(6,35)", ha='center', fontsize=7.5)
 
 # Pignon composé : 64T (10) + 32T (20) + tourillons Ø25 → roulements dans les 2 plaques
 x = A_INT[0]
-rect(ax2, x - 34.9, Z0, 69.85, T64, facecolor=C_64, edgecolor='black', alpha=0.75)
+rect(ax2, x - 43.4, Z0, 86.78, T64, facecolor=C_64, edgecolor='black', alpha=0.75)
 rect(ax2, x - 18.0, Z0 + T64, 36, T32, facecolor=C_64, edgecolor='black', alpha=0.75)
 rect(ax2, x - 12.5, Z0 - BRG_T, 25, BRG_T, facecolor='#bbbbbb', edgecolor='black')       # tourillon AR
 rect(ax2, x - 12.5, Z0 + T64 + T32, 25, zfront - (Z0 + T64 + T32), facecolor='#bbbbbb', edgecolor='black')
@@ -86,18 +86,18 @@ for zb in (Z0 - BRG_T, zfront - 0.001):                                         
          facecolor='none')
 rect(ax2, x - BRG_D / 2, Z0 - BRG_T, BRG_D, BRG_T, facecolor='#88aadd', edgecolor='black', alpha=0.6)
 rect(ax2, x - BRG_D / 2, zfront - BRG_T, BRG_D, BRG_T, facecolor='#88aadd', edgecolor='black', alpha=0.6)
-ax2.text(x, Z0 + T64 / 2, "64T", ha='center', fontsize=8)
+ax2.text(x, Z0 + T64 / 2, "80T", ha='center', fontsize=8)
 ax2.text(x, Z0 + T64 + T32 / 2, "32T", ha='center', fontsize=8)
 
 # 64T de sortie : au niveau de la 32T (décalée de GAP au-dessus de la 64T étage 1)
 xo = A_OUT[0]
 z64o = Z0 + T64 + GAP
-rect(ax2, xo - 34.9, z64o, 69.85, T32 - GAP, facecolor=C_64, edgecolor='black', alpha=0.75)
+rect(ax2, xo - 43.4, z64o, 86.78, T32 - GAP, facecolor=C_64, edgecolor='black', alpha=0.75)
 rect(ax2, xo - 12.5, z64o + (T32 - GAP), 25, zfront - (z64o + T32 - GAP), facecolor='#bbbbbb', edgecolor='black')
 rect(ax2, xo - 12.5, Z0 - BRG_T, 25, BRG_T + z64o - Z0, facecolor='#bbbbbb', edgecolor='black')
 rect(ax2, xo - BRG_D / 2, Z0 - BRG_T, BRG_D, BRG_T, facecolor='#88aadd', edgecolor='black', alpha=0.6)
 rect(ax2, xo - BRG_D / 2, zfront - BRG_T, BRG_D, BRG_T, facecolor='#88aadd', edgecolor='black', alpha=0.6)
-ax2.text(xo, z64o + (T32 - GAP) / 2, "64T sortie", ha='center', fontsize=8)
+ax2.text(xo, z64o + (T32 - GAP) / 2, "80T sortie", ha='center', fontsize=8)
 ax2.annotate("jeu ≥1 mm", xy=(xo - 30, Z0 + T64 + GAP / 2), xytext=(xo - 62, Z0 + T64 + 14),
              fontsize=7.5, arrowprops=dict(arrowstyle='->', lw=0.8))
 ax2.annotate("roulement 6805\n(25×37×7)", xy=(x - 10, Z0 - BRG_T / 2), xytext=(-25, Z0 - 24),
@@ -108,7 +108,7 @@ ax2.annotate("tourillon Ø25\n(vers poulie)", xy=(xo + 6, zfront + PLATE + 1),
 # Sortie de boîte : le tourillon avant traverse la plaque (poulie côté extérieur)
 rect(ax2, xo - 12.5, zfront, 25, PLATE + 8, facecolor='#bbbbbb', edgecolor='black')
 
-ax2.set_xlim(-30, 165); ax2.set_ylim(Z0 - PLATE - 40, zfront + PLATE + 18)
+ax2.set_xlim(-32, 195); ax2.set_ylim(Z0 - PLATE - 40, zfront + PLATE + 18)
 ax2.set_aspect('equal'); ax2.axis('off')
 
 fig.tight_layout()

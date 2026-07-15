@@ -28,6 +28,7 @@ using ctl::clampf;
 using ctl::deadzone;
 using ctl::mixArcade;
 using ctl::slew;
+using ctl::turnLimit;
 
 constexpr float PI_F = 3.14159265358979f;
 
@@ -254,7 +255,8 @@ void tick()
         m_brake_r.reset();
         float fwd_t = deadzone(in.y, cfg.thr_deadzone);
         const float turn_t = deadzone(in.x, cfg.thr_deadzone);
-        if (cfg.allow_reverse == 0.f && fwd_t < 0.f) fwd_t = 0.f;   // recul interdit ?
+        if (cfg.allow_reverse == 0.f && fwd_t < 0.f) fwd_t = 0.f;              // recul interdit ?
+        else if (fwd_t < 0.f) fwd_t = std::max(fwd_t, -cfg.rev_limit);         // recul BRIDÉ (50 % défaut)
 
         // 1) Limiteur de pente : interdit une variation trop BRUSQUE (coup de manche « sec »).
         m_fwd_cmd = slew(fwd_t, m_fwd_cmd, cfg.thr_ramp_per_s, hw::CTRL_DT_S);
@@ -262,12 +264,10 @@ void tick()
         fwd = m_fwd_cmd;
         turn = m_turn_cmd;
 
-        // 2) Anti-renversement : borne l'AMPLITUDE du virage pour que a_lat = v·ω reste
-        //    ≤ a_lat_max (prédictif). a_lat ≈ 2·turn_gain·Vmax²·|fwd|·|turn| / voie.
-        const float vmax_mps = std::max(cfg.speed_limit_ms, 0.3f);
-        const float denom = 2.f * std::max(cfg.turn_gain, 0.01f) * vmax_mps * vmax_mps * fabsf(fwd);
-        float turn_max = 1.f;
-        if (denom > 1e-3f) turn_max = clampf(cfg.a_lat_max * hw::TRACK_M / denom, 0.f, 1.f);
+        // 2) Anti-renversement « rampe » : la limite de virage suit la vitesse MESURÉE.
+        //    |v| ≤ turn_full_ms → ±100 % (pivot sur place, v≈0) ; puis décroissance LINÉAIRE
+        //    jusqu'à turn_hi (±50 % défaut) atteinte à speed_limit_ms. Sans encodeurs, v=0 → pas de bridage.
+        const float turn_max = turnLimit(fabsf(v_veh), cfg.turn_full_ms, cfg.speed_limit_ms, cfg.turn_hi);
         turn = clampf(turn, -turn_max, turn_max);
         m_turn_cmd = turn;   // garde l'état borné (pas de windup de la rampe au-delà de la limite)
 

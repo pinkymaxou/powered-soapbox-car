@@ -21,11 +21,8 @@ const ParamDesc PARAMS[] =
 {
     {"speed_limit_ms",  "Limite vitesse (m/s)",   PType::Float, 0.3f,  3.3f,   7.f,    &KartConfig::speed_limit_ms},
     {"duty_cap_frac",   "Plafond PWM (0-1)",       PType::Float, 0.05f, 0.50f,  1.f,    &KartConfig::duty_cap_frac},
-    {"thr_deadzone",    "Zone morte accel.",       PType::Float, 0.f,   0.06f,  0.30f,  &KartConfig::thr_deadzone},
-    {"thr_top_margin",  "Marge haute accel.",      PType::Float, 0.f,   0.05f,  0.30f,  &KartConfig::thr_top_margin},
-    {"thr_ramp_per_s",  "Rampe accel. (1/s)",      PType::Float, 0.2f,  2.f,    20.f,   &KartConfig::thr_ramp_per_s},
-    {"thr_min_raw",     "Brut accel. min",         PType::Int,   0.f,   200.f,  4095.f, &KartConfig::thr_min_raw},
-    {"thr_max_raw",     "Brut accel. max",         PType::Int,   0.f,   3000.f, 4095.f, &KartConfig::thr_max_raw},
+    {"thr_deadzone",    "Zone morte manche",       PType::Float, 0.f,   0.06f,  0.30f,  &KartConfig::thr_deadzone},
+    {"thr_ramp_per_s",  "Douceur avance (D/s)",    PType::Float, 0.2f,  2.f,    20.f,   &KartConfig::thr_ramp_per_s},
     {"vbat_div_ratio",  "Ratio diviseur Vbat",     PType::Float, 1.f,   7.667f, 20.f,   &KartConfig::vbat_div_ratio},
     {"vbat_warn_v",     "Vbat avertissement (V)",  PType::Float, 12.f,  16.5f,  21.f,   &KartConfig::vbat_warn_v},
     {"vbat_cut_v",      "Vbat coupure LVC (V)",    PType::Float, 13.5f, 15.0f,  20.f,   &KartConfig::vbat_cut_v},
@@ -40,7 +37,11 @@ const ParamDesc PARAMS[] =
     {"vlim_ki",         "Limiteur PID Ki (m/s)",   PType::Float, 0.f,   0.50f,  10.f,   &KartConfig::vmax_ki},
     {"vlim_kd",         "Limiteur PID Kd (m/s)",   PType::Float, 0.f,   0.f,    2.f,    &KartConfig::vmax_kd},
     {"turn_gain",       "Gain de virage (0-1)",    PType::Float, 0.f,   0.6f,   1.f,    &KartConfig::turn_gain},
-    {"a_lat_max",       "Accel. lat. max (m/s2)",  PType::Float, 0.5f,  2.5f,   8.f,    &KartConfig::a_lat_max},
+    // Anti-renversement « rampe » : virage ±100 % sous turn_full_ms, décroît linéairement
+    // jusqu'à turn_hi à speed_limit_ms (vitesse MESURÉE). Recul plafonné à rev_limit.
+    {"turn_full_ms",    "Virage 100% sous (m/s)",  PType::Float, 0.1f,  0.5f,   3.f,    &KartConfig::turn_full_ms},
+    {"turn_hi",         "Virage max a Vmax (0-1)", PType::Float, 0.1f,  0.5f,   1.f,    &KartConfig::turn_hi},
+    {"rev_limit",       "Limite recul (0-1)",      PType::Float, 0.f,   0.5f,   1.f,    &KartConfig::rev_limit},
     {"turn_rate",       "Douceur virage (D/s)",    PType::Float, 0.3f,  3.0f,   20.f,   &KartConfig::turn_rate},
     {"use_encoders",    "Utiliser encodeurs (0/1)", PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::use_encoders},
     {"allow_reverse",   "Marche arriere (0/1)",    PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::allow_reverse},
