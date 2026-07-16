@@ -6,7 +6,8 @@
 // ── Cotes principales (mm) ──
 WHEEL_D = 254;   WHEEL_W = 70;      // roues 10"
 TRACK   = 840;                       // voie avant (centres)
-WBASE   = 1100;                      // essieu avant → roulette
+SHIFT   = 325;                       // RECUL de l'essieu dans la caisse (réduit le rayon d'encombrement)
+WBASE   = 1090 - SHIFT;              // essieu avant → pivot roulette (765)
 CLEAR   = 80;                        // garde au sol
 LU_W = 38; LU_H = 64;                // 2×3 sur chant
 PLY  = 12.7;                         // contreplaqué 1/2"
@@ -31,19 +32,40 @@ module frame()
     {
         // traverse avant LARGE (porte l'essieu, au plus près des roues) + fermeture de baie
         translate([  20, -410, CLEAR]) lumber_y(820);
-        translate([ 300, -410, CLEAR]) lumber_y(820);
+        translate([ 300, -370, CLEAR]) lumber_y(740);   // raccourcie : dégage les roues (essieu reculé)
         // longerons de l'habitacle (caisse plus étroite que la voie)
         for (sy = [-1, 1]) translate([20, sy * 300 - LU_W / 2, CLEAR]) lumber(1010);
         // traverses intermédiaire + arrière
         translate([ 640, -300, CLEAR]) lumber_y(600);
         translate([ 990, -300, CLEAR]) lumber_y(600);
-        // supports d'essieu (paliers près des moyeux, ≤ 5 cm)
-        for (sy = [-1, 1]) translate([-20, sy * 370 - 20, CLEAR]) cube([40, 40, AXLE_Z - CLEAR + 20]);
     }
-    // plancher contreplaqué 1/2"
-    color("Wheat") translate([20, -410, FLOOR_Z]) ply(310, 820);                   // baie technique
+    // plancher contreplaqué 1/2" (baie : passages de roues découpés)
+    color("Wheat") difference()
+    {
+        translate([20, -410, FLOOR_Z]) ply(310, 820);                              // baie technique
+        for (sy = [-1, 1]) translate([SHIFT - 150, sy * 395 - 20, FLOOR_Z - 1]) cube([300, 40, PLY + 2]);
+    }
     color("Wheat") translate([330, -300, FLOOR_Z]) ply(700, 600);                  // habitacle
-    // essieu avant : tige filetée 1/2" traversante
+}
+
+// Batterie moto 12 V (~150×87×105) — À L'AVANT AU CENTRE de la baie : son poids
+// dans le museau charge l'essieu moteur (traction/freinage) et abaisse le CG.
+module battery()
+{
+    translate([40, -44, FLOOR_Z + PLY])
+    {
+        color("DimGray") cube([150, 88, 105]);
+        color("Black")   translate([0, 0, 105]) cube([150, 88, 6]);
+        color("Red")     translate([25, 44, 111]) cylinder(d = 14, h = 12);   // borne +
+        color("Silver")  translate([125, 44, 111]) cylinder(d = 14, h = 12);  // borne −
+    }
+}
+
+// Supports d'essieu + tige (positionnés SUR L'ESSIEU, hors du décalage de caisse)
+module axle_group()
+{
+    color("BurlyWood") for (sy = [-1, 1])
+        translate([-20, sy * 370 - 20, CLEAR]) cube([40, 40, AXLE_Z - CLEAR + 20]);
     color("Silver") translate([0, 0, AXLE_Z]) rotate([90, 0, 0]) cylinder(d = 12.7, h = 940, center = true);
 }
 
@@ -111,8 +133,9 @@ module caster()
 }
 
 // ───────────────────────────── Assemblage ─────────────────────────────
-frame();
-seat();
+// La caisse est décalée de -SHIFT : l'essieu recule dans le véhicule (museau devant),
+// le centre de pivot se rapproche du milieu → rayon d'ENCOMBREMENT réduit (~0,95 m vs ~1,27 m).
+translate([-SHIFT, 0, 0]) { frame(); seat(); caster(); battery(); }
+axle_group();
 drive_side(-1);
 drive_side(1);
-caster();

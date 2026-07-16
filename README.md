@@ -33,7 +33,7 @@ flowchart TB
     subgraph AV["◄ AVANT ► — 2 roues MOTRICES + BAIE TECHNIQUE"]
         direction LR
         AVG["🛞 roue AV G<br/>moteur + réducteur + courroie"]
-        BAY["🔋 BAIE TECHNIQUE<br/>2× batteries 20 V<br/>🧠 ESP32 + driver 2 canaux"]
+        BAY["🔋 BAIE TECHNIQUE (museau)<br/>batterie moto 12 V<br/>🧠 ESP32 + driver 2 canaux"]
         AVD["🛞 roue AV D<br/>moteur + réducteur + courroie"]
         AVG ~~~ BAY ~~~ AVD
     end
@@ -67,15 +67,17 @@ flowchart TB
 ![Concept 3D du kart](doc/cad/kart_concept.png)
 
 > Concept visuel régénérable : [`doc/cad/kart_concept.scad`](doc/cad/kart_concept.scad) (OpenSCAD —
-> 2 roues 10″ motorisées à l'avant, roulette 10″ folle sur queue surélevée, banquette 2 enfants,
-> garde-corps latéraux, arrêt d'urgence au sommet du dossier, châssis 2×3 + contreplaqué 1/2″).
+> 2 roues 10″ motorisées à l'avant **avec essieu reculé dans la caisse** (museau ~30 cm devant
+> l'essieu → braquage court), **batterie moto 12 V à l'avant au centre**, roulette 10″ folle sur
+> queue surélevée, banquette 2 enfants, garde-corps latéraux, arrêt d'urgence au sommet du
+> dossier, châssis 2×3 + contreplaqué 1/2″).
 
 ![Plan coté du kart](doc/schematics/kart_dimensions.png)
 
 > Plan coté (mm) régénérable : `python doc/schematics/kart_dimensions.py` — vues de côté et de
 > dessus aux cotes du concept.
 
-**Gabarit :** longueur ~150–180 cm · largeur ~96 cm · **voie avant ~84 cm** · **2 roues motrices avant Ø25,4 cm (10″) + baie technique à l'avant** + **1 roulette arrière libre** · **garde-corps latéraux** + **arrêt d'urgence au sommet du dossier (centré)** · assise basse 16 cm (anti-basculement).
+**Gabarit :** longueur ~125 cm · largeur ~91 cm · **voie avant ~84 cm** · **empattement ~76 cm** (essieu **reculé** dans la caisse, museau ~30 cm) · **2 roues motrices avant Ø25,4 cm (10″) + baie technique dans le museau** + **1 roulette arrière libre 10″** · **garde-corps latéraux** + **arrêt d'urgence au sommet du dossier (centré)** · assise basse (anti-basculement).
 
 > ⚠️ Réservé au **terrain plat, sous surveillance adulte**. Vitesse estimée ~8–11,5 km/h (~3,2 m/s), autonomie ~10–20 min. **Un tricycle bascule plus facilement qu'un 4 roues** → anti-renversement logiciel (voir §3).
 
@@ -90,7 +92,7 @@ flowchart TB
 | **Roues** | **2 × motrices avant Ø25,4 cm (10″)** (jante plastique, roulement 1/2") + **1 roulette arrière pivotante libre** |
 | **Pilotage** | **Manette Bluetooth** (stick : Y = avance/recul, X = virage) ; **calibration obligatoire** ; joystick analogique réservé (futur) |
 | **Électronique** | **ESP32** → **driver double canal 20 A / 6–30 V** (PWM + DIR / canal), **PWM bridé ~50 %** ; **baie technique à l'AVANT** (près des 2 moteurs, câblage de puissance court) |
-| **Énergie** | **2 × packs 20 V / 5 Ah en parallèle** (diode-OR) + 2 adaptateurs vers bornes de puissance ; **logés à l'AVANT** dans la baie technique |
+| **Énergie** | **Batterie moto 12 V** (option probable), **à l'avant au centre du museau** — son poids charge l'essieu moteur ; alternative : **2 × packs 20 V / 5 Ah en parallèle** (diode-OR) + 2 adaptateurs |
 | **Vitesse** | Mesurée par **2 capteurs d'angle AS5600** (un par roue, 1 par bus I²C) ; asservissement à **500 Hz** |
 | **Commandes** | Pilotage à la **manette Bluetooth** ; bouton **armement** (physique ou START de la manette, ~1 s) ; **arrêt d'urgence matériel** au **sommet du dossier, centré** (coupe tout, accessible aux 2 enfants et à un adulte derrière) **+** arrêt d'urgence logiciel = bouton **B** de la manette ; **frein électrique par défaut** |
 | **Châssis** | **Bois** allégé : madriers **2×3** + plancher **contreplaqué 6 mm** |
@@ -101,9 +103,9 @@ flowchart TB
 - **Direction différentielle = mécanique nulle** : plus de volant, colonne, pivots, fusées, bielle ni barre d'attaque → moins de pièces à fabriquer, à régler et à user ; on **tourne en logiciel** (différence de PWM entre les 2 roues). **Pivot sur place** quand l'avance ≈ 0.
 - **Roulette arrière libre** : une seule roulette pivotante non motorisée s'oriente d'elle-même → géométrie simple, pas d'essieu arrière.
 - **Stabilité maîtrisée** : un tricycle bascule plus vite qu'un 4 roues → assise basse (16 cm), **voie avant large** + **anti-renversement firmware** (bornage de l'amplitude de virage selon la vitesse **et** limiteur de pente sur le virage).
-- **Moteurs 12 V sur batterie 20 V** : le **PWM est plafonné à ~50 %** (≈ 10 V moyens) pour éviter la surchauffe des moteurs.
+- **Moteurs 12 V sur batterie 20 V** : le **PWM est plafonné à ~50 %** (≈ 10 V moyens) pour éviter la surchauffe des moteurs. Avec la **batterie moto 12 V** envisagée, ce bridage devient inutile (tension nominale).
 - **Roues avant à roulement libre** : entraînées par **courroie** (poulie vissée sur la jante), elles gardent leur roulement d'origine — pas d'essieu moteur traversant.
-- **Baie technique à l'avant** : batteries + driver + ESP32 sont regroupés **à l'avant, près des 2 moteurs** → **câblage de puissance court** (moins de pertes, moins de fils ~10 AWG à tirer), masse motrice et énergie concentrées sur l'essieu moteur. Disposition longitudinale : **AVANT (2 roues motrices + baie technique) → HABITACLE → ARRIÈRE (roulette libre)**.
+- **Baie technique à l'avant** : batteries + driver + ESP32 sont regroupés **à l'avant, près des 2 moteurs** → **câblage de puissance court** (moins de pertes, moins de fils ~10 AWG à tirer), masse motrice et énergie concentrées sur l'essieu moteur. Disposition longitudinale : **MUSEAU (baie technique + batterie) → ESSIEU MOTEUR → HABITACLE → ARRIÈRE (roulette libre)**. **L'essieu est reculé de ~32 cm dans la caisse** : en pivot sur place (rotation autour du milieu de l'essieu) l'encombrement balayé passe de ~1,27 m à **~0,95 m de rayon** (braquage court), et le poids de la **batterie au centre du museau** charge les roues motrices (traction + freinage).
 - **Sécurité** : **arrêt d'urgence matériel central**, au **sommet du dossier** (à portée des deux enfants et d'un adulte derrière), **coupe-courant général** (en série dans la gate du latch, ESP32 compris) **et** arrêt d'urgence logiciel manette (bouton B) ; démarrage par **bouton momentané** + latch low-side (2× MOSFET, l'ESP se maintient en vie), fusible par pack, **frein électrique par défaut** (déconnexion manette → freinage immédiat), coupure basse tension (LVC), **watchdog 5 s**, démarrage **désarmé** par défaut, carters sur courroies/poulies, ceinture, casque.
 
 ---
@@ -112,18 +114,18 @@ flowchart TB
 
 | Cote | Valeur | Pourquoi |
 |---|---|---|
-| Longueur totale | **150 cm** (prévoir **jusqu'à ~180 cm**) | **Baie technique à l'avant** (batteries, driver, électronique, ~30 cm près des 2 moteurs) + habitacle + dossier + porte-à-faux jusqu'à la roulette arrière |
+| Longueur totale | **~125 cm** (plan coté ; prévoir marge) | **Museau** (baie technique ~30 cm **devant l'essieu**) + habitacle + dossier + porte-à-faux jusqu'à la roulette arrière |
 | Largeur hors-tout | **96 cm** | Doit loger **deux enfants côte à côte** |
 | **Largeur intérieure banquette** | **~80 cm** | 2 × ~40 cm/enfant (épaules + coudes) |
 | **Garde-corps latéraux** (CP 1/2″, de chaque côté de la banquette) | hauteur **~30 cm** au-dessus du plancher, longueur ~40 cm | Empêchent l'enfant de **tomber sur le côté** ; arêtes arrondies |
-| **Baie technique** (avant) | longueur ~**30 cm** (0–30 cm depuis l'essieu avant) | Loge **2 packs 20 V, driver, ESP32, breakout** près des 2 moteurs (câblage court) |
+| **Baie technique** (museau, **devant l'essieu**) | longueur ~**30 cm** | Loge la **batterie (moto 12 V probable, centrée)** + driver, ESP32, breakout près des 2 moteurs (câblage court) ; le poids devant l'essieu **charge les roues motrices** |
 | **Voie avant** (écartement roues motrices, axe à axe) | **84 cm** | Voie large = **anti-basculement** ET **bras de levier du différentiel** (plus la voie est large, plus le virage est franc à différentiel donné) |
-| **Empattement** (essieu AV ↔ roulette AR) | **~110 cm** | Assez long pour la stabilité (les 2 enfants restent entre l'essieu moteur et la roulette) ; la roulette ne fait que suivre, le pivot se fait sur l'essieu avant |
+| **Empattement** (essieu AV ↔ pivot roulette) | **~76 cm** (essieu **reculé** de ~32 cm dans la caisse) | **Braquage court** : le pivot-sur-place tourne autour du milieu de l'essieu → essieu proche du centre du véhicule = **rayon d'encombrement ~0,95 m** ; et davantage de poids sur les roues motrices (traction/freinage) |
 | Hauteur d'assise (sol → fond du siège) | **16 cm** | Centre de gravité **bas** = limite le renversement |
 | Garde au sol (sous châssis) | **8 cm** | Passe les petits obstacles sans talonner |
 | Hauteur de dossier (assise → haut) | **34 cm** | Soutient le dos des deux enfants |
 | **Roues motrices avant (×2 identiques)** | **Ø25,4 cm (10″)**, jante plastique + pneu PVC dur | Mêmes roues à gauche/droite → plan simplifié |
-| **Roulette arrière (×1)** | **Roulette pivotante (caster) Ø ~12,5 cm (5")**, hauteur montée ~15 cm, charge ≥ 50 kg | Non motorisée, s'oriente librement ; hauteur de montage choisie pour garder le châssis **de niveau** avec l'essieu avant (centre à 15 cm) |
+| **Roulette arrière (×1)** | **Roue 10″ (Ø25,4 cm) sur fourche pivotante**, sous une **queue surélevée** (platine à ~33 cm), charge ≥ 50 kg | Non motorisée, s'oriente librement (360°) ; **même roue que l'avant** (pièces communes) ; la queue surélevée garde le châssis **de niveau** |
 | Moyeu / fixation roues avant | **Roulement métal, alésage 1/2"**, moyeu large ~3,8 cm | Tourne **libre** sur un **essieu mort traversant : tige filetée 1/2″ × 36″** (grade **8.8/B7**, pas de la quincaillerie), **locknuts + rondelles à chaque bout**, entretoises pour figer la position latérale (alignement courroie), supports châssis au plus près des moyeux (≤ 3–5 cm, flexion) |
 
 **Idée directrice :** assise basse + **voie avant large (84 cm)** = un engin **qui reste stable** malgré le format tricycle et deux enfants côte à côte. L'anti-renversement firmware complète la géométrie.
@@ -132,24 +134,24 @@ flowchart TB
 > châssis en **T** : **traverse avant large** portant les **paliers d'essieu au plus près des
 > roues** (≤ 3–5 cm, sinon la tige filetée fléchit), longerons étroits derrière. L'espace le
 > long de l'essieu entre longeron et roue loge le **moteur + réducteur + courroie** de chaque
-> côté. ⚠️ Si la voie change, mettre à jour `hw::TRACK_M` dans le firmware (anti-renversement).
+> côté. ⚠️ L'anti-renversement firmware est une rampe **empirique** (`turn_full_ms`, `turn_hi`) : à re-régler au banc si la géométrie change.
 
 ---
 
 ## 2. Position siège / commandes
 
-Repère 0 = essieu **avant** (roues motrices) ; cotes mesurées **vers l'arrière**. La **baie technique** (batteries + électronique) occupe l'avant, **entre l'essieu moteur et la banquette**.
+Repère 0 = essieu **avant** (roues motrices) ; cotes mesurées **vers l'arrière** (négatives = museau). La **baie technique** (batterie + électronique) occupe le **museau, devant l'essieu**.
 
 | Élément | Distance depuis essieu AV | Hauteur / sol |
 |---|---|---|
-| Essieu avant (roues motrices, repère) | **0 cm** | centre à 15 cm (roue Ø30) |
-| **Baie technique** (batteries + électronique) | **~0–30 cm** | dans le châssis, bas |
-| **Cale-pieds** | **~35 cm** | repose-pieds au-dessus/derrière la baie |
-| Avant de l'assise | **~65 cm** | 16 cm |
-| **Fond du dossier** | **~95 cm** | assise à 16 cm |
-| Roulette arrière (libre) | **~110 cm** | centre selon Ø ~12,5 cm |
+| **Baie technique** (batterie + électronique) | **~−30–0 cm (museau)** | sur le plancher, bas |
+| Essieu avant (roues motrices, repère) | **0 cm** | centre à 12,7 cm (roue Ø25,4) |
+| **Cale-pieds** | **~5 cm** | repose-pieds juste derrière l'essieu |
+| Avant de l'assise | **~32 cm** | ~20 cm |
+| **Fond du dossier** | **~62 cm** | assise à ~20 cm |
+| Pivot de la roulette arrière (libre) | **~76 cm** | roue 10″ (Ø25,4), platine à ~33 cm |
 
-➡️ Avec la **manette Bluetooth**, il n'y a **plus de boîtier de pédales ni de volant** à positionner : seule compte l'ergonomie d'assise. **Dossier → cale-pieds ≈ 60 cm** (95 − 35) ✔ jambe presque tendue, léger pli du genou. Prévoir un endroit sûr pour **poser/charger la manette**. Siège **réglable** (§6) pour s'adapter à la taille de l'enfant.
+➡️ Avec la **manette Bluetooth**, il n'y a **plus de boîtier de pédales ni de volant** à positionner : seule compte l'ergonomie d'assise. **Dossier → cale-pieds ≈ 57 cm** (62 − 5) ✔ jambe presque tendue, léger pli du genou. Prévoir un endroit sûr pour **poser/charger la manette**. Siège **réglable** (§6) pour s'adapter à la taille de l'enfant.
 
 ➡️ **Arrêt d'urgence au sommet du dossier (centré)** : le **champignon matériel** (coupe-circuit en série dans la gate du latch) est monté **en haut du dossier, au centre** — accessible aux **deux enfants** et à un **adulte qui suit le kart**. Il **coupe tout** (puissance **et** ESP32), en complément de l'arrêt d'urgence **logiciel** de la manette (bouton **B**). **Garde-corps latéraux** de chaque côté de la banquette (pas de séparation centrale : banquette continue). Le **pilotage reste à la manette Bluetooth**.
 
@@ -157,13 +159,13 @@ Repère 0 = essieu **avant** (roues motrices) ; cotes mesurées **vers l'arrièr
 
 ```mermaid
 flowchart LR
-    AV["🛞 Essieu AV motrice<br/>Ø25 cm — 0 cm"]
-    BAY["🔋 Baie technique<br/>~0–30 cm"]
-    ASS["Avant assise<br/>~65 cm"]
-    DOS["Dossier<br/>~95 cm"]
-    AR["🛞 Roulette AR libre<br/>~110 cm (Ø12,5)"]
+    BAY["🔋 Museau : baie technique<br/>batterie moto 12 V — ~−30–0 cm"]
+    AV["🛞 Essieu AV motrice<br/>Ø25,4 cm — 0 cm"]
+    ASS["Avant assise<br/>~32 cm"]
+    DOS["Dossier<br/>~62 cm"]
+    AR["🛞 Roulette AR libre<br/>pivot ~76 cm (roue 10″)"]
 
-    AV --> BAY --> ASS --> DOS --> AR
+    BAY --> AV --> ASS --> DOS --> AR
 
     classDef axe fill:#cfe2ff,stroke:#333,stroke-width:2px;
     classDef caster fill:#e2e3e5,stroke:#333,stroke-width:2px;
@@ -175,7 +177,7 @@ flowchart LR
     class BAY elec;
 ```
 
-> **Banquette unique 2 places** : les deux enfants côte à côte (~80 cm intérieure), même dossier. Le **conducteur (gauche)** tient la **manette** ; le côté droit est passager. La **baie technique** (batteries + électronique) est **à l'avant**, entre l'essieu moteur et l'assise.
+> **Banquette unique 2 places** : les deux enfants côte à côte (~80 cm intérieure), même dossier. Le **conducteur (gauche)** tient la **manette** ; le côté droit est passager. La **baie technique** (batterie + électronique) est **dans le museau, devant l'essieu moteur**.
 
 ### Vue de dessus (disposition 2 places)
 
@@ -276,7 +278,7 @@ Paramètres web : **`turn_gain`** (autorité de virage), **`turn_full_ms`** / **
 | | **2 × capteur d'angle AS5600** + aimant diamétral | un par roue avant, **1 par bus I²C** ; magnétique sans contact, **12 bits absolu I²C** (adresse fixe 0x36), **3,3 V natif** (aucun level-shift), pull-ups 4,7 kΩ |
 | **Pilotage** | **Manette Bluetooth** | stick : Y = avance/recul, X = virage ; bouton **B** = arrêt d'urgence, bouton **START** = armement ; **calibration obligatoire** |
 | | *Joystick analogique* | **réservé (futur, non câblé)** : 2 voies de l'ADS1115 (A1/A2) prévues derrière la même abstraction logicielle |
-| **Énergie / électronique** | Batteries (**2 requises**) | **2 × packs 20 V / 5 Ah** à glissière, **en parallèle** (~40 A total) ; **logées à l'AVANT** (baie technique, près des moteurs) |
+| **Énergie / électronique** | Batterie | **Batterie moto 12 V** (option probable, ~40 A de pointe OK, moteurs à tension nominale → plus de bridage PWM) **au centre du museau** ; alternative : **2 × packs 20 V / 5 Ah** à glissière en parallèle (~40 A total) |
 | | **Adaptateurs de batterie** (×2) | Support à glissière → bornes de puissance (+ / −) |
 | | **Diodes idéales (diode-OR)** — requis | **2 × modules 40 A / 60 A** (un par pack) + 1 fusible/pack |
 | | **Interrupteur d'alimentation (latch)** | **2× MOSFET N IRFZ44N** low-side (+ dissipateur) + **opto** + zener/pull-down + **bouton démarrage** |
