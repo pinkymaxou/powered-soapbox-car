@@ -32,11 +32,13 @@ inline float slew(float target, float current, float rate, float dt)
     return target;
 }
 
-// Mix arcade différentiel : gauche = avance − virage·gain, droite = avance + virage·gain.
+// Mix arcade différentiel : gauche = avance + virage·gain, droite = avance − virage·gain.
 inline void mixArcade(float fwd, float turn, float gain, float& out_l, float& out_r)
 {
-    out_l = clampf(fwd - turn * gain, -1.f, 1.f);
-    out_r = clampf(fwd + turn * gain, -1.f, 1.f);
+    // Stick à gauche (turn < 0) → la roue DROITE accélère et la GAUCHE ralentit (et
+    // inversement) : le kart tourne du côté du stick.
+    out_l = clampf(fwd + turn * gain, -1.f, 1.f);
+    out_r = clampf(fwd - turn * gain, -1.f, 1.f);
 }
 
 // Anti-renversement « rampe » : limite de virage selon la vitesse VÉHICULE MESURÉE (m/s).

@@ -273,22 +273,43 @@ std::string buildConfigJson()
     {
         const ParamDesc& p = PARAMS[i];
         const char* type = (PType::Float == p.type) ? "float" : (PType::Int == p.type ? "int" : "bool");
-        char buf[640];   // cat + help (infobulle) inclus — textes statiques SANS guillemets doubles
-        snprintf(buf, sizeof(buf),
-                 "%s{\"name\":\"%s\",\"desc\":\"%s\",\"cat\":\"%s\",\"help\":\"%s\","
-                 "\"type\":\"%s\",\"min\":%g,\"max\":%g,\"val\":%g}",
-                 i ? "," : "", p.name, p.desc, p.cat, p.help, type, p.min, p.max, cfg.*(PARAMS[i].field));
-        out += buf;
+        // Textes (desc/cat/help, statiques SANS guillemets doubles) concaténés DIRECTEMENT dans
+        // la std::string (tas) : pas de grand tampon sur la PILE httpd — un char buf[640] ici a
+        // déjà débordé la pile de la tâche (4 Ko) et gelé le LEDC par corruption mémoire.
+        if (i) out += ',';
+        out += "{\"name\":\"";  out += p.name;
+        out += "\",\"desc\":\""; out += p.desc;
+        out += "\",\"cat\":\"";  out += p.cat;
+        out += "\",\"help\":\""; out += p.help;
+        out += "\",\"type\":\""; out += type;
+        char num[96];   // uniquement les nombres
+        snprintf(num, sizeof(num), "\",\"min\":%g,\"max\":%g,\"val\":%g}",
+                 p.min, p.max, cfg.*(PARAMS[i].field));
+        out += num;
     }
     out += "]}";
     return out;
+}
+
+// Échelle d'affichage de la jauge batterie — décidée ICI (le client ne connaît aucun seuil) :
+// bas = seuil de coupure LVC du type détecté, haut = tension pleine charge au repos.
+float battDispLo()
+{
+    const int bt = g_status.m_batt_type.load();
+    return (24 == bt) ? hw::VBAT24_CUT_V : (12 == bt) ? hw::VBAT12_CUT_V : 0.f;
+}
+float battDispHi()
+{
+    const int bt = g_status.m_batt_type.load();
+    return (24 == bt) ? hw::VBAT24_FULL_V : (12 == bt) ? hw::VBAT12_FULL_V : 0.f;
 }
 
 std::string buildStatusJson()
 {
     char buf[576];
     snprintf(buf, sizeof(buf),
-             "{\"type\":\"status\",\"state\":%d,\"fault\":%d,\"faults\":%u,\"vbat\":%.2f,\"batt_type\":%d,"
+             "{\"type\":\"status\",\"state\":%d,\"fault\":%d,\"faults\":%u,\"vbat\":%.2f,"
+             "\"batt_type\":%d,\"batt_lo\":%.1f,\"batt_hi\":%.1f,"
              "\"speed_ms\":%.2f,\"speed_l\":%.2f,\"speed_r\":%.2f,\"fwd\":%.3f,\"turn\":%.3f,"
              "\"out_l\":%.3f,\"out_r\":%.3f,\"brake\":%s,\"arming\":%s,\"btn_start\":%s,"
              "\"pad_conn\":%s,\"pad_batt\":%d,\"pad_x\":%.3f,\"pad_y\":%.3f,"
@@ -296,6 +317,7 @@ std::string buildStatusJson()
              "\"pad_rx2\":%.3f,\"pad_ry2\":%.3f,\"pad_btns\":%u}",
              g_status.m_state.load(), g_status.m_fault.load(), g_status.m_faults.load(),
              g_status.m_vbat.load(), g_status.m_batt_type.load(),
+             battDispLo(), battDispHi(),
              g_status.m_speed_ms.load(),
              g_status.m_speed_l.load(), g_status.m_speed_r.load(),
              g_status.m_fwd.load(), g_status.m_turn.load(),
@@ -670,6 +692,7 @@ void webServerStart()
     ESP_ERROR_CHECK(esp_timer_start_periodic(m_hist_timer, 1000000));   // 1 s
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = 8192;   // défaut 4096 : trop juste pour WS + formatage %g (débordement vécu)
     if (ESP_OK != httpd_start(&m_server, &config))
     {
         ESP_LOGE(TAG, "Échec démarrage HTTP");

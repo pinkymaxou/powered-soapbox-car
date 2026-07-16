@@ -125,7 +125,7 @@ const ST=["IDLE","CALIBRATION","ARMÉ","DÉFAUT"];                       // libe
 const FA=["—","E-STOP","BATTERIE BASSE","NON CALIBRÉ","ENCODEUR BLOQUÉ","ENCODEUR INVERSÉ","ENCODEUR ABERRANT"];  // libellés par FAULT
 let ws,timer,histTimer,built=false;
 let speedScale=3.3;  // m/s ≙ 100 % (barres de vitesse), réglé depuis la config
-let battLow=10.5, battFull=13, battType=-1;   // échelle selon la batterie DÉTECTÉE (12/24 V)
+let battLow=0, battFull=1, battType=-1;   // échelle reçue du FIRMWARE (batt_lo/batt_hi du statut)
 
 // Onglets
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
@@ -310,7 +310,7 @@ function showStatus(s){
    why.innerHTML="🚫 <b>Le véhicule ne peut pas bouger</b>"+
      (b.length?(" :<ul><li>"+b.join("</li><li>")+"</li></ul>"):" (état : "+st+")");
  }
- setBattType(s.batt_type||0);
+ setBattType(s.batt_type||0,s.batt_lo||0,s.batt_hi||0);
  showFaults(s.faults>>>0);
  document.getElementById('status').textContent=
   `État : ${st}${s.fault?('  ·  défaut : '+(FA[s.fault]||s.fault)):''}\n`+
@@ -322,15 +322,15 @@ function showStatus(s){
 function deriveFromCfg(p){
  if(p.name==='speed_limit_ms') speedScale=Math.max(0.3,p.val);
 }
-// Type de batterie détecté au démarrage du kart (tension stable 3 s) : 0 = en cours, 12 ou 24.
-// Adapte le titre et l'échelle du graphique batterie (plomb : vide sous charge → pleine au repos).
-function setBattType(bt){
+// Échelle de la jauge batterie : ENTIÈREMENT décidée par le firmware (type détecté, seuils
+// codés en dur côté micro) — le client ne fait qu'appliquer batt_lo/batt_hi reçus du statut.
+function setBattType(bt,lo,hi){
  if(bt===battType)return; battType=bt;
- if(bt===24){battLow=21;battFull=26;} else {battLow=10.5;battFull=13;}
+ if(hi>lo){battLow=lo;battFull=hi;}
  const t=document.getElementById('batttitle');
  t.textContent=bt?`🔋 Batterie ${bt} V (${battLow}–${battFull} V) — 30 min`
                :'🔋 Batterie (détection du type…) — 30 min';
- if(chBatt){const y=chBatt.options.scales.y;y.min=battLow;y.max=battFull;y.ticks.stepSize=(battFull-battLow)/4;chBatt.update('none');}
+ if(chBatt&&hi>lo){const y=chBatt.options.scales.y;y.min=battLow;y.max=battFull;y.ticks.stepSize=(battFull-battLow)/4;chBatt.update('none');}
 }
 // Bits du masque « faults » (voir controller.cpp) : toutes les conditions ACTIVES en même temps.
 const FAULTS_DESC=[

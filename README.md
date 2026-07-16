@@ -225,7 +225,7 @@ Il n'y a **aucune pièce de direction mécanique** : pas de volant, pas de colon
 ```mermaid
 flowchart TD
     PAD["🎮 Manette Bluetooth<br/>stick Y = avance · stick X = virage"]
-    MIX["Mélange « arcade » (firmware)<br/>gauche = avance − virage·gain<br/>droite = avance + virage·gain"]
+    MIX["Mélange « arcade » (firmware)<br/>gauche = avance + virage·gain<br/>droite = avance − virage·gain"]
     LIM["Anti-renversement<br/>(amplitude bornée + limiteur de pente)"]
     ML["⚙️ Moteur AV gauche"]
     MR["⚙️ Moteur AV droite"]
@@ -247,7 +247,7 @@ flowchart TD
     class CAS caster;
 ```
 
-1. **Mélange « arcade »** : le firmware combine l'avance (stick Y) et le virage (stick X) en deux consignes de roue : `gauche = avance − virage·gain` et `droite = avance + virage·gain`. Tourner le stick à droite = roue gauche plus rapide → le kart vire à droite.
+1. **Mélange « arcade »** : le firmware combine l'avance (stick Y) et le virage (stick X) en deux consignes de roue : `gauche = avance + virage·gain` et `droite = avance − virage·gain`. Tourner le stick à droite = roue gauche plus rapide → le kart vire à droite.
 2. **Pivot sur place** : si l'avance ≈ 0 et qu'on pousse le stick latéralement, les deux roues tournent **en sens opposés** → le kart **tourne sur lui-même** (la roulette arrière pivote pour suivre).
 3. **Anti-renversement** : un tricycle bascule facilement, donc le virage est protégé sur **deux plans** :
    - **Rampe vitesse→virage (vitesse MESURÉE)** : sous `turn_full_ms` (~0,5 m/s, pivot sur place inclus), virage autorisé **±100 %** ; au-delà, la limite décroît **linéairement** jusqu'à `turn_hi` (±50 % par défaut) à la vitesse max. Plus on roule vite, moins on peut braquer fort. La **marche arrière est bridée** à `rev_limit` (50 % par défaut).

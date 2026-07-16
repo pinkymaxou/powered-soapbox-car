@@ -58,10 +58,12 @@ static void test_mix_arcade()
     float l = 0.f, r = 0.f;
     ctl::mixArcade(1.f, 0.f, 0.6f, l, r);       // tout droit → symétrique
     CHECK(near(l, 1.f) && near(r, 1.f));
-    ctl::mixArcade(0.f, 1.f, 0.6f, l, r);       // pivot sur place, plafonné par le gain
+    ctl::mixArcade(0.f, 1.f, 0.6f, l, r);       // stick à droite → pivot vers la DROITE
+    CHECK(near(l, 0.6f) && near(r, -0.6f));     // (gauche accélère, droite recule)
+    ctl::mixArcade(0.f, -1.f, 0.6f, l, r);      // stick à gauche → la roue DROITE accélère
     CHECK(near(l, -0.6f) && near(r, 0.6f));
     ctl::mixArcade(1.f, 1.f, 0.6f, l, r);       // saturation bornée à ±1
-    CHECK(near(l, 0.4f) && near(r, 1.f));
+    CHECK(near(l, 1.f) && near(r, 0.4f));
     ctl::mixArcade(-1.f, 0.f, 0.6f, l, r);      // marche arrière
     CHECK(near(l, -1.f) && near(r, -1.f));
 }

@@ -68,6 +68,10 @@ constexpr float   VBAT_DETECT_TOL_V     = 0.5f;      // écart min-max toléré 
 constexpr float   VBAT_DETECT_24V_MIN   = 18.0f;     // moyenne stable ≥ 18 V → 24 V, sinon 12 V
 constexpr float   VBAT12_WARN_V = 11.5f, VBAT12_CUT_V = 10.5f, VBAT12_RECOVER_V = 12.0f;
 constexpr float   VBAT24_WARN_V = 23.0f, VBAT24_CUT_V = 21.0f, VBAT24_RECOVER_V = 24.0f;
+// Pleine charge AU REPOS (haut de la jauge web ; le bas = seuil de coupure). L'échelle
+// d'affichage est décidée côté firmware et envoyée dans le statut (batt_lo / batt_hi).
+constexpr float   VBAT12_FULL_V = 13.0f;
+constexpr float   VBAT24_FULL_V = 26.0f;
 constexpr float EBRAKE_MIN_MPS       = 0.15f;  // en-dessous, on considère la roue arrêtée (frein PID)
 constexpr float ENC_STUCK_PWM        = 0.10f;
 constexpr int   ENC_STUCK_MS         = 1000;

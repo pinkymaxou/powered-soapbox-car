@@ -1,6 +1,6 @@
 // controller.cpp — Contrôle DIFFÉRENTIEL (variante expérimentale).
 // 2 roues avant motrices indépendantes + 1 roulette arrière. Pilotage manette (namespace input).
-// Mix arcade : y = avance, x = virage → gauche = avance − virage, droite = avance + virage.
+// Mix arcade : y = avance, x = virage → gauche = avance + virage, droite = avance − virage.
 // Sécurités : manette déconnectée / e-stop manette / non armé / LVC → FREINAGE (PID vitesse → 0).
 // Anti-renversement : le virage autorisé décroît avec la vitesse (borne l'accélération latérale).
 // ESP-IDF 6.1 / C++.

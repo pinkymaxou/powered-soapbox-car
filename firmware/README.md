@@ -18,7 +18,7 @@ sur 2 bus I²C), sécurités, **ruban WS2812B** et **configuration par Wi-Fi**.
        ARRIÈRE
 ```
 
-- **Mélange « arcade »** : `gauche = avance − virage·gain`, `droite = avance + virage·gain`.
+- **Mélange « arcade »** : `gauche = avance + virage·gain`, `droite = avance − virage·gain` (stick à gauche → roue droite plus rapide → le kart vire à gauche).
 - **Anti-renversement** : un tricycle se renverse facilement → la **limite de virage suit
   la vitesse mesurée** (rampe ±100 % → ±50 %) et le **recul est bridé**.
   Voir [Anti-renversement](#anti-renversement-virage-trop-sec).
