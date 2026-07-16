@@ -70,6 +70,11 @@ flowchart TB
 > 2 roues 10″ motorisées à l'avant, roulette 10″ folle sur queue surélevée, banquette 2 enfants,
 > garde-corps latéraux, arrêt d'urgence au sommet du dossier, châssis 2×3 + contreplaqué 1/2″).
 
+![Plan coté du kart](doc/schematics/kart_dimensions.png)
+
+> Plan coté (mm) régénérable : `python doc/schematics/kart_dimensions.py` — vues de côté et de
+> dessus aux cotes du concept.
+
 **Gabarit :** longueur ~150–180 cm · largeur ~96 cm · **voie avant ~84 cm** · **2 roues motrices avant Ø25,4 cm (10″) + baie technique à l'avant** + **1 roulette arrière libre** · **garde-corps latéraux** + **arrêt d'urgence au sommet du dossier (centré)** · assise basse 16 cm (anti-basculement).
 
 > ⚠️ Réservé au **terrain plat, sous surveillance adulte**. Vitesse estimée ~8–11,5 km/h (~3,2 m/s), autonomie ~10–20 min. **Un tricycle bascule plus facilement qu'un 4 roues** → anti-renversement logiciel (voir §3).
