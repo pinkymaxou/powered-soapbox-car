@@ -40,7 +40,7 @@ flowchart TB
     subgraph CAB["HABITACLE — banquette unique 2 places (~80 cm)"]
         direction LR
         COND["🧒 CONDUCTEUR (gauche)<br/>manette Bluetooth"]
-        SEP["🛑 séparation centrale<br/>ARRÊT D'URGENCE (e-stop)"]
+        SEP["🛑 ARRÊT D'URGENCE<br/>(sommet du dossier, centré)"]
         PASS["🧒 PASSAGER (droite)<br/>repose-pieds"]
         COND ~~~ SEP ~~~ PASS
     end
@@ -68,9 +68,9 @@ flowchart TB
 
 > Concept visuel régénérable : [`doc/cad/kart_concept.scad`](doc/cad/kart_concept.scad) (OpenSCAD —
 > 2 roues 10″ motorisées à l'avant, roulette 10″ folle sur queue surélevée, banquette 2 enfants,
-> séparation centrale + arrêt d'urgence, châssis 2×3 + contreplaqué 1/2″).
+> garde-corps latéraux, arrêt d'urgence au sommet du dossier, châssis 2×3 + contreplaqué 1/2″).
 
-**Gabarit :** longueur ~150–180 cm · largeur ~96 cm · **voie avant ~84 cm** · **2 roues motrices avant Ø25,4 cm (10″) + baie technique à l'avant** + **1 roulette arrière libre** · **séparation centrale = arrêt d'urgence** · assise basse 16 cm (anti-basculement).
+**Gabarit :** longueur ~150–180 cm · largeur ~96 cm · **voie avant ~84 cm** · **2 roues motrices avant Ø25,4 cm (10″) + baie technique à l'avant** + **1 roulette arrière libre** · **garde-corps latéraux** + **arrêt d'urgence au sommet du dossier (centré)** · assise basse 16 cm (anti-basculement).
 
 > ⚠️ Réservé au **terrain plat, sous surveillance adulte**. Vitesse estimée ~8–11,5 km/h (~3,2 m/s), autonomie ~10–20 min. **Un tricycle bascule plus facilement qu'un 4 roues** → anti-renversement logiciel (voir §3).
 
@@ -87,7 +87,7 @@ flowchart TB
 | **Électronique** | **ESP32** → **driver double canal 20 A / 6–30 V** (PWM + DIR / canal), **PWM bridé ~50 %** ; **baie technique à l'AVANT** (près des 2 moteurs, câblage de puissance court) |
 | **Énergie** | **2 × packs 20 V / 5 Ah en parallèle** (diode-OR) + 2 adaptateurs vers bornes de puissance ; **logés à l'AVANT** dans la baie technique |
 | **Vitesse** | Mesurée par **2 capteurs d'angle AS5600** (un par roue, 1 par bus I²C) ; asservissement à **500 Hz** |
-| **Commandes** | Pilotage à la **manette Bluetooth** ; bouton **armement** (physique ou START de la manette, ~1 s) ; **arrêt d'urgence matériel** sur la **séparation centrale** de l'habitacle (coupe tout) **+** arrêt d'urgence logiciel = bouton **B** de la manette ; **frein électrique par défaut** |
+| **Commandes** | Pilotage à la **manette Bluetooth** ; bouton **armement** (physique ou START de la manette, ~1 s) ; **arrêt d'urgence matériel** au **sommet du dossier, centré** (coupe tout, accessible aux 2 enfants et à un adulte derrière) **+** arrêt d'urgence logiciel = bouton **B** de la manette ; **frein électrique par défaut** |
 | **Châssis** | **Bois** allégé : madriers **2×3** + plancher **contreplaqué 6 mm** |
 | **Masse** | ~**32 kg** à vide · ~**98 kg** en charge (2 enfants) |
 
@@ -99,7 +99,7 @@ flowchart TB
 - **Moteurs 12 V sur batterie 20 V** : le **PWM est plafonné à ~50 %** (≈ 10 V moyens) pour éviter la surchauffe des moteurs.
 - **Roues avant à roulement libre** : entraînées par **courroie** (poulie vissée sur la jante), elles gardent leur roulement d'origine — pas d'essieu moteur traversant.
 - **Baie technique à l'avant** : batteries + driver + ESP32 sont regroupés **à l'avant, près des 2 moteurs** → **câblage de puissance court** (moins de pertes, moins de fils ~10 AWG à tirer), masse motrice et énergie concentrées sur l'essieu moteur. Disposition longitudinale : **AVANT (2 roues motrices + baie technique) → HABITACLE → ARRIÈRE (roulette libre)**.
-- **Sécurité** : **arrêt d'urgence matériel central**, placé sur la **séparation entre les 2 places** (à portée des deux enfants), **coupe-courant général** (en série dans la gate du latch, ESP32 compris) **et** arrêt d'urgence logiciel manette (bouton B) ; démarrage par **bouton momentané** + latch low-side (2× MOSFET, l'ESP se maintient en vie), fusible par pack, **frein électrique par défaut** (déconnexion manette → freinage immédiat), coupure basse tension (LVC), **watchdog 5 s**, démarrage **désarmé** par défaut, carters sur courroies/poulies, ceinture, casque.
+- **Sécurité** : **arrêt d'urgence matériel central**, au **sommet du dossier** (à portée des deux enfants et d'un adulte derrière), **coupe-courant général** (en série dans la gate du latch, ESP32 compris) **et** arrêt d'urgence logiciel manette (bouton B) ; démarrage par **bouton momentané** + latch low-side (2× MOSFET, l'ESP se maintient en vie), fusible par pack, **frein électrique par défaut** (déconnexion manette → freinage immédiat), coupure basse tension (LVC), **watchdog 5 s**, démarrage **désarmé** par défaut, carters sur courroies/poulies, ceinture, casque.
 
 ---
 
@@ -110,7 +110,7 @@ flowchart TB
 | Longueur totale | **150 cm** (prévoir **jusqu'à ~180 cm**) | **Baie technique à l'avant** (batteries, driver, électronique, ~30 cm près des 2 moteurs) + habitacle + dossier + porte-à-faux jusqu'à la roulette arrière |
 | Largeur hors-tout | **96 cm** | Doit loger **deux enfants côte à côte** |
 | **Largeur intérieure banquette** | **~80 cm** | 2 × ~40 cm/enfant (épaules + coudes) |
-| **Séparation centrale** (cloison entre les 2 places) | hauteur **~40 cm / sol** (~24 cm au-dessus de l'assise), **centrée**, ~4 cm d'épaisseur | Cloison verticale **à portée des deux enfants** ; porte le **bouton d'arrêt d'urgence** matériel (champignon à ~35 cm) |
+| **Garde-corps latéraux** (CP 1/2″, de chaque côté de la banquette) | hauteur **~30 cm** au-dessus du plancher, longueur ~40 cm | Empêchent l'enfant de **tomber sur le côté** ; arêtes arrondies |
 | **Baie technique** (avant) | longueur ~**30 cm** (0–30 cm depuis l'essieu avant) | Loge **2 packs 20 V, driver, ESP32, breakout** près des 2 moteurs (câblage court) |
 | **Voie avant** (écartement roues motrices, axe à axe) | **84 cm** | Voie large = **anti-basculement** ET **bras de levier du différentiel** (plus la voie est large, plus le virage est franc à différentiel donné) |
 | **Empattement** (essieu AV ↔ roulette AR) | **~110 cm** | Assez long pour la stabilité (les 2 enfants restent entre l'essieu moteur et la roulette) ; la roulette ne fait que suivre, le pivot se fait sur l'essieu avant |
@@ -146,7 +146,7 @@ Repère 0 = essieu **avant** (roues motrices) ; cotes mesurées **vers l'arrièr
 
 ➡️ Avec la **manette Bluetooth**, il n'y a **plus de boîtier de pédales ni de volant** à positionner : seule compte l'ergonomie d'assise. **Dossier → cale-pieds ≈ 60 cm** (95 − 35) ✔ jambe presque tendue, léger pli du genou. Prévoir un endroit sûr pour **poser/charger la manette**. Siège **réglable** (§6) pour s'adapter à la taille de l'enfant.
 
-➡️ **Séparation centrale + arrêt d'urgence** : une **cloison verticale entre les 2 places** (à portée des deux enfants) porte le **bouton d'arrêt d'urgence matériel** (coupe-circuit en série dans la gate du latch). **Facilement accessible**, il **coupe tout** (puissance **et** ESP32), en complément de l'arrêt d'urgence **logiciel** de la manette (bouton **B**). Le **pilotage du véhicule reste à la manette Bluetooth**.
+➡️ **Arrêt d'urgence au sommet du dossier (centré)** : le **champignon matériel** (coupe-circuit en série dans la gate du latch) est monté **en haut du dossier, au centre** — accessible aux **deux enfants** et à un **adulte qui suit le kart**. Il **coupe tout** (puissance **et** ESP32), en complément de l'arrêt d'urgence **logiciel** de la manette (bouton **B**). **Garde-corps latéraux** de chaque côté de la banquette (pas de séparation centrale : banquette continue). Le **pilotage reste à la manette Bluetooth**.
 
 ### Vue de côté
 
@@ -184,7 +184,7 @@ flowchart TB
     end
     subgraph HAB["HABITACLE — banquette unique ~80 cm"]
         COND["🧒 CONDUCTEUR (gauche)<br/>manette Bluetooth"]
-        SEP["🛑 séparation centrale<br/>ARRÊT D'URGENCE (e-stop)"]
+        SEP["🛑 ARRÊT D'URGENCE<br/>(sommet du dossier, centré)"]
         PASS["🧒 PASSAGER (droite)<br/>repose-pieds"]
         COND --- SEP --- PASS
     end
@@ -282,7 +282,7 @@ Paramètres web : **`turn_gain`** (autorité de virage), **`turn_full_ms`** / **
 | | **Buck 20 V → 5 V** (déjà disponible) | alimente l'ESP32 (qui fabrique son 3,3 V) |
 | | **Perfboard soudée** | pont diviseur Vbat 100 k/15 k (vers A0 de l'ADS1115) + condensateurs de découplage (⚠️ pas de breadboard — vibrations) |
 | | **Boîtier électrique étanche** (ABS, couvercle transparent, ~150 × 100 × 70 mm, ≈IP65) | **dans la baie technique avant** ; loge ESP32 + breakout + ADS1115 + perfboard ; presse-étoupes pour les câbles ; protège poussière/pluie/chocs (couvercle clair = LED d'état visible) |
-| | Sécurité élec. | **Arrêt d'urgence (NF) en série** dans la ligne de gate (bouton **sur la séparation centrale** de l'habitacle, à portée des deux enfants) + **fusible/pack** |
+| | Sécurité élec. | **Arrêt d'urgence (NF) en série** dans la ligne de gate (champignon **au sommet du dossier, centré**, à portée des deux enfants) + **fusible/pack** |
 | | Ruban **WS2812B** (~10 LEDs) | état : vert = en route, rouge = désarmé |
 | **Commandes** | Bouton **armement** + LED | momentané ; armement = appui ~1 s (bouton physique **ou** START de la manette) |
 | **Frein** | **Frein électrique (par défaut)** ✅ | géré par le firmware (PID de plugging) ; **état par défaut = freinage** ; déconnexion manette → freinage immédiat ; pas de patin |
@@ -636,7 +636,7 @@ flowchart TB
 - ⚠️ **Carter courroies/poulies** : pas de doigts/lacets/vêtements happés.
 - ⚠️ **Angles arrondis**, ponçage anti-échardes, têtes de boulons fraisées/capuchonnées côté enfant.
 - ⚠️ **Ceinture ventrale** ancrée au châssis ; **casque obligatoire** ; **cale-pieds**.
-- ⚠️ **Arrêt d'urgence matériel central** : placé sur la **séparation entre les 2 places**, **facilement accessible aux deux enfants** ; il **coupe tout** (puissance **et** ESP32, via l'ouverture de la gate du latch). C'est l'arrêt **garanti**, en complément de l'arrêt d'urgence **logiciel** de la manette (bouton **B**). Vérifier qu'il n'est ni masqué ni bloqué, et que les enfants savent l'actionner.
+- ⚠️ **Arrêt d'urgence matériel central** : au **sommet du dossier, centré**, **facilement accessible aux deux enfants** (et à un adulte derrière) ; il **coupe tout** (puissance **et** ESP32, via l'ouverture de la gate du latch). C'est l'arrêt **garanti**, en complément de l'arrêt d'urgence **logiciel** de la manette (bouton **B**). Vérifier qu'il n'est ni masqué ni bloqué, et que les enfants savent l'actionner.
 - ⚠️ **Manette** : calibrée avant chaque session ; vérifier que le **bouton B (arrêt d'urgence logiciel)** freine, et que la **déconnexion** (manette éteinte / hors de portée) déclenche le freinage.
 - ⚠️ **Inspection avant chaque usage** : supports moteurs, tension courroies + serrage poulies, roulette arrière, **e-stop matériel central** + e-stop manette, fixation de la baie technique (batteries à l'avant), test du frein électrique.
 - ⚠️ **Terrain plat, sous surveillance**, loin de la circulation et des pentes.
@@ -692,13 +692,13 @@ flowchart LR
 
 **Phase 0 — Préparation.** Rassembler matériel (§4) et outils (perceuse, scie, clés, fer à souder, multimètre, imprimante 3D). Imprimer les 2 réducteurs (1:16) + gabarit de perçage. Travailler **batteries débranchées**.
 
-**Phase 1 — Châssis bois.** Grille 2×3 (traverses ~25–30 cm) + plancher CP 6 mm (12 mm sous banquette) + **baie technique à l'avant** (~30 cm, entre l'essieu moteur et la banquette) + banquette ~80 cm + **séparation centrale** entre les 2 places (cloison verticale recevant le bouton d'arrêt d'urgence) + dossier. ✅ *S'asseoir à deux sans flexion excessive ; le bouton d'arrêt d'urgence central tombe sous la main des deux enfants.*
+**Phase 1 — Châssis bois.** Grille 2×3 (traverses ~25–30 cm) + plancher CP 6 mm (12 mm sous banquette) + **baie technique à l'avant** (~30 cm, entre l'essieu moteur et la banquette) + banquette ~80 cm **continue** (pas de séparation) + **garde-corps latéraux** (CP 1/2″, ~30 cm) + dossier. ✅ *S'asseoir à deux sans flexion excessive ; les garde-corps retiennent bien un enfant qui glisse sur le côté.*
 
 **Phase 2 — Roues avant + roulette arrière.** 2 roues Ø30 sur **boulons à épaulement** (perçage 3/8"), tournent **libres** ; **roulette pivotante** fixée à l'arrière, pivot serré mais libre. ✅ *Voie avant 84 cm, rien ne frotte ; la roulette s'oriente seule en poussant le châssis.*
 
 **Phase 3 — Motorisations avant (remplace l'ancienne « direction »).** Sur **chaque roue avant** : poulie vissée (grandes rondelles / contre-platine) + réducteur 3D + moteur sur support renforcé + courroie + réglage tension + carter. **Pas de tringlerie** : la direction est différentielle, donc rien à régler côté volant/bielle. ✅ *Sans courant : chaque roue avant tourne à la main, courroie tendue.*
 
-**Phase 4 — Électronique de puissance ⚠️ (à l'avant).** 2 packs + adaptateurs **logés dans la baie technique avant** (câblage de puissance court vers les 2 moteurs) ; chaque pack **fusible → diode idéale → rail +20 V** (diode-OR) ; **coupe-circuit latch low-side** (2× IRFZ44N sur la masse, gate via **bouton** + **opto**, pull-down + zener, **e-stop NF en série dans la gate** — voir `doc/schematics/power_latch.png`) ; **monter le bouton d'arrêt d'urgence sur la séparation centrale de l'habitacle** (à portée des deux enfants) ; driver (⚠️ **polarité VB+/VB-**) → 2 moteurs avant ; **~10 AWG**, cosses serties. ✅ *Au multimètre AVANT branchement : polarité, ~20 V au driver, le bouton amorce et **l'e-stop central coupe tout** (puissance + ESP32).*
+**Phase 4 — Électronique de puissance ⚠️ (à l'avant).** 2 packs + adaptateurs **logés dans la baie technique avant** (câblage de puissance court vers les 2 moteurs) ; chaque pack **fusible → diode idéale → rail +20 V** (diode-OR) ; **coupe-circuit latch low-side** (2× IRFZ44N sur la masse, gate via **bouton** + **opto**, pull-down + zener, **e-stop NF en série dans la gate** — voir `doc/schematics/power_latch.png`) ; **monter le champignon d'arrêt d'urgence au sommet du dossier, centré** (à portée des deux enfants et d'un adulte derrière) ; driver (⚠️ **polarité VB+/VB-**) → 2 moteurs avant ; **~10 AWG**, cosses serties. ✅ *Au multimètre AVANT branchement : polarité, ~20 V au driver, le bouton amorce et **l'e-stop central coupe tout** (puissance + ESP32).*
 
 **Phase 5 — Électronique de commande.** ESP32 + breakout ; **buck 20→5 V** sur le rail +20 (l'ESP fabrique son 3,3 V) ; **ADS1115** (3,3 V) sur le bus 0, pont Vbat 100 k/15 k → A0 + condensateur ; **2× AS5600** : roue G sur **bus 0 (SDA18/SCL19)**, roue D sur **bus 1 (SDA27/SCL14)**, pull-ups 4,7 kΩ par bus + aimants centrés ; bouton START (GPIO16, pull-up) ; WS2812B (GPIO17). *(Réserves futures câblées non utilisées : 2× encodeur A/B 34/35 + 36/39 ; joystick sur A1/A2 de l'ADS1115.)* ✅ *Masses communes, 3,3 V/5 V présents, AS5600 détectés (0x36 sur chaque bus) + ADS1115 (0x48).*
 
@@ -726,7 +726,7 @@ Code ESP-IDF 6.1 (C++) dans [`firmware/`](firmware/) — détails dans [`firmwar
 Points à **traiter / valider avant tout usage réel**.
 
 **Sécurité & accès**
-- **L'arrêt d'urgence matériel central est le seul arrêt garanti** (bouton **sur la séparation entre les 2 places**, à portée des deux enfants ; NF en série dans la gate → ouvre les 2 MOSFET → coupe tout, ESP32 compris). Le reste (arrêt d'urgence manette, LVC, désarmement, watchdog, freinage sur déconnexion) est logiciel ; l'ESP peut aussi se couper via POWER_HOLD.
+- **L'arrêt d'urgence matériel central est le seul arrêt garanti** (champignon **au sommet du dossier, centré**, à portée des deux enfants ; NF en série dans la gate → ouvre les 2 MOSFET → coupe tout, ESP32 compris). Le reste (arrêt d'urgence manette, LVC, désarmement, watchdog, freinage sur déconnexion) est logiciel ; l'ESP peut aussi se couper via POWER_HOLD.
 - **Web non authentifié — par choix** : seul le mot de passe de l'AP protège l'accès (le changer reste recommandé). La **calibration manette** est verrouillée hors état désarmé/à l'arrêt.
 - **Dépendance à la manette** : si la manette se déconnecte, le kart **freine** (sécurité), mais le pilote perd le contrôle directionnel jusqu'à reconnexion → rouler à portée Bluetooth, manette chargée.
 

@@ -50,7 +50,7 @@ module frame()
 // ───────────────────────────── Banquette 2 places ─────────────────────────────
 module seat()
 {
-    // assise basse (CP 1/2" sur cales), dossier incliné, séparation centrale + arrêt d'urgence
+    // assise basse (CP 1/2" sur cales) + dossier incliné — banquette CONTINUE (pas de séparation)
     color("Peru")
     {
         translate([650, -SEAT_W / 2, FLOOR_Z + PLY + 30]) ply(300, SEAT_W);            // assise
@@ -58,10 +58,18 @@ module seat()
     }
     color("BurlyWood") for (sy = [-1, 0, 1])                                            // cales d'assise
         translate([660, sy * (SEAT_W / 2 - 40) - 20, FLOOR_Z + PLY]) cube([280, 40, 30]);
-    // séparation centrale (CP 1/2") + champignon d'arrêt d'urgence
-    color("Peru") translate([650, -PLY / 2, FLOOR_Z + PLY]) cube([300, PLY, 330]);
-    color("Red")  translate([700, 0, FLOOR_Z + PLY + 330]) cylinder(d = 45, h = 26);
-    color("Yellow") translate([700, 0, FLOOR_Z + PLY + 326]) cylinder(d = 60, h = 6);
+
+    // GARDE-CORPS latéraux (CP 1/2") : empêchent l'enfant de tomber sur les côtés
+    color("Peru") for (sy = [-1, 1])
+        translate([580, sy * (SEAT_W / 2) - (sy > 0 ? PLY : 0), FLOOR_Z + PLY])
+            cube([400, PLY, 300]);
+
+    // Arrêt d'urgence : champignon AU SOMMET DU DOSSIER, centré (accessible aux 2 enfants
+    // et à un adulte derrière le kart)
+    top_x = 950 + 340 * cos(82); top_z = FLOOR_Z + PLY + 340 * sin(82);
+    color("Peru")   translate([top_x - 45, -50, top_z - 6]) cube([90, 100, 14]);   // platine
+    color("Yellow") translate([top_x, 0, top_z + 8]) cylinder(d = 60, h = 6);
+    color("Red")    translate([top_x, 0, top_z + 12]) cylinder(d = 45, h = 26);
 }
 
 // ───────────────────────────── Propulsion (par côté) ─────────────────────────────
@@ -79,19 +87,27 @@ module drive_side(sy)
         cube([40, 6, 8]);
 }
 
-// ───────────────────────────── Roulette arrière 10" ─────────────────────────────
+// ───────────────────────────── Roulette arrière 10" (pivot BIEN VISIBLE) ─────────────────────────────
+CASTER_X = 1090;            // axe de pivot (vertical)
+CASTER_YAW = 38;            // fourche dessinée ORIENTÉE pour montrer que ça tourne
 module caster()
 {
-    // queue surélevée (la roulette 10" a besoin de ~300 mm sous sa platine)
+    plat_z = FLOOR_Z + PLY + 175;                       // sous-face de la plateforme de pivot
+    // support OUVERT : 2 montants 2×3 + petite plateforme (roue dégagée, visible)
     color("BurlyWood") for (sy = [-1, 1])
-        translate([1020, sy * 90 - LU_W / 2, FLOOR_Z + PLY]) cube([140, LU_W, 150]);
-    color("Wheat") translate([1010, -120, FLOOR_Z + PLY + 150]) ply(170, 240);
-    // platine + fourche pivotante + roue (déport de chasse vers l'arrière)
-    color("Silver") translate([1055, -60, FLOOR_Z + PLY + 140]) cube([120, 120, 10]);
-    color("DimGray") for (sy = [-1, 1])
-        translate([1100, sy * 42 - 4, AXLE_Z - 20]) cube([90, 8, FLOOR_Z + PLY + 140 - AXLE_Z + 20]);
-    color("DimGray")  translate([1165, 0, AXLE_Z]) wheel();
-    color("Gainsboro") translate([1165, 0, AXLE_Z]) rim();
+        translate([CASTER_X - 60, sy * 85 - LU_W / 2, FLOOR_Z + PLY]) cube([38, LU_W, 175]);
+    color("Wheat") translate([CASTER_X - 80, -110, plat_z]) ply(160, 220);
+
+    // pivot vertical apparent + fourche ORIENTÉE (chasse vers l'arrière du pivot)
+    color("Silver") translate([CASTER_X, 0, plat_z - 10]) cylinder(d = 64, h = 10);   // platine
+    color("Silver") translate([CASTER_X, 0, plat_z - 26]) cylinder(d = 24, h = 18);   // axe de pivot
+    translate([CASTER_X, 0, 0]) rotate([0, 0, CASTER_YAW])
+    {
+        color("DimGray") for (sy = [-1, 1])                                           // bras de fourche
+            translate([-10, sy * 42 - 4, AXLE_Z - 20]) cube([85, 8, plat_z - 26 - AXLE_Z + 20]);
+        color("DimGray")  translate([55, 0, AXLE_Z]) wheel();                          // roue déportée (chasse)
+        color("Gainsboro") translate([55, 0, AXLE_Z]) rim();
+    }
 }
 
 // ───────────────────────────── Assemblage ─────────────────────────────
