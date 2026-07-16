@@ -91,7 +91,7 @@ flowchart TB
 | **Transmission** | Réducteurs **imprimés 3D 1:16** (2 étages 4:1, pignon moteur 16T/24 DP — voir [`doc/reducteur.md`](doc/reducteur.md)) + **poulies vissées sur les roues avant + courroies** |
 | **Roues** | **2 × motrices avant Ø25,4 cm (10″)** (jante plastique, roulement 1/2") + **1 roulette arrière pivotante libre** |
 | **Pilotage** | **Manette Bluetooth** (stick : Y = avance/recul, X = virage) ; **calibration obligatoire** ; joystick analogique réservé (futur) |
-| **Électronique** | **ESP32** → **driver double canal 20 A / 6–30 V** (PWM + DIR / canal), **PWM bridé ~50 %** ; **baie technique à l'AVANT** (près des 2 moteurs, câblage de puissance court) |
+| **Électronique** | **ESP32** → **driver double canal 20 A / 6–30 V** (PWM + DIR / canal), **PWM plafonné à ≈ 12 V/Vbat** (12 V → ~100 %, 24 V → ~50 %) ; **baie technique dans le museau** (près des 2 moteurs, câblage de puissance court) |
 | **Énergie** | **Batterie moto 12 V** (option probable), **à l'avant au centre du museau** — son poids charge l'essieu moteur ; alternative : **2 × packs 20 V / 5 Ah en parallèle** (diode-OR) + 2 adaptateurs |
 | **Vitesse** | Mesurée par **2 capteurs d'angle AS5600** (un par roue, 1 par bus I²C) ; asservissement à **500 Hz** |
 | **Commandes** | Pilotage à la **manette Bluetooth** ; bouton **armement** (physique ou START de la manette, ~1 s) ; **arrêt d'urgence matériel** au **sommet du dossier, centré** (coupe tout, accessible aux 2 enfants et à un adulte derrière) **+** arrêt d'urgence logiciel = bouton **B** de la manette ; **frein électrique par défaut** |
@@ -103,7 +103,7 @@ flowchart TB
 - **Direction différentielle = mécanique nulle** : plus de volant, colonne, pivots, fusées, bielle ni barre d'attaque → moins de pièces à fabriquer, à régler et à user ; on **tourne en logiciel** (différence de PWM entre les 2 roues). **Pivot sur place** quand l'avance ≈ 0.
 - **Roulette arrière libre** : une seule roulette pivotante non motorisée s'oriente d'elle-même → géométrie simple, pas d'essieu arrière.
 - **Stabilité maîtrisée** : un tricycle bascule plus vite qu'un 4 roues → assise basse (16 cm), **voie avant large** + **anti-renversement firmware** (bornage de l'amplitude de virage selon la vitesse **et** limiteur de pente sur le virage).
-- **Moteurs 12 V sur batterie 20 V** : le **PWM est plafonné à ~50 %** (≈ 10 V moyens) pour éviter la surchauffe des moteurs. Avec la **batterie moto 12 V** envisagée, ce bridage devient inutile (tension nominale).
+- **Tension de batterie flexible (driver 6–30 V)** : les moteurs sont des 12 V ; le firmware **plafonne le PWM AUTOMATIQUEMENT à 12 V / Vbat mesurée** (lissée ~1 s) : batterie moto **12 V → ~100 %**, pack 20 V → ~60 %, **24 V → ~50 %**. Changer de batterie = ajuster le **pont diviseur** de mesure Vbat + recalibrer `vbat_div_ratio` (et les seuils LVC) — **aucun changement de code**. Un plafond **manuel** (`duty_cap`) reste disponible ; ⚠️ **sans capteur Vbat (ADS1115), le plafond auto est inactif** → régler `duty_cap` à la main si la batterie dépasse 12 V.
 - **Roues avant à roulement libre** : entraînées par **courroie** (poulie vissée sur la jante), elles gardent leur roulement d'origine — pas d'essieu moteur traversant.
 - **Baie technique à l'avant** : batteries + driver + ESP32 sont regroupés **à l'avant, près des 2 moteurs** → **câblage de puissance court** (moins de pertes, moins de fils ~10 AWG à tirer), masse motrice et énergie concentrées sur l'essieu moteur. Disposition longitudinale : **MUSEAU (baie technique + batterie) → ESSIEU MOTEUR → HABITACLE → ARRIÈRE (roulette libre)**. **L'essieu est reculé de ~32 cm dans la caisse** : en pivot sur place (rotation autour du milieu de l'essieu) l'encombrement balayé passe de ~1,27 m à **~0,95 m de rayon** (braquage court), et le poids de la **batterie au centre du museau** charge les roues motrices (traction + freinage).
 - **Sécurité** : **arrêt d'urgence matériel central**, au **sommet du dossier** (à portée des deux enfants et d'un adulte derrière), **coupe-courant général** (en série dans la gate du latch, ESP32 compris) **et** arrêt d'urgence logiciel manette (bouton B) ; démarrage par **bouton momentané** + latch low-side (2× MOSFET, l'ESP se maintient en vie), fusible par pack, **frein électrique par défaut** (déconnexion manette → freinage immédiat), coupure basse tension (LVC), **watchdog 5 s**, démarrage **désarmé** par défaut, carters sur courroies/poulies, ceinture, casque.
@@ -278,11 +278,11 @@ Paramètres web : **`turn_gain`** (autorité de virage), **`turn_full_ms`** / **
 | | **2 × capteur d'angle AS5600** + aimant diamétral | un par roue avant, **1 par bus I²C** ; magnétique sans contact, **12 bits absolu I²C** (adresse fixe 0x36), **3,3 V natif** (aucun level-shift), pull-ups 4,7 kΩ |
 | **Pilotage** | **Manette Bluetooth** | stick : Y = avance/recul, X = virage ; bouton **B** = arrêt d'urgence, bouton **START** = armement ; **calibration obligatoire** |
 | | *Joystick analogique* | **réservé (futur, non câblé)** : 2 voies de l'ADS1115 (A1/A2) prévues derrière la même abstraction logicielle |
-| **Énergie / électronique** | Batterie | **Batterie moto 12 V** (option probable, ~40 A de pointe OK, moteurs à tension nominale → plus de bridage PWM) **au centre du museau** ; alternative : **2 × packs 20 V / 5 Ah** à glissière en parallèle (~40 A total) |
+| **Énergie / électronique** | Batterie | **Batterie moto 12 V** (option probable, ~40 A de pointe OK, PWM ~100 %) **au centre du museau** ; le driver accepte jusqu'à **30 V** → **24 V possible** (2×12 V en série, PWM auto ~50 %) ou **2 × packs 20 V / 5 Ah** en parallèle — ajuster le pont diviseur, le firmware plafonne le PWM tout seul (12 V/Vbat) |
 | | **Adaptateurs de batterie** (×2) | Support à glissière → bornes de puissance (+ / −) |
 | | **Diodes idéales (diode-OR)** — requis | **2 × modules 40 A / 60 A** (un par pack) + 1 fusible/pack |
 | | **Interrupteur d'alimentation (latch)** | **2× MOSFET N IRFZ44N** low-side (+ dissipateur) + **opto** + zener/pull-down + **bouton démarrage** |
-| | Driver moteur | **1 carte double canal 20 A / 6–30 V** (PWM+DIR/canal), duty **bridé ~50 %** |
+| | Driver moteur | **1 carte double canal 20 A / 6–30 V** (PWM+DIR/canal), duty **plafonné automatiquement à 12 V/Vbat mesurée** (+ plafond manuel `duty_cap`) |
 | | Calculateur | **Carte ESP32-WROOM** (double cœur 240 MHz, Wi-Fi/BT, 4 MB flash) |
 | | **ADC externe ADS1115** | **16 bits I²C**, alimenté **3,3 V**, adresse **0x48** sur le bus 0 (avec l'AS5600 gauche) ; A0 = Vbat, A1/A2 réservés joystick futur |
 | | **Carte d'extension (breakout)** | Borniers à vis + sorties 5 V / 3,3 V + LED d'état ; le **3,3 V** alimente AS5600 + ADS1115 |
@@ -308,7 +308,7 @@ Chaque **roue avant** est entraînée par son **propre moteur CC à aimants perm
 | Tension / courant | **12 VDC** / **19,6 A** |
 | Service | **intermittent** (loisir, pas en continu) ; TENV, classe F |
 
-> ⚠️ **Tension :** moteurs **12 V**, batterie **20 V** → **PWM bridé à ~50 %** (≈ 10 V moyens) pour protéger les moteurs.
+> ⚠️ **Tension :** moteurs **12 V**, driver **6–30 V** → le firmware **plafonne le PWM à 12 V/Vbat mesurée** pour protéger les moteurs : batterie **12 V → ~100 %**, 20 V → ~60 %, **24 V → ~50 %**. Sans ADS1115 : régler le plafond manuel `duty_cap`.
 > ⚠️ **Courant :** **19,6 A**/moteur (driver 20 A/canal OK) ; **total ~40 A** → **2 batteries en parallèle requises** (~20 A/pack). Éviter les blocages de roue prolongés.
 
 ```mermaid
@@ -362,7 +362,7 @@ flowchart LR
 - L'**ESP32** reçoit les axes de la **manette Bluetooth**, applique le **mélange arcade** + **anti-renversement**, puis envoie **un PWM + DIR indépendant à chaque canal** du driver.
 - Driver : **double canal, 20 A continu / 60 A crête, 6–30 V**, entrées **PWM + DIR** compatibles **3,3 V**, PWM jusqu'à 20 kHz ; protections **surintensité / sous-tension / température**. ⚠️ **Aucune protection contre l'inversion de polarité** (VB+/VB-) → un branchement inversé **détruit la carte**.
 - **Frein PID par défaut** : à l'arrêt ou sans avance, un **PID ramène chaque roue à 0** (lecture AS5600) — sortie signée → peut **inverser le moteur** (plugging). C'est l'**état par défaut**.
-- Bonnes pratiques : **PWM plafonné ~50 %**, **rampe** d'avance, **limiteur de vitesse** (mesure capteur), **watchdog**, **freinage si la manette se déconnecte**.
+- Bonnes pratiques : **PWM plafonné à ≈ 12 V/Vbat**, **rampe** d'avance, **limiteur de vitesse** (mesure capteur), **watchdog**, **freinage si la manette se déconnecte**.
 
 ### Capteurs de vitesse AS5600 (×2, sur I²C)
 
@@ -539,9 +539,17 @@ Même contenu en **schéma électrique à symboles normalisés** (style ports no
 
 ### Mesure de tension batterie & coupure basse tension (LVC)
 
-La batterie monte à ~**21 V** → un **pont diviseur** (100 k / 15 k) ramène Vbat sous 3,3 V sur **l'entrée A0 de l'ADS1115** (ADC externe 16 bits, alimenté 3,3 V) → protection logicielle **en plus du BMS**.
+Un **pont diviseur** ramène Vbat sous 3,3 V sur **l'entrée A0 de l'ADS1115** (ADC externe 16 bits,
+alimenté 3,3 V) → protection logicielle **en plus du BMS**. Le pont se **dimensionne selon la
+batterie choisie** (viser < 3,3 V à la tension max EN CHARGE) puis on recalibre `vbat_div_ratio` :
 
-- Rapport = 15/115 = **0,130** → à 21 V l'entrée voit **2,74 V** (✔). Reconstruction : **Vbat = V_adc × 7,67** (à calibrer via `vbat_div_ratio`).
+| Batterie | Vmax (en charge) | Pont (haut/bas) | Ratio | A0 à Vmax |
+|---|---|---|---|---|
+| **Moto 12 V** (option probable) | ~14,8 V | **100 k / 27 k** | 0,213 | 3,15 V ✔ |
+| Pack outil 20 V | ~21 V | **100 k / 15 k** | 0,130 | 2,74 V ✔ |
+| **24 V** (2×12 V en série) | ~29 V | **100 k / 12 k** | 0,107 | 3,10 V ✔ |
+
+- Reconstruction : **Vbat = V_adc ÷ ratio** — le ratio exact (tolérances des résistances) se calibre via **`vbat_div_ratio`** (page web). Adapter aussi les **seuils LVC** (`vbat_warn_v`, `vbat_cut_v`, `vbat_recover_v`, `cell_count`) à la chimie choisie (plomb 12/24 V vs lithium).
 - Fuite du pont ≈ 0,18 mA — sa masse de retour étant **commutée par le latch low-side**, **rien à l'arrêt**.
 - **Condensateur de découplage** sur le nœud ADC ; l'ADS1115 (16 bits, PGA) donne une mesure plus stable que l'ADC interne.
 

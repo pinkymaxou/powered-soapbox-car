@@ -58,6 +58,7 @@ int64_t m_stuck_us = 0;
 bool    m_enc_fault = false;
 float   m_fwd_cmd = 0.f;   // consigne avance APRÈS limiteur de pente (état conservé entre ticks)
 float   m_turn_cmd = 0.f;  // consigne virage APRÈS limiteur de pente
+float   m_vbat_ema = 0.f;  // Vbat lissée LENTEMENT (τ ≈ 1 s) pour le plafond PWM auto — 0 = inconnue
 float   m_sl_ema = 0.f;    // vitesse roue G lissée (EMA)
 float   m_sr_ema = 0.f;    // vitesse roue D lissée (EMA)
 
@@ -173,16 +174,24 @@ void tick()
     if (vbat_valid)
     {
         updateLVC(vbat, cfg);
+        // Lissage LENT pour le plafond PWM auto : l'affaissement sous charge ne doit pas
+        // faire osciller le duty (sag → Vbat baisse → duty remonte → plus de sag…).
+        if (m_vbat_ema <= 0.f) m_vbat_ema = vbat;
+        else m_vbat_ema += hw::VBAT_CAP_EMA_ALPHA * (vbat - m_vbat_ema);
     }
     else
     {
         m_lvc_tripped = false;
         m_sag_start_us = 0;
         m_lvc_since_us = 0;
+        m_vbat_ema = 0.f;   // tension inconnue → pas de plafond automatique
     }
     publish(sl, sr, v_veh, vbat, in);
 
-    const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(cfg.duty_cap_frac, 0.f, 1.f));
+    // Plafond PWM : AUTOMATIQUE (12 V nominaux / Vbat mesurée : 12 V → ~100 %, 24 V → ~50 %)
+    // ET manuel (duty_cap, page web) — le plus restrictif gagne. Sans ADS1115 : manuel seul.
+    const float duty_max = std::min(cfg.duty_cap_frac, ctl::dutyCapVolts(m_vbat_ema, hw::MOTOR_V_NOM));
+    const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(duty_max, 0.f, 1.f));
 
     // ── Défauts / conditions de non-conduite ──
     Fault fault = Fault::None;

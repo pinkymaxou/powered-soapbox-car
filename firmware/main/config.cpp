@@ -20,13 +20,19 @@ constexpr char NVS_NS[] = "kart";
 const ParamDesc PARAMS[] =
 {
     {"speed_limit_ms",  "Limite vitesse (m/s)",   PType::Float, 0.3f,  3.3f,   7.f,    &KartConfig::speed_limit_ms},
-    {"duty_cap_frac",   "Plafond PWM (0-1)",       PType::Float, 0.05f, 0.50f,  1.f,    &KartConfig::duty_cap_frac},
+    // Plafond PWM MANUEL (plancher de sécurité, le plus restrictif gagne) — le plafond
+    // AUTOMATIQUE 12 V/Vbat mesurée (ctl::dutyCapVolts) s'applique EN PLUS. Clé renommée
+    // (ex-duty_cap_frac, défaut 0,50 pensé pour un pack 20 V fixe) : tout le monde repart
+    // du défaut 1,0 = « laisser faire l'automatique ».
+    {"duty_cap",        "Plafond PWM manuel (0-1)", PType::Float, 0.05f, 1.0f,   1.f,    &KartConfig::duty_cap_frac},
     {"thr_deadzone",    "Zone morte manche",       PType::Float, 0.f,   0.06f,  0.30f,  &KartConfig::thr_deadzone},
     {"thr_ramp_per_s",  "Douceur avance (D/s)",    PType::Float, 0.2f,  2.f,    20.f,   &KartConfig::thr_ramp_per_s},
     {"vbat_div_ratio",  "Ratio diviseur Vbat",     PType::Float, 1.f,   7.667f, 20.f,   &KartConfig::vbat_div_ratio},
-    {"vbat_warn_v",     "Vbat avertissement (V)",  PType::Float, 12.f,  16.5f,  21.f,   &KartConfig::vbat_warn_v},
-    {"vbat_cut_v",      "Vbat coupure LVC (V)",    PType::Float, 13.5f, 15.0f,  20.f,   &KartConfig::vbat_cut_v},
-    {"vbat_recover_v",  "Vbat rearmement (V)",     PType::Float, 12.f,  16.0f,  20.5f,  &KartConfig::vbat_recover_v},
+    // Plages élargies 8–29 V : batterie moto 12 V (option probable), pack outil 20 V,
+    // ou 24 V (2×12 V série, driver max 30 V). Régler les seuils selon la chimie.
+    {"vbat_warn_v",     "Vbat avertissement (V)",  PType::Float, 8.f,   16.5f,  29.f,   &KartConfig::vbat_warn_v},
+    {"vbat_cut_v",      "Vbat coupure LVC (V)",    PType::Float, 8.f,   15.0f,  28.f,   &KartConfig::vbat_cut_v},
+    {"vbat_recover_v",  "Vbat rearmement (V)",     PType::Float, 8.f,   16.0f,  28.5f,  &KartConfig::vbat_recover_v},
     {"cell_count",      "Cellules Li-ion (S)",     PType::Int,   1.f,   5.f,    14.f,   &KartConfig::cell_count},
     // PID en m/s (clés renommées : l'erreur a changé d'unité km/h→m/s, défauts ×3,6 — les
     // anciennes clés NVS pid_*/vmax_* sont ignorées, les nouvelles partent des bons défauts).

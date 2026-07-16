@@ -27,6 +27,13 @@ constexpr int               PWM_FREQ_HZ = 18000;
 constexpr ledc_timer_bit_t  PWM_RES     = LEDC_TIMER_12_BIT;
 constexpr int               PWM_MAX     = 4095;
 
+// Moteurs 12 V nominaux, driver 6–30 V : le duty est plafonné AUTOMATIQUEMENT à
+// MOTOR_V_NOM / Vbat mesurée (12 V → ~100 %, 20 V → ~60 %, 24 V → ~50 %), voir
+// ctl::dutyCapVolts. Vbat est lissée lentement (τ ≈ 1 s à 500 Hz) : sans ce filtrage,
+// l'affaissement sous charge ferait osciller le plafond (sag → Vbat baisse → duty monte).
+constexpr float MOTOR_V_NOM        = 12.0f;
+constexpr float VBAT_CAP_EMA_ALPHA = 0.002f;
+
 constexpr int ADC_OVERSAMPLE = 8;   // nb de lectures ADS1115 moyennées (lisse le résidu de bruit)
 
 // Convertisseur A/N externe ADS1115 (16 bits, I2C) — remplace l'ADC interne de l'ESP32.

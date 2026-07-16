@@ -97,6 +97,18 @@ static void test_turn_limit()
     CHECK(near(ctl::turnLimit(2.0f, 0.5f, 0.5f, 0.5f), 0.5f));   // span dégénéré → pas de division/0
 }
 
+static void test_duty_cap_volts()
+{
+    // Plafond PWM auto = V_nom / Vbat mesurée ; 1 (pas de bridage) si tension inconnue ou basse.
+    CHECK(near(ctl::dutyCapVolts(0.f, 12.f), 1.f));      // capteur absent (Vbat inconnue)
+    CHECK(near(ctl::dutyCapVolts(-1.f, 12.f), 1.f));
+    CHECK(near(ctl::dutyCapVolts(11.5f, 12.f), 1.f));    // batterie moto déchargée → plein duty
+    CHECK(near(ctl::dutyCapVolts(12.f, 12.f), 1.f));     // 12 V pile → 100 %
+    CHECK(near(ctl::dutyCapVolts(20.f, 12.f), 0.6f));    // pack outil 20 V → 60 %
+    CHECK(near(ctl::dutyCapVolts(24.f, 12.f), 0.5f));    // 24 V → 50 %
+    CHECK(near(ctl::dutyCapVolts(28.8f, 12.f), 12.f / 28.8f));   // 2×12 V en charge
+}
+
 // ───────────────────────── Pid ─────────────────────────
 static void test_pid()
 {
@@ -153,6 +165,7 @@ int main()
     test_mix_arcade();
     test_square_map();
     test_turn_limit();
+    test_duty_cap_volts();
     test_pid();
     test_ring();
 

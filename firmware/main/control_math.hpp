@@ -49,6 +49,16 @@ inline float turnLimit(float v_abs, float v_full, float v_max, float hi_limit)
     return 1.f + f * (hi_limit - 1.f);
 }
 
+// Plafond PWM automatique selon la tension batterie MESURÉE : les moteurs (v_nom, ex. 12 V)
+// ne doivent pas voir plus que leur tension nominale en moyenne → duty max = v_nom / vbat.
+// Batterie 12 V → ~100 %, 20 V → ~60 %, 24 V → ~50 %. Tension inconnue (capteur absent,
+// vbat ≤ 0) ou plus basse que v_nom → 1 (pas de bridage automatique).
+inline float dutyCapVolts(float vbat, float v_nom)
+{
+    if (vbat <= v_nom) return 1.f;
+    return v_nom / vbat;
+}
+
 // Compensation cercle→carré : le stick physique est borné par un CERCLE (x²+y²≤1) ; en
 // diagonale pleine chaque axe plafonne à ~0,71. Étire radialement (direction constante,
 // facteur |v|/max(|x|,|y|), =√2 en diagonale) pour rendre les coins du CARRÉ atteignables.

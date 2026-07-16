@@ -180,7 +180,9 @@ Priorités / cœurs / piles : [`main/rtos.hpp`](main/rtos.hpp) · [`../doc/firmw
 3. **Limiteur de pente** sur avance et virage (anti à-coups), puis **mélange arcade**
    `(avance y, virage x)` → consignes roue gauche / droite, après **bridage anti-renversement**.
 4. Par roue : **PID de freinage** (ramène à 0 quand consigne nulle) + **PID limiteur de
-   vitesse** (plafonne la vitesse véhicule à `speed_limit_ms`, en m/s), sortie **plafonnée** (`duty_cap_frac`).
+   vitesse** (plafonne la vitesse véhicule à `speed_limit_ms`, en m/s), sortie **plafonnée** : plafond
+   **automatique 12 V/Vbat mesurée** (moteurs 12 V, driver 6–30 V : batterie 12 V → ~100 %, 24 V → ~50 %)
+   ET plafond **manuel** `duty_cap` — le plus restrictif gagne. Sans ADS1115 (Vbat inconnue) : manuel seul.
 5. **PWM + DIR indépendants** vers les 2 canaux du driver.
 
 `can_drive` exige : manette **connectée**, **calibrée**, **armée**, pas d'arrêt d'urgence,
@@ -197,7 +199,7 @@ absent** (Vbat < 0 ⇒ on s'appuie sur le BMS, utile au banc sans ADS1115), **d�
 défaut capteur**, **watchdog 5 s**, **PWM plafonné** (moteurs 12 V / batterie 20 V).
 
 > **Option `use_encoders` (0/1)** : à **0**, le firmware ignore les AS5600 — pas d'asservissement
-> vitesse ni de frein PID (on s'appuie sur `duty_cap_frac`), et **pas de défaut « capteur
+> vitesse ni de frein PID (on s'appuie sur les plafonds PWM), et **pas de défaut « capteur
 > bloqué »**. Indispensable pour **tester au banc sans encodeurs câblés** (sinon le défaut
 > capteur se déclenche dès qu'on commande du PWM sans rotation mesurée).
 
@@ -230,7 +232,7 @@ Paramètres web : **`turn_gain`**, **`turn_full_ms`**, **`turn_hi`**, **`rev_lim
   `WHEEL_DIAM_M = 0,254` (roue 10″). **2 AS5600**,
   **un par bus I²C** (adresse fixe `0x36` → un seul capteur par bus). À **vérifier au banc**.
 - **Manette** : appairer (onglet Manette) puis **calibrer** — obligatoire pour rouler.
-- **Réglages web** : `vbat_div_ratio` (au multimètre), `speed_limit_ms` (m/s), `duty_cap_frac`,
+- **Réglages web** : `vbat_div_ratio` (au multimètre), `speed_limit_ms` (m/s), `duty_cap` (plafond PWM manuel),
   `turn_gain` / `a_lat_max` (anti-renversement). Commencer **roues en l'air**, vitesse basse.
 - **PID** : `vmax_*` (limiteur de vitesse) et `pid_*` (frein) par roue — pré-réglés
   (limiteur ≈ 0,15/0,14, frein ≈ 0,12/0,08/0,003), à **affiner au banc**.
