@@ -273,10 +273,11 @@ std::string buildConfigJson()
     {
         const ParamDesc& p = PARAMS[i];
         const char* type = (PType::Float == p.type) ? "float" : (PType::Int == p.type ? "int" : "bool");
-        char buf[256];
+        char buf[640];   // cat + help (infobulle) inclus — textes statiques SANS guillemets doubles
         snprintf(buf, sizeof(buf),
-                 "%s{\"name\":\"%s\",\"desc\":\"%s\",\"type\":\"%s\",\"min\":%g,\"max\":%g,\"val\":%g}",
-                 i ? "," : "", p.name, p.desc, type, p.min, p.max, cfg.*(PARAMS[i].field));
+                 "%s{\"name\":\"%s\",\"desc\":\"%s\",\"cat\":\"%s\",\"help\":\"%s\","
+                 "\"type\":\"%s\",\"min\":%g,\"max\":%g,\"val\":%g}",
+                 i ? "," : "", p.name, p.desc, p.cat, p.help, type, p.min, p.max, cfg.*(PARAMS[i].field));
         out += buf;
     }
     out += "]}";
@@ -287,13 +288,14 @@ std::string buildStatusJson()
 {
     char buf[576];
     snprintf(buf, sizeof(buf),
-             "{\"type\":\"status\",\"state\":%d,\"fault\":%d,\"vbat\":%.2f,"
+             "{\"type\":\"status\",\"state\":%d,\"fault\":%d,\"vbat\":%.2f,\"batt_type\":%d,"
              "\"speed_ms\":%.2f,\"speed_l\":%.2f,\"speed_r\":%.2f,\"fwd\":%.3f,\"turn\":%.3f,"
              "\"out_l\":%.3f,\"out_r\":%.3f,\"brake\":%s,\"arming\":%s,\"btn_start\":%s,"
              "\"pad_conn\":%s,\"pad_batt\":%d,\"pad_x\":%.3f,\"pad_y\":%.3f,"
              "\"pad_cx\":%.3f,\"pad_cy\":%.3f,\"pad_zl\":%.2f,\"pad_zr\":%.2f,"
              "\"pad_rx2\":%.3f,\"pad_ry2\":%.3f,\"pad_btns\":%u}",
              g_status.m_state.load(), g_status.m_fault.load(), g_status.m_vbat.load(),
+             g_status.m_batt_type.load(),
              g_status.m_speed_ms.load(),
              g_status.m_speed_l.load(), g_status.m_speed_r.load(),
              g_status.m_fwd.load(), g_status.m_turn.load(),

@@ -116,7 +116,7 @@ const ST=["IDLE","CALIBRATION","ARMÉ","DÉFAUT"];                       // libe
 const FA=["—","E-STOP","BATTERIE BASSE","NON CALIBRÉ","ENCODEUR"];  // libellés par FAULT
 let ws,timer,histTimer,built=false;
 let speedScale=3.3;  // m/s ≙ 100 % (barres de vitesse), réglé depuis la config
-let battLow=15, battFull=21;   // V à 0 % / 100 %, dérivés du nombre de cellules (config)
+let battLow=10.5, battFull=13, battType=-1;   // échelle selon la batterie DÉTECTÉE (12/24 V)
 
 // Onglets
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
@@ -301,25 +301,37 @@ function showStatus(s){
    why.innerHTML="🚫 <b>Le véhicule ne peut pas bouger</b>"+
      (b.length?(" :<ul><li>"+b.join("</li><li>")+"</li></ul>"):" (état : "+st+")");
  }
+ setBattType(s.batt_type||0);
  document.getElementById('status').textContent=
   `État : ${st}${s.fault?('  ·  défaut : '+(FA[s.fault]||s.fault)):''}\n`+
-  `Manette : ${s.pad_conn?'connectée':'déconnectée'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}`;
+  `Manette : ${s.pad_conn?'connectée':'déconnectée'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}\n`+
+  `Batterie : ${s.batt_type?s.batt_type+' V (détectée)':'détection du type…'}`;
 }
 
 // ── Formulaire de configuration (auto-généré depuis le schéma) ──
 function deriveFromCfg(p){
  if(p.name==='speed_limit_ms') speedScale=Math.max(0.3,p.val);
- if(p.name==='cell_count'){
-   const n=Math.max(1,p.val); battLow=n*3.0; battFull=n*4.2;
-   document.getElementById('batttitle').textContent=`🔋 Batterie (${battLow.toFixed(0)}–${battFull.toFixed(0)} V) — 30 min`;
-   if(chBatt){const y=chBatt.options.scales.y;y.min=battLow;y.max=battFull;y.ticks.stepSize=(battFull-battLow)/4;chBatt.update('none');}
- }
+}
+// Type de batterie détecté au démarrage du kart (tension stable 3 s) : 0 = en cours, 12 ou 24.
+// Adapte le titre et l'échelle du graphique batterie (plomb : vide sous charge → pleine au repos).
+function setBattType(bt){
+ if(bt===battType)return; battType=bt;
+ if(bt===24){battLow=21;battFull=26;} else {battLow=10.5;battFull=13;}
+ const t=document.getElementById('batttitle');
+ t.textContent=bt?`🔋 Batterie ${bt} V (${battLow}–${battFull} V) — 30 min`
+               :'🔋 Batterie (détection du type…) — 30 min';
+ if(chBatt){const y=chBatt.options.scales.y;y.min=battLow;y.max=battFull;y.ticks.stepSize=(battFull-battLow)/4;chBatt.update('none');}
 }
 function buildForm(params){
  const f=document.getElementById('f');f.innerHTML='';
+ let cat=null;
  params.forEach(p=>{
+   if(p.cat&&p.cat!==cat){cat=p.cat;                       // catégories visuelles (entrées consécutives)
+     const h=document.createElement('div');h.className='cfgcat';h.textContent=cat;f.appendChild(h);}
    const lab=document.createElement('label');lab.textContent=p.desc;
+   if(p.help){lab.title=p.help;}                           // infobulle au survol (libellé + champ)
    const inp=document.createElement('input');inp.type='number';inp.name=p.name;
+   if(p.help){inp.title=p.help;}
    inp.step=(p.type==='float')?'any':'1';inp.min=p.min;inp.max=p.max;inp.value=p.val;
    lab.appendChild(inp);f.appendChild(lab);
    deriveFromCfg(p);

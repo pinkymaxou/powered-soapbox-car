@@ -38,7 +38,11 @@ void render(const KartConfig& cfg)
             b = 255;
             break;
         case State::Run:
-            if (g_status.m_vbat.load() < cfg.vbat_warn_v)
+        {
+            // Seuil d'avertissement selon la batterie détectée (12/24 V) ; type inconnu → pas d'alerte.
+            const int   bt     = g_status.m_batt_type.load();
+            const float warn_v = (24 == bt) ? hw::VBAT24_WARN_V : hw::VBAT12_WARN_V;
+            if ((0 != bt) && g_status.m_vbat.load() < warn_v)
             {
                 r = 255;
                 g = 120;       // batterie faible : orange
@@ -52,6 +56,7 @@ void render(const KartConfig& cfg)
                 g = 255;       // armé : vert
             }
             break;
+        }
         case State::Lockout:
         default:
             if (g_status.m_arming.load())

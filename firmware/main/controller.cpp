@@ -59,6 +59,7 @@ bool    m_enc_fault = false;
 float   m_fwd_cmd = 0.f;   // consigne avance APRÈS limiteur de pente (état conservé entre ticks)
 float   m_turn_cmd = 0.f;  // consigne virage APRÈS limiteur de pente
 float   m_vbat_ema = 0.f;  // Vbat lissée LENTEMENT (τ ≈ 1 s) pour le plafond PWM auto — 0 = inconnue
+ctl::BattDetect m_batt_det; // type de batterie (12/24 V) classé au démarrage sur tension stable 3 s
 float   m_sl_ema = 0.f;    // vitesse roue G lissée (EMA)
 float   m_sr_ema = 0.f;    // vitesse roue D lissée (EMA)
 
@@ -74,12 +75,26 @@ void setState(State s, Fault f)
     g_status.m_fault.store(static_cast<int>(f));
 }
 
-void updateLVC(float vbat, const KartConfig& cfg)
+void updateLVC(float vbat)
 {
+    // Seuils codés en dur selon la batterie DÉTECTÉE au démarrage (12 V ou 24 V, plomb).
+    // Tant que la tension n'a pas été stable 3 s (type inconnu) : pas de LVC — le kart
+    // démarre désarmé de toute façon, et on ne change jamais de batterie système allumé.
+    const int bt = m_batt_det.volts;
+    if (0 == bt)
+    {
+        m_lvc_tripped = false;
+        m_sag_start_us = 0;
+        m_lvc_since_us = 0;
+        return;
+    }
+    const float cut_v     = (24 == bt) ? hw::VBAT24_CUT_V     : hw::VBAT12_CUT_V;
+    const float recover_v = (24 == bt) ? hw::VBAT24_RECOVER_V : hw::VBAT12_RECOVER_V;
+
     const int64_t now = esp_timer_get_time();
     if (!m_lvc_tripped)
     {
-        if (vbat < cfg.vbat_cut_v)
+        if (vbat < cut_v)
         {
             if (0 == m_sag_start_us) m_sag_start_us = now;
             if ((now - m_sag_start_us) > static_cast<int64_t>(hw::VBAT_SAG_DEBOUNCE_MS) * 1000)
@@ -93,7 +108,7 @@ void updateLVC(float vbat, const KartConfig& cfg)
             m_sag_start_us = 0;
         }
     }
-    else if (vbat > cfg.vbat_recover_v)
+    else if (vbat > recover_v)
     {
         m_lvc_tripped = false;
         m_sag_start_us = 0;
@@ -128,6 +143,7 @@ void updateEncStuck(int64_t now, float cmd, float speed_ms)
 void publish(float sl, float sr, float v_veh, float vbat, const input::State& in)
 {
     g_status.m_vbat.store(vbat);
+    g_status.m_batt_type.store(m_batt_det.volts);
     g_status.m_speed_l.store(sl);
     g_status.m_speed_r.store(sr);
     g_status.m_speed_ms.store(v_veh);   // vitesse véhicule signée (m/s), 0 en pivot
@@ -173,7 +189,9 @@ void tick()
     // pack assure la protection). Permet aussi de tester au banc sans l'ADS1115 câblé.
     if (vbat_valid)
     {
-        updateLVC(vbat, cfg);
+        m_batt_det.update(vbat, now, hw::VBAT_DETECT_STABLE_US,
+                          hw::VBAT_DETECT_TOL_V, hw::VBAT_DETECT_24V_MIN);
+        updateLVC(vbat);
         // Lissage LENT pour le plafond PWM auto : l'affaissement sous charge ne doit pas
         // faire osciller le duty (sag → Vbat baisse → duty remonte → plus de sag…).
         if (m_vbat_ema <= 0.f) m_vbat_ema = vbat;

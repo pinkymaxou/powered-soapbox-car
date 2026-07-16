@@ -109,6 +109,48 @@ static void test_duty_cap_volts()
     CHECK(near(ctl::dutyCapVolts(28.8f, 12.f), 12.f / 28.8f));   // 2×12 V en charge
 }
 
+static void test_batt_detect()
+{
+    const int64_t S = 3000000;   // 3 s de stabilité exigée
+    const float TOL = 0.5f, V24 = 18.f;
+    const int64_t DT = 2000;     // 500 Hz
+
+    // Batterie 12 V stable → classée 12 après 3 s, pas avant.
+    ctl::BattDetect d;
+    int64_t t = 0;
+    for (int i = 0; i < 1400; ++i) { d.update(12.6f, t, S, TOL, V24); t += DT; }
+    CHECK(0 == d.volts);                     // 2,8 s : pas encore
+    for (int i = 0; i < 200; ++i) { d.update(12.6f, t, S, TOL, V24); t += DT; }
+    CHECK(12 == d.volts);
+
+    // Batterie 24 V (2×12 plomb, repos ~25,3 V) → classée 24.
+    ctl::BattDetect d24; t = 0;
+    for (int i = 0; i < 1600; ++i) { d24.update(25.3f, t, S, TOL, V24); t += DT; }
+    CHECK(24 == d24.volts);
+
+    // Tension INSTABLE (>|tol|) → la fenêtre repart, pas de classification.
+    ctl::BattDetect du; t = 0;
+    for (int i = 0; i < 3000; ++i) { du.update((i % 2) ? 12.f : 13.f, t, S, TOL, V24); t += DT; }
+    CHECK(0 == du.volts);
+    // …puis la tension se stabilise → classée.
+    for (int i = 0; i < 1600; ++i) { du.update(12.5f, t, S, TOL, V24); t += DT; }
+    CHECK(12 == du.volts);
+
+    // Mesure invalide (capteur absent) au milieu → on repart de zéro, sans classer.
+    ctl::BattDetect di; t = 0;
+    for (int i = 0; i < 1000; ++i) { di.update(12.6f, t, S, TOL, V24); t += DT; }
+    di.update(-1.f, t, S, TOL, V24); t += DT;
+    for (int i = 0; i < 1400; ++i) { di.update(12.6f, t, S, TOL, V24); t += DT; }
+    CHECK(0 == di.volts);                    // 2,8 s depuis la coupure : pas encore
+
+    // Une fois classée, la détection est DÉFINITIVE (on ne change pas de batterie allumé).
+    ctl::BattDetect df; t = 0;
+    for (int i = 0; i < 1600; ++i) { df.update(12.6f, t, S, TOL, V24); t += DT; }
+    CHECK(12 == df.volts);
+    for (int i = 0; i < 3000; ++i) { df.update(25.f, t, S, TOL, V24); t += DT; }
+    CHECK(12 == df.volts);
+}
+
 // ───────────────────────── Pid ─────────────────────────
 static void test_pid()
 {
@@ -166,6 +208,7 @@ int main()
     test_square_map();
     test_turn_limit();
     test_duty_cap_volts();
+    test_batt_detect();
     test_pid();
     test_ring();
 

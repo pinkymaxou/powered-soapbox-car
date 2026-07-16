@@ -549,7 +549,8 @@ batterie choisie** (viser < 3,3 V à la tension max EN CHARGE) puis on recalibre
 | Pack outil 20 V | ~21 V | **100 k / 15 k** | 0,130 | 2,74 V ✔ |
 | **24 V** (2×12 V en série) | ~29 V | **100 k / 12 k** | 0,107 | 3,10 V ✔ |
 
-- Reconstruction : **Vbat = V_adc ÷ ratio** — le ratio exact (tolérances des résistances) se calibre via **`vbat_div_ratio`** (page web). Adapter aussi les **seuils LVC** (`vbat_warn_v`, `vbat_cut_v`, `vbat_recover_v`, `cell_count`) à la chimie choisie (plomb 12/24 V vs lithium).
+- Reconstruction : **Vbat = V_adc ÷ ratio** — le ratio exact (tolérances des résistances) se calibre via **`vbat_div_ratio`** (page web).
+- **Type de batterie détecté automatiquement au démarrage** : la tension doit être **stable pendant 3 s** (écart ≤ 0,5 V), puis elle est classée **12 V ou 24 V** (seuil 18 V : une 12 V même en charge reste ≤ ~14,8 V, une 24 V même vide reste ≥ ~21 V). Le type est **figé jusqu'au redémarrage** (on ne change jamais de batterie système allumé). Les **seuils LVC sont codés en dur par type** (plomb) : 12 V → alerte 11,5 / coupure 10,5 / réarmement 12,0 ; 24 V → 23,0 / 21,0 / 24,0. Tant que le type n'est pas classé : pas de LVC (le kart démarre désarmé de toute façon).
 - Fuite du pont ≈ 0,18 mA — sa masse de retour étant **commutée par le latch low-side**, **rien à l'arrêt**.
 - **Condensateur de découplage** sur le nœud ADC ; l'ADS1115 (16 bits, PGA) donne une mesure plus stable que l'ADC interne.
 

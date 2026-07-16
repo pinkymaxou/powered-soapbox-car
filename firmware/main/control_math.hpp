@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cmath>
+#include <cstdint>
 
 namespace ctl
 {
@@ -58,6 +59,36 @@ inline float dutyCapVolts(float vbat, float v_nom)
     if (vbat <= v_nom) return 1.f;
     return v_nom / vbat;
 }
+
+// Détection du TYPE de batterie au démarrage (12 V ou 24 V, plomb) : la tension doit
+// rester STABLE (écart min-max ≤ tol) pendant stable_us, puis classement par seuil —
+// une 12 V même en pleine charge reste ≤ ~14,8 V, une 24 V même déchargée reste ≥ ~21 V,
+// donc v24_min entre les deux tranche sans ambiguïté. On ne change JAMAIS de batterie
+// système allumé : le résultat est DÉFINITIF jusqu'au redémarrage (0 = pas encore classée).
+struct BattDetect
+{
+    int64_t m_start_us = -1;   // début de la fenêtre de stabilité (-1 = pas commencée)
+    float   m_min = 0.f, m_max = 0.f;
+    int     volts = 0;         // 0 = inconnue, puis 12 ou 24 (figé)
+
+    void update(float v, int64_t now_us, int64_t stable_us, float tol, float v24_min)
+    {
+        if (0 != volts) return;                                  // déjà classée : définitif
+        if (v <= 0.f) { m_start_us = -1; return; }               // mesure invalide → on repart
+        if (m_start_us < 0 || (v - m_min > tol) || (m_max - v > tol))
+        {
+            m_start_us = now_us;                                 // instable → fenêtre relancée
+            m_min = m_max = v;
+            return;
+        }
+        m_min = (v < m_min) ? v : m_min;
+        m_max = (v > m_max) ? v : m_max;
+        if (now_us - m_start_us >= stable_us)
+        {
+            volts = (0.5f * (m_min + m_max) >= v24_min) ? 24 : 12;
+        }
+    }
+};
 
 // Compensation cercle→carré : le stick physique est borné par un CERCLE (x²+y²≤1) ; en
 // diagonale pleine chaque axe plafonne à ~0,71. Étire radialement (direction constante,

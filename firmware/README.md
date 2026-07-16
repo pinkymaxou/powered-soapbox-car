@@ -194,7 +194,8 @@ Sécurités : **armement** par appui ~1 s sur START — **bouton physique OU bou
 de la manette** (manette centrée + connectée requises ; démarrage **désarmé**),
 **tout défaut force le désarmement** (il faut réarmer une fois résolu), **désarmement auto**
 après inactivité, **arrêt d'urgence** (bouton B → frein immédiat), **coupure basse tension
-(LVC)** avec hystérésis (+ coupure du latch) — **désactivée si le capteur de tension est
+(LVC)** avec hystérésis (+ coupure du latch), **seuils codés en dur selon la batterie 12 V ou
+24 V détectée au démarrage** (tension stable 3 s, type figé jusqu'au redémarrage) — **désactivée si le capteur de tension est
 absent** (Vbat < 0 ⇒ on s'appuie sur le BMS, utile au banc sans ADS1115), **détection de
 défaut capteur**, **watchdog 5 s**, **PWM plafonné** (moteurs 12 V / batterie 20 V).
 

@@ -56,7 +56,18 @@ constexpr uint8_t AS5600_REG_RAWANG = 0x0C;    // RAW ANGLE 12 bits (octets 0x0C
 
 constexpr int   VBAT_SAG_DEBOUNCE_MS = 500;
 constexpr int   LVC_POWEROFF_MS      = 30000;  // coupure auto (powerOff) après 30 s sous le seuil
-constexpr float VBAT_WARN_DERATE     = 0.6f;
+
+// ── Batterie : détection 12 V / 24 V au démarrage, seuils LVC codés en dur ──
+// La tension doit rester STABLE (écart ≤ TOL) pendant 3 s, puis classement : une 12 V même
+// en pleine charge reste ≤ ~14,8 V, une 24 V même déchargée reste ≥ ~21 V → le seuil 18 V
+// tranche sans ambiguïté. On ne change JAMAIS de batterie système allumé : type figé jusqu'au
+// redémarrage. Tant que non classée : pas de LVC (et le plafond PWM auto suit Vbat de toute
+// façon). Seuils plomb par type — pas des paramètres web : liés à la chimie, pas au réglage.
+constexpr int64_t VBAT_DETECT_STABLE_US = 3000000;   // 3 s de tension stable
+constexpr float   VBAT_DETECT_TOL_V     = 0.5f;      // écart min-max toléré dans la fenêtre
+constexpr float   VBAT_DETECT_24V_MIN   = 18.0f;     // moyenne stable ≥ 18 V → 24 V, sinon 12 V
+constexpr float   VBAT12_WARN_V = 11.5f, VBAT12_CUT_V = 10.5f, VBAT12_RECOVER_V = 12.0f;
+constexpr float   VBAT24_WARN_V = 23.0f, VBAT24_CUT_V = 21.0f, VBAT24_RECOVER_V = 24.0f;
 constexpr float EBRAKE_MIN_MPS       = 0.15f;  // en-dessous, on considère la roue arrêtée (frein PID)
 constexpr float ENC_STUCK_PWM        = 0.10f;
 constexpr int   ENC_STUCK_MS         = 1000;
@@ -75,10 +86,6 @@ struct KartConfig
     float thr_deadzone;   // zone morte du manche (avance ET virage)
     float thr_ramp_per_s; // limiteur de pente de l'AVANCE (douceur, Δ/s)
     float vbat_div_ratio;
-    float vbat_warn_v;
-    float vbat_cut_v;
-    float vbat_recover_v;
-    float cell_count;
     float pid_kp;
     float pid_ki;
     float pid_kd;
@@ -106,7 +113,9 @@ enum class PType : uint8_t { Float, Int, Bool };
 struct ParamDesc
 {
     const char*        name;   // clé NVS + clé JSON (≤ 15 caractères pour NVS)
-    const char*        desc;   // libellé pour la page web
+    const char*        desc;   // libellé court pour la page web
+    const char*        cat;    // catégorie (regroupement visuel dans la page de config)
+    const char*        help;   // description longue (infobulle au survol du champ)
     PType              type;
     float              min, def, max;
     float KartConfig::* field; // pointeur vers le champ correspondant
@@ -124,6 +133,7 @@ struct KartStatus
     std::atomic<int>   m_state{static_cast<int>(State::Lockout)};
     std::atomic<int>   m_fault{static_cast<int>(Fault::None)};
     std::atomic<float> m_vbat{0.f};
+    std::atomic<int>   m_batt_type{0};   // batterie détectée au démarrage : 0 = en cours, 12 ou 24 (V)
     std::atomic<float> m_speed_l{0.f};   // vitesse roue avant gauche SIGNÉE (AS5600 #1, m/s)
     std::atomic<float> m_speed_r{0.f};   // vitesse roue avant droite SIGNÉE (AS5600 #2, m/s)
     std::atomic<float> m_speed_ms{0.f};  // vitesse VÉHICULE signée (m/s) = (vG+vD)/2 — pivot sur place → 0

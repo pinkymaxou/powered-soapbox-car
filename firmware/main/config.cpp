@@ -16,45 +16,85 @@ namespace
 constexpr char NVS_NS[] = "kart";
 }
 
-// Source unique de vérité : nom (clé NVS/JSON), libellé, type, min/défaut/max, champ visé.
+// Source unique de vérité : nom (clé NVS/JSON), libellé, catégorie (regroupement visuel),
+// aide (infobulle au survol — SANS guillemets doubles, injectée telle quelle dans le JSON),
+// type, min/défaut/max, champ visé. L'ordre du tableau = l'ordre d'affichage : garder les
+// entrées d'une même catégorie CONSÉCUTIVES (la page web groupe les cat identiques qui se suivent).
+// NB : les seuils LVC ne sont PAS ici — batterie 12 V ou 24 V détectée au démarrage,
+// seuils codés en dur par type (hw::VBAT12_*/VBAT24_*).
 const ParamDesc PARAMS[] =
 {
-    {"speed_limit_ms",  "Limite vitesse (m/s)",   PType::Float, 0.3f,  3.3f,   7.f,    &KartConfig::speed_limit_ms},
-    // Plafond PWM MANUEL (plancher de sécurité, le plus restrictif gagne) — le plafond
-    // AUTOMATIQUE 12 V/Vbat mesurée (ctl::dutyCapVolts) s'applique EN PLUS. Clé renommée
-    // (ex-duty_cap_frac, défaut 0,50 pensé pour un pack 20 V fixe) : tout le monde repart
-    // du défaut 1,0 = « laisser faire l'automatique ».
-    {"duty_cap",        "Plafond PWM manuel (0-1)", PType::Float, 0.05f, 1.0f,   1.f,    &KartConfig::duty_cap_frac},
-    {"thr_deadzone",    "Zone morte manche",       PType::Float, 0.f,   0.06f,  0.30f,  &KartConfig::thr_deadzone},
-    {"thr_ramp_per_s",  "Douceur avance (D/s)",    PType::Float, 0.2f,  2.f,    20.f,   &KartConfig::thr_ramp_per_s},
-    {"vbat_div_ratio",  "Ratio diviseur Vbat",     PType::Float, 1.f,   7.667f, 20.f,   &KartConfig::vbat_div_ratio},
-    // Plages élargies 8–29 V : batterie moto 12 V (option probable), pack outil 20 V,
-    // ou 24 V (2×12 V série, driver max 30 V). Régler les seuils selon la chimie.
-    {"vbat_warn_v",     "Vbat avertissement (V)",  PType::Float, 8.f,   16.5f,  29.f,   &KartConfig::vbat_warn_v},
-    {"vbat_cut_v",      "Vbat coupure LVC (V)",    PType::Float, 8.f,   15.0f,  28.f,   &KartConfig::vbat_cut_v},
-    {"vbat_recover_v",  "Vbat rearmement (V)",     PType::Float, 8.f,   16.0f,  28.5f,  &KartConfig::vbat_recover_v},
-    {"cell_count",      "Cellules Li-ion (S)",     PType::Int,   1.f,   5.f,    14.f,   &KartConfig::cell_count},
-    // PID en m/s (clés renommées : l'erreur a changé d'unité km/h→m/s, défauts ×3,6 — les
-    // anciennes clés NVS pid_*/vmax_* sont ignorées, les nouvelles partent des bons défauts).
-    {"brk_kp",          "Frein PID Kp (m/s)",      PType::Float, 0.f,   0.43f,  5.f,    &KartConfig::pid_kp},
-    {"brk_ki",          "Frein PID Ki (m/s)",      PType::Float, 0.f,   0.29f,  10.f,   &KartConfig::pid_ki},
-    {"brk_kd",          "Frein PID Kd (m/s)",      PType::Float, 0.f,   0.011f, 2.f,    &KartConfig::pid_kd},
-    {"vlim_kp",         "Limiteur PID Kp (m/s)",   PType::Float, 0.f,   0.54f,  5.f,    &KartConfig::vmax_kp},
-    {"vlim_ki",         "Limiteur PID Ki (m/s)",   PType::Float, 0.f,   0.50f,  10.f,   &KartConfig::vmax_ki},
-    {"vlim_kd",         "Limiteur PID Kd (m/s)",   PType::Float, 0.f,   0.f,    2.f,    &KartConfig::vmax_kd},
-    {"turn_gain",       "Gain de virage (0-1)",    PType::Float, 0.f,   0.6f,   1.f,    &KartConfig::turn_gain},
+    {"speed_limit_ms",  "Limite vitesse (m/s)",   "Vitesse et puissance",
+     "Vitesse maximale du vehicule en m/s. Au-dela, le limiteur PID retient le kart (encodeurs requis). C'est aussi la vitesse ou le virage est le plus bride par l'anti-renversement.",
+     PType::Float, 0.3f,  3.3f,   7.f,    &KartConfig::speed_limit_ms},
+    // Plafond PWM MANUEL (le plus restrictif gagne) — le plafond AUTOMATIQUE 12 V/Vbat
+    // mesurée (ctl::dutyCapVolts) s'applique EN PLUS. Défaut 1,0 = laisser faire l'auto.
+    {"duty_cap",        "Plafond PWM manuel (0-1)", "Vitesse et puissance",
+     "Plafond PWM fixe, en plus du plafond automatique 12 V / tension batterie mesuree (le plus restrictif gagne). Laisser 1,0 en usage normal ; a baisser a la main si on roule sans capteur de tension sur plus de 12 V.",
+     PType::Float, 0.05f, 1.0f,   1.f,    &KartConfig::duty_cap_frac},
+    {"thr_deadzone",    "Zone morte manche",       "Manette",
+     "Rayon autour du centre du stick ou la position est ignoree (0-0,3). Compense un stick qui ne revient pas exactement au centre.",
+     PType::Float, 0.f,   0.06f,  0.30f,  &KartConfig::thr_deadzone},
+    {"thr_ramp_per_s",  "Douceur avance (D/s)",    "Manette",
+     "Pente maximale de la consigne d'avance (pleine echelle par seconde). Plus petit = departs et arrets plus doux.",
+     PType::Float, 0.2f,  2.f,    20.f,   &KartConfig::thr_ramp_per_s},
+    {"turn_gain",       "Gain de virage (0-1)",    "Manette",
+     "Part du differentiel gauche/droite a fond de stick. 0,6 = pivot sur place plafonne a 60 % de la puissance.",
+     PType::Float, 0.f,   0.6f,   1.f,    &KartConfig::turn_gain},
+    {"turn_rate",       "Douceur virage (D/s)",    "Manette",
+     "Pente maximale de la consigne de virage (pleine echelle par seconde). Adoucit les coups de stick brusques.",
+     PType::Float, 0.3f,  3.0f,   20.f,   &KartConfig::turn_rate},
     // Anti-renversement « rampe » : virage ±100 % sous turn_full_ms, décroît linéairement
     // jusqu'à turn_hi à speed_limit_ms (vitesse MESURÉE). Recul plafonné à rev_limit.
-    {"turn_full_ms",    "Virage 100% sous (m/s)",  PType::Float, 0.1f,  0.5f,   3.f,    &KartConfig::turn_full_ms},
-    {"turn_hi",         "Virage max a Vmax (0-1)", PType::Float, 0.1f,  0.5f,   1.f,    &KartConfig::turn_hi},
-    {"rev_limit",       "Limite recul (0-1)",      PType::Float, 0.f,   0.5f,   1.f,    &KartConfig::rev_limit},
-    {"turn_rate",       "Douceur virage (D/s)",    PType::Float, 0.3f,  3.0f,   20.f,   &KartConfig::turn_rate},
-    {"use_encoders",    "Utiliser encodeurs (0/1)", PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::use_encoders},
-    {"allow_reverse",   "Marche arriere (0/1)",    PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::allow_reverse},
-    {"arm_hold_ms",     "Appui armement (ms)",     PType::Int,   200.f, 1000.f, 5000.f, &KartConfig::arm_hold_ms},
-    {"disarm_s",        "Desarmement auto (s)",    PType::Int,   5.f,   30.f,   600.f,  &KartConfig::disarm_s},
-    {"led_count",       "Nb LEDs ruban",           PType::Int,   1.f,   10.f,   60.f,   &KartConfig::led_count},
-    {"led_brightness",  "Luminosite LEDs",         PType::Int,   1.f,   64.f,   255.f,  &KartConfig::led_brightness},
+    {"turn_full_ms",    "Virage 100% sous (m/s)",  "Anti-renversement",
+     "Sous cette vitesse vehicule (m/s), le virage est autorise a 100 % (pivot sur place permis). Au-dela, la limite descend lineairement jusqu'a la limite Vmax.",
+     PType::Float, 0.1f,  0.5f,   3.f,    &KartConfig::turn_full_ms},
+    {"turn_hi",         "Virage max a Vmax (0-1)", "Anti-renversement",
+     "Limite de virage atteinte a la vitesse maximale. 0,5 = a fond de vitesse on ne peut braquer qu'a 50 % — empeche le renversement.",
+     PType::Float, 0.1f,  0.5f,   1.f,    &KartConfig::turn_hi},
+    {"rev_limit",       "Limite recul (0-1)",      "Anti-renversement",
+     "Plafond de puissance en marche arriere. 0,5 = on recule au maximum a 50 % — evite de reculer dangereusement vite.",
+     PType::Float, 0.f,   0.5f,   1.f,    &KartConfig::rev_limit},
+    {"vbat_div_ratio",  "Ratio diviseur Vbat",     "Batterie",
+     "Rapport du pont diviseur de mesure de tension : Vbat = tension lue par l'ADS1115 x ce ratio. A calibrer au multimetre. Le type de batterie (12 ou 24 V) et les seuils de coupure sont detectes automatiquement au demarrage.",
+     PType::Float, 1.f,   7.667f, 20.f,   &KartConfig::vbat_div_ratio},
+    // PID en m/s (l'erreur est en m/s depuis le passage km/h→m/s).
+    {"brk_kp",          "Frein PID Kp (m/s)",      "Asservissement (PID)",
+     "Gain proportionnel du frein electrique actif (consigne vitesse 0). Encodeurs requis.",
+     PType::Float, 0.f,   0.43f,  5.f,    &KartConfig::pid_kp},
+    {"brk_ki",          "Frein PID Ki (m/s)",      "Asservissement (PID)",
+     "Gain integral du frein electrique actif : rattrape une pente qui fait glisser le kart a l'arret.",
+     PType::Float, 0.f,   0.29f,  10.f,   &KartConfig::pid_ki},
+    {"brk_kd",          "Frein PID Kd (m/s)",      "Asservissement (PID)",
+     "Gain derive du frein electrique actif : amortit les oscillations de freinage.",
+     PType::Float, 0.f,   0.011f, 2.f,    &KartConfig::pid_kd},
+    {"vlim_kp",         "Limiteur PID Kp (m/s)",   "Asservissement (PID)",
+     "Gain proportionnel du limiteur de vitesse (retient le kart a la limite de vitesse).",
+     PType::Float, 0.f,   0.54f,  5.f,    &KartConfig::vmax_kp},
+    {"vlim_ki",         "Limiteur PID Ki (m/s)",   "Asservissement (PID)",
+     "Gain integral du limiteur de vitesse : tient la limite en descente.",
+     PType::Float, 0.f,   0.50f,  10.f,   &KartConfig::vmax_ki},
+    {"vlim_kd",         "Limiteur PID Kd (m/s)",   "Asservissement (PID)",
+     "Gain derive du limiteur de vitesse : amortit les oscillations autour de la limite.",
+     PType::Float, 0.f,   0.f,    2.f,    &KartConfig::vmax_kd},
+    {"use_encoders",    "Utiliser encodeurs (0/1)", "Comportement",
+     "1 = les capteurs AS5600 servent au limiteur de vitesse, au frein PID, a l'anti-renversement et au defaut capteur bloque. 0 = banc d'essai sans encodeurs cables.",
+     PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::use_encoders},
+    {"allow_reverse",   "Marche arriere (0/1)",    "Comportement",
+     "Autoriser la marche arriere (toujours plafonnee par la limite de recul).",
+     PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::allow_reverse},
+    {"arm_hold_ms",     "Appui armement (ms)",     "Comportement",
+     "Duree d'appui maintenu sur START (physique ou manette) pour armer, stick centre exige.",
+     PType::Int,   200.f, 1000.f, 5000.f, &KartConfig::arm_hold_ms},
+    {"disarm_s",        "Desarmement auto (s)",    "Comportement",
+     "Desarmement automatique apres ce delai sans toucher au stick.",
+     PType::Int,   5.f,   30.f,   600.f,  &KartConfig::disarm_s},
+    {"led_count",       "Nb LEDs ruban",           "LEDs",
+     "Nombre de LEDs WS2812 sur le ruban d'etat.",
+     PType::Int,   1.f,   10.f,   60.f,   &KartConfig::led_count},
+    {"led_brightness",  "Luminosite LEDs",         "LEDs",
+     "Luminosite du ruban (1-255).",
+     PType::Int,   1.f,   64.f,   255.f,  &KartConfig::led_brightness},
 };
 const int PARAM_COUNT = sizeof(PARAMS) / sizeof(PARAMS[0]);
 
@@ -73,9 +113,8 @@ void KartConfig::clampAll()
         float& f = this->*(PARAMS[i].field);
         f = std::clamp(f, PARAMS[i].min, PARAMS[i].max);
     }
-    // Cohérence des seuils LVC : cut < recover ≤ warn
-    if (vbat_recover_v < vbat_cut_v + 0.2f) vbat_recover_v = vbat_cut_v + 0.2f;
-    if (vbat_warn_v < vbat_recover_v)        vbat_warn_v = vbat_recover_v;
+    // (Les seuils LVC ne sont plus des paramètres : codés en dur selon la batterie
+    // 12/24 V détectée au démarrage — hw::VBAT12_*/VBAT24_*, cohérence garantie.)
 }
 
 namespace

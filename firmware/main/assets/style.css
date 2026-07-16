@@ -80,6 +80,12 @@ form{background:var(--card);border:1px solid var(--line);border-radius:12px;padd
 label{display:flex;justify-content:space-between;align-items:center;gap:12px;
  padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px;color:var(--muted)}
 label:last-child{border-bottom:0}
+/* Catégories du formulaire de config (bandeaux pleine largeur dans la carte) */
+.cfgcat{margin:10px -14px 2px;padding:6px 14px;background:var(--card2);
+ border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+ font-weight:600;font-size:13px;color:var(--accent);letter-spacing:.4px}
+.cfgcat:first-child{margin-top:-8px;border-top:0;border-radius:12px 12px 0 0}
+label[title]{cursor:help}
 input{width:120px;background:var(--card2);color:var(--txt);border:1px solid var(--line);
  border-radius:8px;padding:7px 9px;font-size:14px;text-align:right}
 input:focus{outline:none;border-color:var(--accent)}
