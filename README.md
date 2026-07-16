@@ -64,6 +64,12 @@ flowchart TB
     class SEP estop;
 ```
 
+![Concept 3D du kart](doc/cad/kart_concept.png)
+
+> Concept visuel régénérable : [`doc/cad/kart_concept.scad`](doc/cad/kart_concept.scad) (OpenSCAD —
+> 2 roues 10″ motorisées à l'avant, roulette 10″ folle sur queue surélevée, banquette 2 enfants,
+> séparation centrale + arrêt d'urgence, châssis 2×3 + contreplaqué 1/2″).
+
 **Gabarit :** longueur ~150–180 cm · largeur ~96 cm · **voie avant ~84 cm** · **2 roues motrices avant Ø25,4 cm (10″) + baie technique à l'avant** + **1 roulette arrière libre** · **séparation centrale = arrêt d'urgence** · assise basse 16 cm (anti-basculement).
 
 > ⚠️ Réservé au **terrain plat, sous surveillance adulte**. Vitesse estimée ~8–11,5 km/h (~3,2 m/s), autonomie ~10–20 min. **Un tricycle bascule plus facilement qu'un 4 roues** → anti-renversement logiciel (voir §3).
