@@ -10,6 +10,7 @@
  <button class="tab active" data-tab="dash">Tableau de bord</button>
  <button class="tab" data-tab="cfg">Configuration</button>
  <button class="tab" data-tab="pad">Manette</button>
+ <button class="tab" data-tab="faults" id="faultstab">Défauts</button>
  <button class="tab" data-tab="wifi">Wi-Fi</button>
  <button class="tab" data-tab="pins">Brochage</button>
  <button class="tab" data-tab="sys">Système</button>
@@ -36,6 +37,14 @@
   <button class="alt" onclick="reload()">Recharger</button>
   <form id="f"></form>
   <button type="button" onclick="save()">💾 Enregistrer</button>
+ </section>
+
+ <section id="faults" class="panel" hidden>
+  <div class="chart-title">🚨 Défauts présentement actifs</div>
+  <div id="faultlist" class="faultlist"></div>
+  <p class="note">Un défaut <b>désarme</b> le kart et enclenche le freinage dynamique. Les défauts
+  d'encodeur (bloqué / inversé / aberrant) restent <b>verrouillés jusqu'au redémarrage</b> ; les
+  autres disparaissent quand leur cause est résolue (il faut ensuite réarmer avec START).</p>
  </section>
 
  <section id="pad" class="panel" hidden>
@@ -111,9 +120,9 @@
 <script>
 // Reflètent les enums C++ State / Fault (config.hpp) — index = valeur.
 const STATE={LOCKOUT:0,CALIBRATE:1,RUN:2,FAULT:3};
-const FAULT={NONE:0,ESTOP:1,LVC:2,NOT_CALIBRATED:3,ENCODER:4};
+const FAULT={NONE:0,ESTOP:1,LVC:2,NOT_CALIBRATED:3,ENCODER:4,ENCODER_DIR:5,ENCODER_MAD:6};
 const ST=["IDLE","CALIBRATION","ARMÉ","DÉFAUT"];                       // libellés par STATE
-const FA=["—","E-STOP","BATTERIE BASSE","NON CALIBRÉ","ENCODEUR"];  // libellés par FAULT
+const FA=["—","E-STOP","BATTERIE BASSE","NON CALIBRÉ","ENCODEUR BLOQUÉ","ENCODEUR INVERSÉ","ENCODEUR ABERRANT"];  // libellés par FAULT
 let ws,timer,histTimer,built=false;
 let speedScale=3.3;  // m/s ≙ 100 % (barres de vitesse), réglé depuis la config
 let battLow=10.5, battFull=13, battType=-1;   // échelle selon la batterie DÉTECTÉE (12/24 V)
@@ -302,6 +311,7 @@ function showStatus(s){
      (b.length?(" :<ul><li>"+b.join("</li><li>")+"</li></ul>"):" (état : "+st+")");
  }
  setBattType(s.batt_type||0);
+ showFaults(s.faults>>>0);
  document.getElementById('status').textContent=
   `État : ${st}${s.fault?('  ·  défaut : '+(FA[s.fault]||s.fault)):''}\n`+
   `Manette : ${s.pad_conn?'connectée':'déconnectée'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}\n`+
@@ -322,6 +332,30 @@ function setBattType(bt){
                :'🔋 Batterie (détection du type…) — 30 min';
  if(chBatt){const y=chBatt.options.scales.y;y.min=battLow;y.max=battFull;y.ticks.stepSize=(battFull-battLow)/4;chBatt.update('none');}
 }
+// Bits du masque « faults » (voir controller.cpp) : toutes les conditions ACTIVES en même temps.
+const FAULTS_DESC=[
+ {b:0, t:'Arrêt d\u2019urgence manette (bouton B)', d:'Le bouton B est/était enfoncé. Relâcher, puis réarmer avec START.', grave:true},
+ {b:1, t:'Batterie basse (LVC)',                  d:'Tension sous le seuil de coupure du type de batterie détecté (12/24 V). Recharger la batterie ; coupure d\u2019alimentation automatique si la condition persiste.', grave:true},
+ {b:2, t:'Manette non calibrée',                  d:'Lancer la calibration du stick (onglet Manette).', grave:true},
+ {b:3, t:'Encodeur : roue bloquée',               d:'PWM appliqué mais aucune rotation mesurée. Roue coincée, courroie cassée ou capteur AS5600 débranché. Verrouillé jusqu\u2019au redémarrage.', grave:true},
+ {b:4, t:'Manette déconnectée',                   d:'Aucune manette Bluetooth connectée. Allumer/appairer la manette.', grave:true},
+ {b:5, t:'Capteur de tension absent (info)',      d:'ADS1115 non détecté : pas de LVC ni de plafond PWM automatique. OK au banc ; à câbler avant de rouler.', grave:false},
+ {b:6, t:'Encodeur : sens inversé',               d:'La roue tourne franchement à l\u2019opposé de la commande : capteur ou moteur câblé à l\u2019envers. ARRÊT TOTAL, verrouillé jusqu\u2019au redémarrage.', grave:true},
+ {b:7, t:'Encodeur : mesure aberrante',           d:'Vitesse mesurée physiquement impossible pour le kart. Capteur ou aimant défectueux. ARRÊT TOTAL, verrouillé jusqu\u2019au redémarrage.', grave:true},
+];
+let lastFaults=-1;
+function showFaults(mask){
+ if(mask===lastFaults)return; lastFaults=mask;
+ const n=FAULTS_DESC.filter(f=>mask>>>f.b&1).length;
+ const tab=document.getElementById('faultstab');
+ tab.textContent=n?`Défauts (${n})`:'Défauts';
+ tab.classList.toggle('tabalert',!!FAULTS_DESC.some(f=>f.grave&&(mask>>>f.b&1)));
+ const el=document.getElementById('faultlist');
+ if(!n){el.innerHTML='<div class="faultok">✅ Aucun défaut actif</div>';return;}
+ el.innerHTML=FAULTS_DESC.filter(f=>mask>>>f.b&1)
+  .map(f=>`<div class="faultcard${f.grave?'':' info'}"><b>${f.grave?'⛔':'ℹ️'} ${f.t}</b><br>${f.d}</div>`).join('');
+}
+
 function buildForm(params){
  const f=document.getElementById('f');f.innerHTML='';
  let cat=null;

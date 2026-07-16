@@ -178,9 +178,12 @@ Priorités / cœurs / piles : [`main/rtos.hpp`](main/rtos.hpp) · [`../doc/firmw
    **Vitesse véhicule = moyenne signée des deux roues** : deux roues égales en sens inverse
    (pivot sur place) → **0 m/s**. C'est elle qui alimente le limiteur et la télémétrie.
 3. **Limiteur de pente** sur avance et virage (anti à-coups), puis **mélange arcade**
-   `(avance y, virage x)` → consignes roue gauche / droite, après **bridage anti-renversement**.
-4. Par roue : **PID de freinage** (ramène à 0 quand consigne nulle) + **PID limiteur de
-   vitesse** (plafonne la vitesse véhicule à `speed_limit_ms`, en m/s), sortie **plafonnée** : plafond
+   `(avance y, virage x)` → consignes roue gauche / droite, après **bridage anti-renversement**
+   (désactivable : `turn_limit_en`, pour les essais).
+4. Par roue : **PID de freinage** (ramène à 0 quand consigne nulle, désactivable :
+   `brk_pid_enable` → repli frein dynamique) + **PID limiteur de
+   vitesse** (plafonne la vitesse véhicule à `speed_limit_ms`, en m/s ; désactivable :
+   `vlim_enable`), sortie **plafonnée** : plafond
    **automatique 12 V/Vbat mesurée** (moteurs 12 V, driver 6–30 V : batterie 12 V → ~100 %, 24 V → ~50 %)
    ET plafond **manuel** `duty_cap` — le plus restrictif gagne. Sans ADS1115 (Vbat inconnue) : manuel seul.
 5. **PWM + DIR indépendants** vers les 2 canaux du driver.
@@ -196,8 +199,16 @@ de la manette** (manette centrée + connectée requises ; démarrage **désarmé
 après inactivité, **arrêt d'urgence** (bouton B → frein immédiat), **coupure basse tension
 (LVC)** avec hystérésis (+ coupure du latch), **seuils codés en dur selon la batterie 12 V ou
 24 V détectée au démarrage** (tension stable 3 s, type figé jusqu'au redémarrage) — **désactivée si le capteur de tension est
-absent** (Vbat < 0 ⇒ on s'appuie sur le BMS, utile au banc sans ADS1115), **détection de
-défaut capteur**, **watchdog 5 s**, **PWM plafonné** (moteurs 12 V / batterie 20 V).
+absent** (Vbat < 0 ⇒ on s'appuie sur le BMS, utile au banc sans ADS1115), **sanité des
+encodeurs** — roue **bloquée** (PWM sans rotation), sens **inversé** (roue mesurée à l'opposé
+d'une consigne franche : câblage capteur/moteur à l'envers) et mesure **aberrante** (vitesse
+physiquement impossible) ⇒ **arrêt total verrouillé jusqu'au redémarrage** (un capteur qui ment
+rendrait frein PID et limiteur dangereux), **watchdog 5 s**, **PWM plafonné automatiquement**
+(12 V/Vbat mesurée).
+
+La page web a un onglet **Défauts** : liste de **toutes les conditions actives** en simultané
+(masque `faults`, bits nommés `fb::` dans `config.hpp`), avec explication et remède — l'onglet
+passe en rouge dès qu'un défaut grave est présent.
 
 > **Option `use_encoders` (0/1)** : à **0**, le firmware ignore les AS5600 — pas d'asservissement
 > vitesse ni de frein PID (on s'appuie sur les plafonds PWM), et **pas de défaut « capteur

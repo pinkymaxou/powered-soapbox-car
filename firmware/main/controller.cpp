@@ -56,6 +56,10 @@ int64_t m_last_act_us = 0;     // dernière activité manche
 bool    m_start_latch = false; // appui START déjà traité
 int64_t m_stuck_us = 0;
 bool    m_enc_fault = false;
+int64_t m_rev_l_us = 0, m_rev_r_us = 0;   // débuts de « sens opposé » persistant (G/D)
+int64_t m_mad_us = 0;                      // début de mesure aberrante persistante
+bool    m_enc_rev_fault = false;           // encodeur/moteur câblé À L'ENVERS (verrouillé)
+bool    m_enc_mad_fault = false;           // mesure sans aucun sens physique (verrouillé)
 float   m_fwd_cmd = 0.f;   // consigne avance APRÈS limiteur de pente (état conservé entre ticks)
 float   m_turn_cmd = 0.f;  // consigne virage APRÈS limiteur de pente
 float   m_vbat_ema = 0.f;  // Vbat lissée LENTEMENT (τ ≈ 1 s) pour le plafond PWM auto — 0 = inconnue
@@ -140,6 +144,42 @@ void updateEncStuck(int64_t now, float cmd, float speed_ms)
     }
 }
 
+// Sanité des encodeurs : sens inversé (roue mesurée à l'opposé d'une consigne franche —
+// câblage capteur OU moteur à l'envers) et mesure aberrante (vitesse impossible). Un capteur
+// qui MENT rend le frein PID et le limiteur DANGEREUX (ils pousseraient au lieu de retenir) →
+// ARRÊT TOTAL, verrouillé jusqu'au redémarrage. « braking » exclut le frein PID : il s'oppose
+// à la rotation par design et déclencherait le test de sens à tort.
+void updateEncSanity(int64_t now, bool braking, float out_l, float out_r, float sl, float sr)
+{
+    auto reversed = [now](float out, float v, int64_t& t0) -> bool {
+        if (fabsf(out) > hw::ENC_REV_PWM && fabsf(v) > hw::ENC_REV_MPS && out * v < 0.f)
+        {
+            if (0 == t0) t0 = now;
+            return (now - t0) > static_cast<int64_t>(hw::ENC_REV_MS) * 1000;
+        }
+        t0 = 0;
+        return false;
+    };
+    if (!braking)
+    {
+        if (reversed(out_l, sl, m_rev_l_us) || reversed(out_r, sr, m_rev_r_us)) m_enc_rev_fault = true;
+    }
+    else
+    {
+        m_rev_l_us = m_rev_r_us = 0;
+    }
+
+    if (fabsf(sl) > hw::ENC_MAX_SANE_MPS || fabsf(sr) > hw::ENC_MAX_SANE_MPS)
+    {
+        if (0 == m_mad_us) m_mad_us = now;
+        else if ((now - m_mad_us) > static_cast<int64_t>(hw::ENC_MAD_MS) * 1000) m_enc_mad_fault = true;
+    }
+    else
+    {
+        m_mad_us = 0;
+    }
+}
+
 void publish(float sl, float sr, float v_veh, float vbat, const input::State& in)
 {
     g_status.m_vbat.store(vbat);
@@ -184,6 +224,7 @@ void tick()
     // inverse (pivot sur place) → 0 m/s. C'est elle qui sert aux ajustements de conduite.
     const float v_veh = 0.5f * (sl + sr);
     if (!use_enc) m_enc_fault = false;   // pas d'encodeurs → pas de défaut « capteur bloqué »
+    if (!use_enc) { m_enc_rev_fault = false; m_enc_mad_fault = false; m_rev_l_us = m_rev_r_us = m_mad_us = 0; }
 
     // Capteur de tension absent → tension inconnue : on NE déclenche PAS la LVC (le BMS du
     // pack assure la protection). Permet aussi de tester au banc sans l'ADS1115 câblé.
@@ -214,8 +255,23 @@ void tick()
     // ── Défauts / conditions de non-conduite ──
     Fault fault = Fault::None;
     if (m_lvc_tripped)                              fault = Fault::Lvc;
-    else if (m_enc_fault)                           fault = Fault::Encoder;
+    else if (m_enc_mad_fault)                       fault = Fault::EncoderMad;     // mesure impossible
+    else if (m_enc_rev_fault)                       fault = Fault::EncoderDir;     // sens inversé
+    else if (m_enc_fault)                           fault = Fault::Encoder;        // roue bloquée
     else if (in.connected && !input::calibrated())  fault = Fault::NotCalibrated;  // manette non calibrée
+
+    // Masque de TOUTES les conditions actives (le champ « fault » ne retient que la plus
+    // prioritaire) — consommé par la page web « Défauts ». Bits : voir FAULTS_DESC (index.html).
+    unsigned fmask = 0;
+    if (in.estop)                                fmask |= fb::ESTOP;
+    if (m_lvc_tripped)                           fmask |= fb::LVC;
+    if (in.connected && !input::calibrated())    fmask |= fb::NOCAL;
+    if (m_enc_fault)                             fmask |= fb::ENC_STUCK;
+    if (!in.connected)                           fmask |= fb::PAD_LOST;
+    if (!vbat_valid)                             fmask |= fb::NO_VBAT;
+    if (m_enc_rev_fault)                         fmask |= fb::ENC_REV;
+    if (m_enc_mad_fault)                         fmask |= fb::ENC_MAD;
+    g_status.m_faults.store(fmask);
 
     // Manette absente / e-stop manette / DÉFAUT → on désarme et on freine (sécurité absolue).
     // Un défaut force le désarmement : il faudra réarmer (START maintenu) une fois résolu.
@@ -294,16 +350,20 @@ void tick()
         // 2) Anti-renversement « rampe » : la limite de virage suit la vitesse MESURÉE.
         //    |v| ≤ turn_full_ms → ±100 % (pivot sur place, v≈0) ; puis décroissance LINÉAIRE
         //    jusqu'à turn_hi (±50 % défaut) atteinte à speed_limit_ms. Sans encodeurs, v=0 → pas de bridage.
-        const float turn_max = turnLimit(fabsf(v_veh), cfg.turn_full_ms, cfg.speed_limit_ms, cfg.turn_hi);
-        turn = clampf(turn, -turn_max, turn_max);
-        m_turn_cmd = turn;   // garde l'état borné (pas de windup de la rampe au-delà de la limite)
+        //    Désactivable (turn_limit_en=0) pour les essais au banc.
+        if (cfg.turn_limit_en != 0.f)
+        {
+            const float turn_max = turnLimit(fabsf(v_veh), cfg.turn_full_ms, cfg.speed_limit_ms, cfg.turn_hi);
+            turn = clampf(turn, -turn_max, turn_max);
+            m_turn_cmd = turn;   // garde l'état borné (pas de windup de la rampe au-delà de la limite)
+        }
 
         // Mix arcade différentiel (pivot sur place possible si fwd≈0).
         mixArcade(fwd, turn, cfg.turn_gain, out_l, out_r);
 
         // Plafond de vitesse global (préserve le ratio de virage) via PID sur la vitesse moyenne.
         // Sans encodeurs : pas d'asservissement vitesse → on s'appuie sur le plafond PWM (duty_cap).
-        if (use_enc)
+        if (use_enc && cfg.vlim_enable != 0.f)
         {
             const float vcap = m_speed_pid.update(cfg.speed_limit_ms, fabsf(v_veh), hw::CTRL_DT_S,
                                                   cfg.vmax_kp, cfg.vmax_ki, cfg.vmax_kd, 0.f, 1.f);
@@ -317,10 +377,10 @@ void tick()
 
         if (fabsf(fwd) < 1e-3f && fabsf(turn) < 1e-3f)
         {
-            // ARMÉ + manche centré → FREINAGE ACTIF (PID de plugging) si encodeurs présents ;
-            // sinon repli sur le freinage dynamique (court-circuit).
+            // ARMÉ + manche centré → FREINAGE ACTIF (PID de plugging) si encodeurs présents
+            // ET frein PID activé ; sinon repli sur le freinage dynamique (court-circuit).
             braking = true;
-            if (use_enc)
+            if (use_enc && cfg.brk_pid_enable != 0.f)
             {
                 out_l = brakeWheel(m_brake_l, sl, cfg, hw::CTRL_DT_S);
                 out_r = brakeWheel(m_brake_r, sr, cfg, hw::CTRL_DT_S);
@@ -339,7 +399,11 @@ void tick()
 
     if (dyn_brake) board::motorsBrake();                  // court-circuit moteur (freinage dynamique)
     else           board::motorsSet(out_l, out_r, cap);   // pilotage / plugging actif
-    if (use_enc) updateEncStuck(now, 0.5f * (out_l + out_r), v_veh);
+    if (use_enc)
+    {
+        updateEncStuck(now, 0.5f * (out_l + out_r), v_veh);
+        updateEncSanity(now, braking || dyn_brake, out_l, out_r, sl, sr);
+    }
 
     // Désarmement auto après inactivité.
     if (m_armed && (now - m_last_act_us) > static_cast<int64_t>(cfg.disarm_s) * 1000000) m_armed = false;

@@ -86,6 +86,12 @@ label:last-child{border-bottom:0}
  font-weight:600;font-size:13px;color:var(--accent);letter-spacing:.4px}
 .cfgcat:first-child{margin-top:-8px;border-top:0;border-radius:12px 12px 0 0}
 label[title]{cursor:help}
+/* Page Défauts */
+.faultlist{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.faultcard{background:#3a1212;border:1px solid #a33;color:#ffd9d9;border-radius:10px;padding:10px 14px;font-size:14px}
+.faultcard.info{background:#33301a;border-color:#aa3;color:#f5edc2}
+.faultok{background:#12351b;border:1px solid #3a5;color:#c9f5d4;border-radius:10px;padding:12px 14px;font-size:15px}
+.tab.tabalert{color:#fff;background:var(--red)}
 input{width:120px;background:var(--card2);color:var(--txt);border:1px solid var(--line);
  border-radius:8px;padding:7px 9px;font-size:14px;text-align:right}
 input:focus{outline:none;border-color:var(--accent)}

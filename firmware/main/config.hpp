@@ -71,6 +71,16 @@ constexpr float   VBAT24_WARN_V = 23.0f, VBAT24_CUT_V = 21.0f, VBAT24_RECOVER_V 
 constexpr float EBRAKE_MIN_MPS       = 0.15f;  // en-dessous, on considère la roue arrêtée (frein PID)
 constexpr float ENC_STUCK_PWM        = 0.10f;
 constexpr int   ENC_STUCK_MS         = 1000;
+// Sanité des encodeurs (câblage/montage) — un capteur qui MENT est pire qu'un capteur absent :
+// tout défaut ci-dessous provoque l'ARRÊT TOTAL (désarmement + frein), verrouillé jusqu'au reboot.
+// · INVERSÉ : consigne franche dans un sens, roue mesurée FRANCHEMENT dans l'autre pendant 400 ms
+//   (évalué seulement hors freinage : le frein PID s'oppose à la rotation PAR DESIGN).
+// · ABERRANT : |vitesse| physiquement impossible (kart ≈ 3,3 m/s max) pendant 200 ms.
+constexpr float ENC_REV_PWM          = 0.25f;   // consigne « franche »
+constexpr float ENC_REV_MPS         = 0.30f;    // vitesse « franche » opposée
+constexpr int   ENC_REV_MS          = 400;
+constexpr float ENC_MAX_SANE_MPS    = 8.0f;
+constexpr int   ENC_MAD_MS          = 200;
 // Lissage vitesse (moyenne exponentielle) : à 500 Hz le Δangle par tick est quantifié
 // (~0,08 m/s par count avec GEAR_RATIO 1,28 / roue 10"). α ~0,25 → cte de temps ~4 ticks (8 ms).
 constexpr float SPEED_EMA_ALPHA      = 0.25f;
@@ -93,10 +103,13 @@ struct KartConfig
     float vmax_ki;
     float vmax_kd;
     float turn_gain;     // part du différentiel à fond de manche X (0..1)
+    float turn_limit_en; // 1 = anti-renversement actif (rampe vitesse→virage) ; 0 = désactivé (essais)
     float turn_full_ms;  // sous cette vitesse (m/s), virage ±100 % (pivot permis) — anti-renversement
     float turn_hi;       // limite de virage (0..1) atteinte à speed_limit_ms (rampe linéaire)
     float rev_limit;     // plafond d'avance en MARCHE ARRIÈRE (0..1) — recul bridé
     float turn_rate;     // pente max du virage (Δ/s) — adoucit les coups de manche brusques
+    float vlim_enable;   // 1 = limiteur de vitesse PID actif ; 0 = désactivé (essais)
+    float brk_pid_enable;// 1 = frein PID actif à l'arrêt ; 0 = frein dynamique seul (essais)
     float use_encoders;  // 1 = asservissement vitesse/frein/défaut via AS5600 ; 0 = ignore les encodeurs
     float allow_reverse;
     float arm_hold_ms;
@@ -126,12 +139,28 @@ extern const int       PARAM_COUNT;
 
 // ───────────────────────── Télémétrie ─────────────────────────
 enum class State : int { Lockout = 0, Calibrate = 1, Run = 2, Fault = 3 };
-enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4 };
+enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4, EncoderDir = 5, EncoderMad = 6 };
+
+// Bits du masque m_faults : TOUTES les conditions actives simultanément (m_fault ne retient
+// que la plus prioritaire). Source unique côté firmware ; miroir de présentation côté web :
+// FAULTS_DESC dans index.html (mêmes bits, textes seulement).
+namespace fb
+{
+constexpr unsigned ESTOP     = 1u << 0;   // arrêt d'urgence manette (B)
+constexpr unsigned LVC       = 1u << 1;   // batterie basse
+constexpr unsigned NOCAL     = 1u << 2;   // manette non calibrée
+constexpr unsigned ENC_STUCK = 1u << 3;   // roue bloquée (PWM sans rotation)
+constexpr unsigned PAD_LOST  = 1u << 4;   // manette déconnectée
+constexpr unsigned NO_VBAT   = 1u << 5;   // capteur de tension absent (info)
+constexpr unsigned ENC_REV   = 1u << 6;   // encodeur/moteur câblé à l'envers
+constexpr unsigned ENC_MAD   = 1u << 7;   // mesure de vitesse aberrante
+} // namespace fb
 
 struct KartStatus
 {
     std::atomic<int>   m_state{static_cast<int>(State::Lockout)};
     std::atomic<int>   m_fault{static_cast<int>(Fault::None)};
+    std::atomic<unsigned> m_faults{0};   // masque des conditions ACTIVES (page Défauts) — voir controller.cpp
     std::atomic<float> m_vbat{0.f};
     std::atomic<int>   m_batt_type{0};   // batterie détectée au démarrage : 0 = en cours, 12 ou 24 (V)
     std::atomic<float> m_speed_l{0.f};   // vitesse roue avant gauche SIGNÉE (AS5600 #1, m/s)
