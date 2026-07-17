@@ -73,8 +73,8 @@
   1) Manche au repos → « Démarrer ». 2) Bouger les 2 sticks <b>à fond dans tous les sens</b>. 3) « Terminer ».</p>
   <div class="row">
    <button class="warn" id="calstartbtn" onclick="calStart()">▶ Démarrer la calibration</button>
-   <button onclick="calFinish()">✓ Terminer</button>
-   <button class="alt" onclick="calCancel()">Annuler</button>
+   <button id="calfinishbtn" onclick="calFinish()" disabled>✓ Terminer</button>
+   <button class="alt" id="calcancelbtn" onclick="calCancel()" disabled>Annuler</button>
   </div>
   <div class="status" id="calstatus">Calibration : —</div>
  </section>
@@ -493,8 +493,12 @@ function showPad(m){
   (m.batt>=0?(' · batterie '+m.batt+'%'):'');
  const cal=m.calstate===1?'⏺ collecte des extrêmes — bouger les sticks à fond':(m.calibrated?'✅ calibrée':'❌ NON calibrée (obligatoire pour rouler)');
  document.getElementById('calstatus').textContent='Calibration : '+cal+(m.pairing?'  ·  appairage ouvert':'');
- // Calibration en cours → « Démarrer » grisé jusqu'à Terminer ou Annuler.
- document.getElementById('calstartbtn').disabled=(m.calstate===1);
+ // Calibration en cours → « Démarrer » grisé ; sinon ce sont « Terminer »/« Annuler »
+ // qui le sont (ils n'ont de sens que pendant la collecte).
+ const encours=(m.calstate===1);
+ document.getElementById('calstartbtn').disabled=encours;
+ document.getElementById('calfinishbtn').disabled=!encours;
+ document.getElementById('calcancelbtn').disabled=!encours;
 }
 function reboot(){if(confirm("Redémarrer le système ? Il redémarrera DÉSARMÉ."))sendReq({type:'reboot'});}
 function showWifi(m){
