@@ -1,10 +1,9 @@
 // ringbuffer.hpp — Buffer circulaire d'octets (header-only), réutilisable.
-// Conserve les CAP dernières valeurs et sait les sérialiser en tableau JSON.
+// Conserve les CAP dernières valeurs ; copyTo() les linéarise (du plus ancien au plus
+// récent) pour l'encodage protobuf « bytes » de l'historique.
 #pragma once
 
-#include <cstdio>
 #include <cstdint>
-#include <string>
 
 template <int CAP>
 class Ring
@@ -22,26 +21,6 @@ public:
 
     int count() const { return m_count; }
     int capacity() const { return CAP; }
-
-    // Ajoute  "name":[v0,v1,...]  à `out`, du plus ancien au plus récent.
-    void appendJson(std::string& out, const char* name) const
-    {
-        char buf[16];
-        out += '"';
-        out += name;
-        out += "\":[";
-        const int oldest = (m_head - m_count + CAP) % CAP;
-        for (int i = 0; i < m_count; ++i)
-        {
-            if (i)
-            {
-                out += ',';
-            }
-            snprintf(buf, sizeof(buf), "%u", m_buf[(oldest + i) % CAP]);
-            out += buf;
-        }
-        out += ']';
-    }
 
     // Copie linéarisée (du plus ancien au plus récent) dans dst ; retourne le nb d'octets.
     // Pour l'encodage protobuf « bytes » (1 octet/échantillon, zéro tas).

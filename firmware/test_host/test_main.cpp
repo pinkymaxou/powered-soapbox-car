@@ -189,21 +189,17 @@ static void test_ring()
     Ring<4> ring;
     CHECK(0 == ring.count() && 4 == ring.capacity());
 
-    std::string out;
-    ring.appendJson(out, "v");
-    CHECK(out == "\"v\":[]");
+    uint8_t lin[8] = {};
+    CHECK(0 == ring.copyTo(lin, 8));                // vide → rien
 
     ring.push(1); ring.push(2); ring.push(3);
-    out.clear(); ring.appendJson(out, "v");
-    CHECK(out == "\"v\":[1,2,3]");
+    CHECK(3 == ring.count());
+    CHECK(3 == ring.copyTo(lin, 8));
+    CHECK(1 == lin[0] && 2 == lin[1] && 3 == lin[2]);
 
     ring.push(4); ring.push(5);   // dépassement → écrase le plus ancien
     CHECK(4 == ring.count());
-    out.clear(); ring.appendJson(out, "v");
-    CHECK(out == "\"v\":[2,3,4,5]");
-
     // Linéarisation (pour l'encodage protobuf « bytes ») : plus ancien → plus récent.
-    uint8_t lin[8] = {};
     CHECK(4 == ring.copyTo(lin, 8));
     CHECK(2 == lin[0] && 3 == lin[1] && 4 == lin[2] && 5 == lin[3]);
     CHECK(2 == ring.copyTo(lin, 2));                // capacité < count → tronqué au plus ancien
