@@ -92,6 +92,39 @@ struct BattDetect
     }
 };
 
+// Détection « capteur/moteur câblé à l'envers » : commande franche d'un côté, roue mesurée
+// FRANCHEMENT de l'autre pendant win_us SANS que sa vitesse ne décroisse. Le point clé :
+// une DÉCÉLÉRATION commandée (freinage au stick, kart lancé) a aussi une vitesse opposée à
+// la commande — mais elle FOND vers zéro ; un câblage inversé donne une vitesse opposée
+// STABLE ou CROISSANTE. On ré-ancre la fenêtre dès que |v| décroît de plus de `decay`.
+struct RevDetect
+{
+    int64_t m_t0 = 0;    // début de la fenêtre d'opposition (0 = inactive)
+    float   m_v0 = 0.f;  // |v| à l'ancrage
+
+    // true = inversion CONFIRMÉE (opposition franche, persistante et non décroissante).
+    bool update(float out, float v, int64_t now_us, int64_t win_us,
+                float out_min, float v_min, float decay)
+    {
+        const bool opposed = (std::fabs(out) > out_min) && (std::fabs(v) > v_min) &&
+                             (out * v < 0.f);
+        if (!opposed)
+        {
+            m_t0 = 0;
+            return false;
+        }
+        if (0 == m_t0 || std::fabs(v) < m_v0 - decay)   // début, ou ça décélère → ré-ancre
+        {
+            m_t0 = now_us;
+            m_v0 = std::fabs(v);
+            return false;
+        }
+        return (now_us - m_t0) > win_us;
+    }
+
+    void reset() { m_t0 = 0; }
+};
+
 // Compensation cercle→carré : le stick physique est borné par un CERCLE (x²+y²≤1) ; en
 // diagonale pleine chaque axe plafonne à ~0,71. Étire radialement (direction constante,
 // facteur |v|/max(|x|,|y|), =√2 en diagonale) pour rendre les coins du CARRÉ atteignables.

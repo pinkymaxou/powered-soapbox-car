@@ -56,7 +56,7 @@ int64_t m_last_act_us = 0;     // dernière activité manche
 bool    m_start_latch = false; // appui START déjà traité
 int64_t m_stuck_us = 0;
 bool    m_enc_fault = false;
-int64_t m_rev_l_us = 0, m_rev_r_us = 0;   // débuts de « sens opposé » persistant (G/D)
+ctl::RevDetect m_rev_l, m_rev_r;   // détection « sens inversé » par roue (voir control_math.hpp)
 int64_t m_mad_us = 0;                      // début de mesure aberrante persistante
 bool    m_enc_rev_fault = false;           // encodeur/moteur câblé À L'ENVERS (verrouillé)
 bool    m_enc_mad_fault = false;           // mesure sans aucun sens physique (verrouillé)
@@ -128,7 +128,7 @@ float brakeWheel(Pid& pid, float speed_ms, const KartConfig& cfg, float dt)
         pid.reset();
         return 0.f;
     }
-    return pid.update(0.f, speed_ms, dt, cfg.pid_kp, cfg.pid_ki, cfg.pid_kd, -1.f, 1.f);
+    return pid.update(0.f, speed_ms, dt, cfg.brk_kp, cfg.brk_ki, cfg.brk_kd, -1.f, 1.f);
 }
 
 void updateEncStuck(int64_t now, float cmd, float speed_ms)
@@ -151,22 +151,21 @@ void updateEncStuck(int64_t now, float cmd, float speed_ms)
 // à la rotation par design et déclencherait le test de sens à tort.
 void updateEncSanity(int64_t now, bool braking, float out_l, float out_r, float sl, float sr)
 {
-    auto reversed = [now](float out, float v, int64_t& t0) -> bool {
-        if (fabsf(out) > hw::ENC_REV_PWM && fabsf(v) > hw::ENC_REV_MPS && out * v < 0.f)
-        {
-            if (0 == t0) t0 = now;
-            return (now - t0) > static_cast<int64_t>(hw::ENC_REV_MS) * 1000;
-        }
-        t0 = 0;
-        return false;
-    };
+    // RevDetect distingue une VRAIE inversion (vitesse opposée stable/croissante) d'une
+    // DÉCÉLÉRATION commandée — freinage au stick — où la vitesse opposée fond vers zéro.
     if (!braking)
     {
-        if (reversed(out_l, sl, m_rev_l_us) || reversed(out_r, sr, m_rev_r_us)) m_enc_rev_fault = true;
+        constexpr int64_t win = static_cast<int64_t>(hw::ENC_REV_MS) * 1000;
+        if (m_rev_l.update(out_l, sl, now, win, hw::ENC_REV_PWM, hw::ENC_REV_MPS, hw::ENC_REV_DECAY_MPS) ||
+            m_rev_r.update(out_r, sr, now, win, hw::ENC_REV_PWM, hw::ENC_REV_MPS, hw::ENC_REV_DECAY_MPS))
+        {
+            m_enc_rev_fault = true;
+        }
     }
     else
     {
-        m_rev_l_us = m_rev_r_us = 0;
+        m_rev_l.reset();
+        m_rev_r.reset();
     }
 
     if (fabsf(sl) > hw::ENC_MAX_SANE_MPS || fabsf(sr) > hw::ENC_MAX_SANE_MPS)
@@ -235,7 +234,7 @@ void tick()
     // inverse (pivot sur place) → 0 m/s. C'est elle qui sert aux ajustements de conduite.
     const float v_veh = 0.5f * (sl + sr);
     if (!use_enc) m_enc_fault = false;   // pas d'encodeurs → pas de défaut « capteur bloqué »
-    if (!use_enc) { m_enc_rev_fault = false; m_enc_mad_fault = false; m_rev_l_us = m_rev_r_us = m_mad_us = 0; }
+    if (!use_enc) { m_enc_rev_fault = false; m_enc_mad_fault = false; m_rev_l.reset(); m_rev_r.reset(); m_mad_us = 0; }
 
     // Capteur de tension absent → tension inconnue : on NE déclenche PAS la LVC (le BMS du
     // pack assure la protection). Permet aussi de tester au banc sans l'ADS1115 câblé.
@@ -309,7 +308,11 @@ void tick()
         else if (!m_start_latch && (now - m_hold_start_us) > static_cast<int64_t>(cfg.arm_hold_ms) * 1000)
         {
             m_start_latch = true;
-            if (!m_armed && in.connected && centered) { m_armed = true; m_last_act_us = now; }
+            if (!m_armed && in.connected && !pad_stale && centered && (Fault::None == fault))
+            {
+                m_armed = true;
+                m_last_act_us = now;
+            }
             else                                       { m_armed = false; }
         }
     }
@@ -335,6 +338,7 @@ void tick()
         input::rumble(220, 220, 250);
         m_rumble_block_us = now;
     }
+    if (m_armed_prev && !m_armed) configFlushPending();   // set reçu en roulant → persisté ici
     m_armed_prev = m_armed;
     m_estop_prev = in.estop;
     m_hardfault_prev = hard_fault;
@@ -390,7 +394,7 @@ void tick()
         if (use_enc && cfg.vlim_enable != 0.f)
         {
             const float vcap = m_speed_pid.update(cfg.speed_limit_ms, fabsf(v_veh), hw::CTRL_DT_S,
-                                                  cfg.vmax_kp, cfg.vmax_ki, cfg.vmax_kd, 0.f, 1.f);
+                                                  cfg.vlim_kp, cfg.vlim_ki, cfg.vlim_kd, 0.f, 1.f);
             out_l *= vcap;
             out_r *= vcap;
         }

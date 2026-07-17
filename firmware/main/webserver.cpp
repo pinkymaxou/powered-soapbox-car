@@ -159,6 +159,13 @@ size_t encodeMsg(const Msg& msg)
         ESP_LOGE(TAG, "Encodage protobuf : %s", PB_GET_ERROR(&os));
         return 0;
     }
+    if (os.bytes_written > (REPLY_CAP * 4) / 5)
+    {
+        // Marge < 20 % (la config grossit d'~190 o par paramètre ajouté) : agrandir REPLY_CAP
+        // AVANT que l'encodage n'échoue silencieusement côté page.
+        ESP_LOGW(TAG, "Réponse protobuf à %u/%u octets : marge faible",
+                 static_cast<unsigned>(os.bytes_written), static_cast<unsigned>(REPLY_CAP));
+    }
     return os.bytes_written;
 }
 
@@ -551,17 +558,30 @@ size_t buildSysInfoPb()
     return encodeMsg(msg);   // encodage AVANT la sortie de portée des tampons locaux
 }
 
-// Décodage d'un ParamVal de « set » : applique directement la valeur au brouillon de config.
+// Brouillon de config PARESSEUX : instancié (mutex + copie) seulement si des paires
+// « set » arrivent réellement — pas pour les status à 20 Hz.
+struct SetCtx
+{
+    KartConfig cfg;
+    bool       touched = false;
+};
+
+// Décodage d'un ParamVal de « set » : applique directement la valeur au brouillon.
 bool decSetParam(pb_istream_t* is, const pb_field_t* field, void** arg)
 {
-    KartConfig* cfg = static_cast<KartConfig*>(*arg);
+    SetCtx* ctx = static_cast<SetCtx*>(*arg);
     ParamVal pv = ParamVal_init_zero;
     if (!pb_decode(is, ParamVal_fields, &pv)) return false;
+    if (!ctx->touched)
+    {
+        ctx->cfg = configSnapshot();
+        ctx->touched = true;
+    }
     for (int i = 0; i < PARAM_COUNT; ++i)
     {
         if (0 == strcmp(PARAMS[i].name, pv.name))
         {
-            cfg->*(PARAMS[i].field) = pv.val;
+            ctx->cfg.*(PARAMS[i].field) = pv.val;
             break;
         }
     }
@@ -627,8 +647,8 @@ esp_err_t wsHandler(httpd_req_t* req)
     }
 
     // Décodage de la requête. « set » applique ses paires nom/valeur au fil du décodage
-    // (callback decSetParam) sur un brouillon de la config.
-    KartConfig draft = configSnapshot();
+    // (callback decSetParam) sur un brouillon instancié à la première paire.
+    SetCtx draft;
     Req rq = Req_init_zero;
     rq.set.funcs.decode = decSetParam;
     rq.set.arg = &draft;
@@ -674,7 +694,7 @@ esp_err_t wsHandler(httpd_req_t* req)
     }
     if (0 == strcmp(cmd, "set"))
     {
-        configUpdate(draft, true);   // les valeurs ont été appliquées au brouillon par decSetParam
+        if (draft.touched) configUpdate(draft.cfg, true);   // appliqué par decSetParam
         return wsReply(req, buildValsPb());
     }
     if (0 == strcmp(cmd, "sysinfo"))   { return wsReply(req, buildSysInfoPb()); }

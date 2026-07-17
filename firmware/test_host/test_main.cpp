@@ -155,6 +155,46 @@ static void test_batt_detect()
     CHECK(12 == df.volts);
 }
 
+static void test_rev_detect()
+{
+    const int64_t WIN = 400000;   // 400 ms
+    const int64_t DT = 2000;      // tick 500 Hz
+    const float OUT_MIN = 0.25f, V_MIN = 0.30f, DECAY = 0.15f;
+
+    // FREINAGE AU STICK : kart à +2 m/s, commande -0,5 → la vitesse opposée FOND vers 0.
+    // Décélération 2 m/s² : PAS une inversion, aucun déclenchement attendu.
+    ctl::RevDetect d;
+    int64_t t = 0; float v = 2.0f; bool fired = false;
+    while (v > 0.f)
+    {
+        fired |= d.update(-0.5f, v, t, WIN, OUT_MIN, V_MIN, DECAY);
+        v -= 2.0f * 0.002f;   // 2 m/s² × 2 ms
+        t += DT;
+    }
+    CHECK(!fired);
+
+    // VRAIE INVERSION : commande +0,5, roue mesurée à -1 m/s STABLE → confirmé après 400 ms.
+    ctl::RevDetect di; t = 0; fired = false;
+    for (int i = 0; i < 300; ++i) { fired |= di.update(0.5f, -1.0f, t, WIN, OUT_MIN, V_MIN, DECAY); t += DT; }
+    CHECK(fired);
+
+    // Inversion avec vitesse CROISSANTE (le kart accélère, capteur à l'envers) → confirmé.
+    ctl::RevDetect dc; t = 0; v = -0.4f; fired = false;
+    for (int i = 0; i < 400; ++i)
+    {
+        fired |= dc.update(0.6f, v, t, WIN, OUT_MIN, V_MIN, DECAY);
+        v -= 1.0f * 0.002f;   // accélère dans le mauvais sens
+        t += DT;
+    }
+    CHECK(fired);
+
+    // Opposition brève (< 400 ms) puis retour normal → rien.
+    ctl::RevDetect db; t = 0; fired = false;
+    for (int i = 0; i < 100; ++i) { fired |= db.update(0.5f, -1.0f, t, WIN, OUT_MIN, V_MIN, DECAY); t += DT; }
+    for (int i = 0; i < 300; ++i) { fired |= db.update(0.5f, 1.0f, t, WIN, OUT_MIN, V_MIN, DECAY); t += DT; }
+    CHECK(!fired);
+}
+
 // ───────────────────────── Pid ─────────────────────────
 static void test_pid()
 {
@@ -216,6 +256,7 @@ int main()
     test_turn_limit();
     test_duty_cap_volts();
     test_batt_detect();
+    test_rev_detect();
     test_pid();
     test_ring();
 

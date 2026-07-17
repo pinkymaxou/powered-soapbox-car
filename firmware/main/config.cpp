@@ -2,6 +2,7 @@
 #include "config.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include "esp_log.h"
 #include "nvs.h"
 
@@ -64,25 +65,25 @@ const ParamDesc PARAMS[] =
     // PID en m/s (l'erreur est en m/s depuis le passage km/h→m/s).
     {"brk_kp",          "Frein PID Kp (m/s)",      "Asservissement (PID)",
      "Gain proportionnel du frein electrique actif (consigne vitesse 0). Encodeurs requis.",
-     PType::Float, 0.f,   0.43f,  5.f,    &KartConfig::pid_kp},
+     PType::Float, 0.f,   0.43f,  5.f,    &KartConfig::brk_kp},
     {"brk_ki",          "Frein PID Ki (m/s)",      "Asservissement (PID)",
      "Gain integral du frein electrique actif : rattrape une pente qui fait glisser le kart a l'arret.",
-     PType::Float, 0.f,   0.29f,  10.f,   &KartConfig::pid_ki},
+     PType::Float, 0.f,   0.29f,  10.f,   &KartConfig::brk_ki},
     {"brk_kd",          "Frein PID Kd (m/s)",      "Asservissement (PID)",
      "Gain derive du frein electrique actif : amortit les oscillations de freinage.",
-     PType::Float, 0.f,   0.011f, 2.f,    &KartConfig::pid_kd},
+     PType::Float, 0.f,   0.011f, 2.f,    &KartConfig::brk_kd},
     {"vlim_enable",     "Limiteur vitesse (0/1)",  "Asservissement (PID)",
      "1 = le PID limiteur retient le kart a la limite de vitesse (encodeurs requis). 0 = desactive — seul le plafond PWM borne la vitesse.",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::vlim_enable},
     {"vlim_kp",         "Limiteur PID Kp (m/s)",   "Asservissement (PID)",
      "Gain proportionnel du limiteur de vitesse (retient le kart a la limite de vitesse).",
-     PType::Float, 0.f,   0.54f,  5.f,    &KartConfig::vmax_kp},
+     PType::Float, 0.f,   0.54f,  5.f,    &KartConfig::vlim_kp},
     {"vlim_ki",         "Limiteur PID Ki (m/s)",   "Asservissement (PID)",
      "Gain integral du limiteur de vitesse : tient la limite en descente.",
-     PType::Float, 0.f,   0.50f,  10.f,   &KartConfig::vmax_ki},
+     PType::Float, 0.f,   0.50f,  10.f,   &KartConfig::vlim_ki},
     {"vlim_kd",         "Limiteur PID Kd (m/s)",   "Asservissement (PID)",
      "Gain derive du limiteur de vitesse : amortit les oscillations autour de la limite.",
-     PType::Float, 0.f,   0.f,    2.f,    &KartConfig::vmax_kd},
+     PType::Float, 0.f,   0.f,    2.f,    &KartConfig::vlim_kd},
     {"brk_pid_enable",  "Frein PID (0/1)",         "Asservissement (PID)",
      "1 = frein electrique actif (PID, consigne vitesse 0) quand le stick est relache (encodeurs requis). 0 = freinage dynamique seul (court-circuit moteur).",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::brk_pid_enable},
@@ -139,8 +140,12 @@ bool readFloat(nvs_handle_t handle, const char* key, float& out)
     }
     return false;
 }
+// N'écrit la clé QUE si la valeur stockée diffère : chaque écriture flash suspend le cache
+// (donc la boucle de contrôle, qui s'exécute depuis la flash) et use la NVS pour rien.
 void writeFloat(nvs_handle_t handle, const char* key, float value)
 {
+    float cur;
+    if (readFloat(handle, key, cur) && cur == value) return;
     nvs_set_blob(handle, key, &value, sizeof(value));
 }
 } // namespace
@@ -203,13 +208,35 @@ KartConfig configSnapshot()
     return cfg;
 }
 
+namespace
+{
+std::atomic<bool> m_save_pending{false};   // sauvegarde repoussée (kart armé au moment du set)
+}
+
 void configUpdate(const KartConfig& cfg, bool persist)
 {
     xSemaphoreTake(g_cfg_mtx, portMAX_DELAY);
     g_cfg = cfg;
     g_cfg.clampAll();
-    if (persist) configSave();
+    if (persist)
+    {
+        // Kart ARMÉ → différer l'écriture NVS : les écritures flash suspendent le cache et
+        // gèlent la boucle de contrôle plusieurs dizaines de ms — pas pendant la conduite.
+        // Les valeurs sont déjà ACTIVES (g_cfg) ; la persistance suivra au désarmement.
+        if (g_status.m_arming.load()) m_save_pending.store(true);
+        else                          configSave();
+    }
     xSemaphoreGive(g_cfg_mtx);
+}
+
+// Appelée par la boucle de contrôle au passage armé → désarmé.
+void configFlushPending()
+{
+    if (!m_save_pending.exchange(false)) return;
+    xSemaphoreTake(g_cfg_mtx, portMAX_DELAY);
+    configSave();
+    xSemaphoreGive(g_cfg_mtx);
+    ESP_LOGI(TAG, "Réglages différés persistés (kart désarmé)");
 }
 
 bool configGetWifi(char* ssid, size_t ssid_size, char* pass, size_t pass_size, bool* enabled)

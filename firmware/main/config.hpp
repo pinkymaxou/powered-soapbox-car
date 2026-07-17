@@ -88,6 +88,7 @@ constexpr int   ENC_STUCK_MS         = 1000;
 constexpr float ENC_REV_PWM          = 0.25f;   // consigne « franche »
 constexpr float ENC_REV_MPS         = 0.30f;    // vitesse « franche » opposée
 constexpr int   ENC_REV_MS          = 400;
+constexpr float ENC_REV_DECAY_MPS   = 0.15f;    // |v| qui décroît d'autant = décélération, pas une inversion
 constexpr float ENC_MAX_SANE_MPS    = 8.0f;
 constexpr int   ENC_MAD_MS          = 200;
 // Lissage vitesse (moyenne exponentielle) : à 500 Hz le Δangle par tick est quantifié
@@ -114,12 +115,12 @@ struct KartConfig
     float thr_deadzone;   // zone morte du manche (avance ET virage)
     float thr_ramp_per_s; // limiteur de pente de l'AVANCE (douceur, Δ/s)
     float vbat_div_ratio;
-    float pid_kp;
-    float pid_ki;
-    float pid_kd;
-    float vmax_kp;
-    float vmax_ki;
-    float vmax_kd;
+    float brk_kp;
+    float brk_ki;
+    float brk_kd;
+    float vlim_kp;
+    float vlim_ki;
+    float vlim_kd;
     float turn_gain;     // part du différentiel à fond de manche X (0..1)
     float turn_limit_en; // 1 = anti-renversement actif (rampe vitesse→virage) ; 0 = désactivé (essais)
     float turn_full_ms;  // sous cette vitesse (m/s), virage ±100 % (pivot permis) — anti-renversement
@@ -222,6 +223,7 @@ bool       configLoad();
 bool       configSave();
 KartConfig configSnapshot();
 void       configUpdate(const KartConfig& c, bool persist);
+void       configFlushPending();   // persiste un « set » différé (à appeler une fois désarmé)
 
 bool configGetWifi(char* ssid, size_t ssid_size, char* pass, size_t pass_size, bool* enabled = nullptr);
 void configSetWifi(const char* ssid, const char* pass, bool enabled);

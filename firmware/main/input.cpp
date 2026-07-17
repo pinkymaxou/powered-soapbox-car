@@ -147,8 +147,13 @@ extern "C" void inputbp_on_conn(int connected, const char* name, int batt)
     if (connected)
     {
         m_pairing.store(false);   // appairage terminé une fois connecté
-        std::strncpy(m_name, name ? name : "", sizeof(m_name) - 1);
-        m_name[sizeof(m_name) - 1] = '\0';
+        // Appelé à CHAQUE trame HID (batterie fraîche) : ne copier le nom que s'il change —
+        // évite 60 strncpy/s inutiles et la fenêtre de lecture d'un nom en cours d'écriture.
+        if (name && 0 != std::strcmp(m_name, name))
+        {
+            std::strncpy(m_name, name, sizeof(m_name) - 1);
+            m_name[sizeof(m_name) - 1] = '\0';
+        }
     }
     else
     {
