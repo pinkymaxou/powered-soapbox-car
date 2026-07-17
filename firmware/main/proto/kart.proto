@@ -1,0 +1,154 @@
+// kart.proto — Protocole WebSocket binaire du kart (Protocol Buffers).
+// Serveur : nanopb (callbacks → zéro allocation, encode/décode par flux).
+// Client : protobuf.js (runtime « light », descripteur JSON généré depuis ce fichier).
+// Régénérer côté C : voir main/proto/generate.sh
+// IMPORTANT : les noms de champs sont EXACTEMENT ceux qu'attend le JS (index.html).
+syntax = "proto3";
+
+// ── Requête (client → kart) ──
+// `type` garde les mêmes verbes que l'ancien protocole JSON : status, get, vals, sysdyn,
+// sysinfo, hist, wifiget, padinfo, reboot, padpair, padunpair, calstart, calfinish,
+// calcancel, wifiset, set.
+message Req {
+  string type = 1;
+  string ssid = 2;              // wifiset
+  string pass = 3;              // wifiset
+  bool   enabled = 4;           // wifiset
+  repeated ParamVal set = 5;    // set : paires nom/valeur
+}
+
+message ParamVal {
+  string name = 1;
+  float  val = 2;
+}
+
+// ── Réponses (kart → client) ──
+message Status {
+  int32  state = 1;
+  int32  fault = 2;
+  uint32 faults = 3;            // masque des conditions actives (bits fb::)
+  float  vbat = 4;
+  int32  batt_type = 5;         // 0 en détection, 12 ou 24
+  float  batt_lo = 6;           // échelle de jauge décidée côté firmware
+  float  batt_hi = 7;
+  float  speed_ms = 8;
+  float  speed_l = 9;
+  float  speed_r = 10;
+  float  fwd = 11;
+  float  turn = 12;
+  float  out_l = 13;
+  float  out_r = 14;
+  int32  brake_mode = 15;       // 0 traction, 1 dynamique, 2 actif (PID)
+  bool   arming = 16;
+  bool   btn_start = 17;
+  bool   pad_conn = 18;
+  int32  pad_batt = 19;
+  float  pad_x = 20;
+  float  pad_y = 21;
+  float  pad_cx = 22;
+  float  pad_cy = 23;
+  float  pad_zl = 24;
+  float  pad_zr = 25;
+  float  pad_rx2 = 26;
+  float  pad_ry2 = 27;
+  uint32 pad_btns = 28;
+  int32  pad_age_ms = 29;       // heartbeat manette (âge du dernier rapport HID)
+}
+
+message ParamMeta {
+  string name = 1;
+  string desc = 2;
+  string cat = 3;
+  string help = 4;
+  string type = 5;              // "float" | "int" | "bool"
+  float  min = 6;
+  float  max = 7;
+  float  val = 8;
+}
+
+message Config { repeated ParamMeta params = 1; }
+message Vals   { repeated ParamVal  params = 1; }
+
+// Historique : chaque série = octets BRUTS (1 octet/échantillon, plus ancien → plus récent).
+message Hist {
+  uint32 dt_fast = 1;           // s entre échantillons (accel/pwm/rpm)
+  uint32 dt_spd = 2;
+  uint32 dt_batt = 3;
+  bytes  accel = 4;
+  bytes  pwml = 5;
+  bytes  pwmr = 6;
+  bytes  rpml = 7;
+  bytes  rpmr = 8;
+  bytes  spd = 9;               // m/s ×10
+  bytes  batt = 10;             // V ×10
+}
+
+message Pad {
+  bool   conn = 1;
+  string name = 2;
+  int32  batt = 3;
+  bool   calibrated = 4;
+  int32  calstate = 5;
+  bool   pairing = 6;
+}
+
+message Wifi {
+  bool   enabled = 1;
+  string ssid = 2;
+  bool   connected = 3;
+  string ip = 4;
+}
+
+message Ip6 {
+  string addr = 1;
+  string type = 2;
+}
+
+message SysInfo {
+  string fw_ver = 1;
+  string fw_proj = 2;
+  string fw_date = 3;
+  string idf = 4;
+  string chip = 5;
+  int32  cores = 6;
+  int32  rev = 7;
+  uint32 flash_mb = 8;
+  int64  uptime_s = 9;
+  uint32 heap_free = 10;
+  uint32 heap_min = 11;
+  string reset = 12;
+  string mac_ap = 13;
+  string mac_sta = 14;
+  string ap_ssid = 15;
+  string ip_ap = 16;
+  bool   sta_en = 17;
+  string sta_ssid = 18;
+  bool   sta_conn = 19;
+  string ip_sta = 20;
+  repeated Ip6 ip6_ap = 21;
+  repeated Ip6 ip6_sta = 22;
+}
+
+message SysDyn {
+  int64  uptime_s = 1;
+  uint32 heap_free = 2;
+  uint32 heap_min = 3;
+  uint32 ledc_fix = 4;          // sentinelle horloge LEDC
+}
+
+message Ok {}
+
+// Enveloppe : un seul type de trame sur le WebSocket (binaire), le oneof fait le dispatch.
+message Msg {
+  oneof body {
+    Status  status = 1;
+    Config  config = 2;
+    Vals    vals = 3;
+    Hist    hist = 4;
+    Pad     pad = 5;
+    Wifi    wifi = 6;
+    SysInfo sysinfo = 7;
+    SysDyn  sysdyn = 8;
+    Ok      ok = 9;
+  }
+}

@@ -9,9 +9,11 @@ idf_component_register(
         "leds.cpp"
         "config.cpp"
         "webserver.cpp"
+        "proto/kart.pb.c"
         "ws2812.cpp"
     INCLUDE_DIRS "."
     REQUIRES
+        nanopb
         esp_driver_gpio
         esp_driver_ledc
         esp_driver_i2c
@@ -31,7 +33,7 @@ idf_component_register(
 # Assets web : compressés en gzip au build puis embarqués en binaire.
 # Le serveur les renvoie tels quels avec l'en-tête « Content-Encoding: gzip »
 # (le navigateur décompresse). Réduit fortement la flash (Chart.js 205 ko → ~70 ko).
-foreach(asset index.html style.css chart.min.js)
+foreach(asset index.html style.css chart.min.js pb.min.js)
     set(_src "${COMPONENT_DIR}/assets/${asset}")
     set(_gz  "${CMAKE_CURRENT_BINARY_DIR}/${asset}.gz")
     add_custom_command(

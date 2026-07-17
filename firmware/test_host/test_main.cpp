@@ -202,15 +202,12 @@ static void test_ring()
     out.clear(); ring.appendJson(out, "v");
     CHECK(out == "\"v\":[2,3,4,5]");
 
-    // Variante SANS TAS : même sortie, bornée, terminée par NUL.
-    char buf[64];
-    const size_t n = ring.appendJsonC(buf, sizeof(buf), "v");
-    CHECK(std::string(buf) == "\"v\":[2,3,4,5]");
-    CHECK(n == std::strlen(buf));
-    char tiny[8];                                   // capacité insuffisante → tronqué PROPREMENT
-    const size_t t = ring.appendJsonC(tiny, sizeof(tiny), "v");
-    CHECK(t == 7 && '\0' == tiny[7]);
-    CHECK(std::string(tiny) == "\"v\":[2,");
+    // Linéarisation (pour l'encodage protobuf « bytes ») : plus ancien → plus récent.
+    uint8_t lin[8] = {};
+    CHECK(4 == ring.copyTo(lin, 8));
+    CHECK(2 == lin[0] && 3 == lin[1] && 4 == lin[2] && 5 == lin[3]);
+    CHECK(2 == ring.copyTo(lin, 2));                // capacité < count → tronqué au plus ancien
+    CHECK(2 == lin[0] && 3 == lin[1]);
 }
 
 int main()

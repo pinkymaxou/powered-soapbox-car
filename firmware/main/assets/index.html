@@ -4,6 +4,7 @@
 <title>Kart - Configuration</title>
 <link rel="stylesheet" href="/style.css">
 <script src="/chart.js"></script>
+<script src="/pb.js"></script>
 </head><body>
 <header>🛞 Kart électrique<span class="pill brakemode" id="i_brakemode">—</span><span class="hdr-state" id="hdrstate">…</span></header>
 <nav class="tabs">
@@ -123,6 +124,67 @@ const STATE={LOCKOUT:0,CALIBRATE:1,RUN:2,FAULT:3};
 const FAULT={NONE:0,ESTOP:1,LVC:2,NOT_CALIBRATED:3,ENCODER:4,ENCODER_DIR:5,ENCODER_MAD:6,ENCODER_ABSENT:7};
 const ST=["IDLE","CALIBRATION","ARMÉ","DÉFAUT"];                       // libellés par STATE
 const FA=["—","E-STOP","BATTERIE BASSE","NON CALIBRÉ","ENCODEUR BLOQUÉ","ENCODEUR INVERSÉ","ENCODEUR ABERRANT","ENCODEUR ABSENT"];  // libellés par FAULT
+// ── Protocole BINAIRE (Protocol Buffers) ──
+// Descripteur = miroir exact de firmware/main/proto/kart.proto (mêmes noms, mêmes numéros).
+// Décodé par le runtime protobuf.js (/pb.js, embarqué). Les trames sont ~3× plus petites
+// que le JSON et l'ESP32 les encode sans aucune allocation (nanopb + callbacks).
+const PB_ROOT=protobuf.Root.fromJSON({nested:{
+ ParamVal:{fields:{name:{type:"string",id:1},val:{type:"float",id:2}}},
+ Req:{fields:{type:{type:"string",id:1},ssid:{type:"string",id:2},pass:{type:"string",id:3},
+      enabled:{type:"bool",id:4},set:{rule:"repeated",type:"ParamVal",id:5}}},
+ Status:{fields:{state:{type:"int32",id:1},fault:{type:"int32",id:2},faults:{type:"uint32",id:3},
+  vbat:{type:"float",id:4},batt_type:{type:"int32",id:5},batt_lo:{type:"float",id:6},
+  batt_hi:{type:"float",id:7},speed_ms:{type:"float",id:8},speed_l:{type:"float",id:9},
+  speed_r:{type:"float",id:10},fwd:{type:"float",id:11},turn:{type:"float",id:12},
+  out_l:{type:"float",id:13},out_r:{type:"float",id:14},brake_mode:{type:"int32",id:15},
+  arming:{type:"bool",id:16},btn_start:{type:"bool",id:17},pad_conn:{type:"bool",id:18},
+  pad_batt:{type:"int32",id:19},pad_x:{type:"float",id:20},pad_y:{type:"float",id:21},
+  pad_cx:{type:"float",id:22},pad_cy:{type:"float",id:23},pad_zl:{type:"float",id:24},
+  pad_zr:{type:"float",id:25},pad_rx2:{type:"float",id:26},pad_ry2:{type:"float",id:27},
+  pad_btns:{type:"uint32",id:28},pad_age_ms:{type:"int32",id:29}}},
+ ParamMeta:{fields:{name:{type:"string",id:1},desc:{type:"string",id:2},cat:{type:"string",id:3},
+  help:{type:"string",id:4},type:{type:"string",id:5},min:{type:"float",id:6},
+  max:{type:"float",id:7},val:{type:"float",id:8}}},
+ Config:{fields:{params:{rule:"repeated",type:"ParamMeta",id:1}}},
+ Vals:{fields:{params:{rule:"repeated",type:"ParamVal",id:1}}},
+ Hist:{fields:{dt_fast:{type:"uint32",id:1},dt_spd:{type:"uint32",id:2},dt_batt:{type:"uint32",id:3},
+  accel:{type:"bytes",id:4},pwml:{type:"bytes",id:5},pwmr:{type:"bytes",id:6},
+  rpml:{type:"bytes",id:7},rpmr:{type:"bytes",id:8},spd:{type:"bytes",id:9},batt:{type:"bytes",id:10}}},
+ Pad:{fields:{conn:{type:"bool",id:1},name:{type:"string",id:2},batt:{type:"int32",id:3},
+  calibrated:{type:"bool",id:4},calstate:{type:"int32",id:5},pairing:{type:"bool",id:6}}},
+ Wifi:{fields:{enabled:{type:"bool",id:1},ssid:{type:"string",id:2},connected:{type:"bool",id:3},
+  ip:{type:"string",id:4}}},
+ Ip6:{fields:{addr:{type:"string",id:1},type:{type:"string",id:2}}},
+ SysInfo:{fields:{fw_ver:{type:"string",id:1},fw_proj:{type:"string",id:2},fw_date:{type:"string",id:3},
+  idf:{type:"string",id:4},chip:{type:"string",id:5},cores:{type:"int32",id:6},rev:{type:"int32",id:7},
+  flash_mb:{type:"uint32",id:8},uptime_s:{type:"int64",id:9},heap_free:{type:"uint32",id:10},
+  heap_min:{type:"uint32",id:11},reset:{type:"string",id:12},mac_ap:{type:"string",id:13},
+  mac_sta:{type:"string",id:14},ap_ssid:{type:"string",id:15},ip_ap:{type:"string",id:16},
+  sta_en:{type:"bool",id:17},sta_ssid:{type:"string",id:18},sta_conn:{type:"bool",id:19},
+  ip_sta:{type:"string",id:20},ip6_ap:{rule:"repeated",type:"Ip6",id:21},
+  ip6_sta:{rule:"repeated",type:"Ip6",id:22}}},
+ SysDyn:{fields:{uptime_s:{type:"int64",id:1},heap_free:{type:"uint32",id:2},
+  heap_min:{type:"uint32",id:3},ledc_fix:{type:"uint32",id:4}}},
+ Ok:{fields:{}},
+ Msg:{oneofs:{body:{oneof:["status","config","vals","hist","pad","wifi","sysinfo","sysdyn","ok"]}},
+  fields:{status:{type:"Status",id:1},config:{type:"Config",id:2},vals:{type:"Vals",id:3},
+   hist:{type:"Hist",id:4},pad:{type:"Pad",id:5},wifi:{type:"Wifi",id:6},
+   sysinfo:{type:"SysInfo",id:7},sysdyn:{type:"SysDyn",id:8},ok:{type:"Ok",id:9}}}
+}});
+const PB_REQ=PB_ROOT.lookupType("Req"), PB_MSG=PB_ROOT.lookupType("Msg");
+function sendReq(o){if(ws&&ws.readyState===1)ws.send(PB_REQ.encode(PB_REQ.create(o)).finish());}
+// Décode l'enveloppe et redonne la forme « JSON historique » (m.type + champs à plat,
+// bytes → tableaux) pour que le reste de la page reste inchangé.
+function pbDecode(buf){
+ const env=PB_MSG.decode(new Uint8Array(buf));
+ const which=env.body; if(!which)return null;
+ const m=PB_MSG.toObject(env,{defaults:true,longs:Number})[which];
+ m.type=which;
+ if(which==='hist')for(const k of['accel','pwml','pwmr','rpml','rpmr','spd','batt'])
+   m[k]=m[k]?Array.from(m[k]):[];
+ if(which==='config'||which==='vals')m.params=m.params||[];
+ return m;
+}
 let ws,timer,histTimer,built=false;
 let speedScale=3.3;  // m/s ≙ 100 % (barres de vitesse), réglé depuis la config
 let battLow=0, battFull=1, battType=-1;   // échelle reçue du FIRMWARE (batt_lo/batt_hi du statut)
@@ -389,12 +451,13 @@ function connect(){
  ws=new WebSocket('ws://'+location.host+'/ws');
  ws.onopen=()=>{
    // 1× par connexion : métadonnées de config, infos système (immuables) et graphiques.
-   ws.send('{"type":"get"}'); ws.send('{"type":"sysinfo"}'); ws.send('{"type":"hist"}');
+   sendReq({type:'get'}); sendReq({type:'sysinfo'}); sendReq({type:'hist'});
    clearInterval(timer); clearInterval(histTimer);
-   timer=setInterval(()=>{if(ws.readyState===1)ws.send('{"type":"status"}');},50);       // état live 20 Hz (~370 o)
-   histTimer=setInterval(()=>{if(ws.readyState===1)ws.send('{"type":"hist"}');},5000);   // graphiques : lent (RAM serveur)
+   timer=setInterval(()=>{sendReq({type:'status'});},50);       // état live 20 Hz (~150 octets binaires)
+   histTimer=setInterval(()=>{sendReq({type:'hist'});},5000);   // graphiques : lent (RAM serveur)
  };
- ws.onmessage=e=>{const m=JSON.parse(e.data);
+ ws.binaryType='arraybuffer';
+ ws.onmessage=e=>{const m=pbDecode(e.data); if(!m)return;
    if(m.type==='config')fillForm(m.params);
    else if(m.type==='vals'){if(built)fillForm(m.params);}
    else if(m.type==='status')showStatus(m);
@@ -405,11 +468,11 @@ function connect(){
    else if(m.type==='pad')showPad(m);};
  ws.onclose=()=>{clearInterval(timer);clearInterval(histTimer);document.getElementById('status').textContent='Reconnexion…';setTimeout(connect,1000);};
 }
-function reload(){if(ws&&ws.readyState===1)ws.send('{"type":"vals"}');}   // métadonnées déjà en main
-function save(){const o={type:'set'};
- document.querySelectorAll('#f input').forEach(i=>o[i.name]=parseFloat(i.value));
- if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
-function sendPad(cmd){if(ws&&ws.readyState===1)ws.send('{"type":"'+cmd+'"}');}
+function reload(){sendReq({type:'vals'});}   // métadonnées déjà en main
+function save(){const set=[];
+ document.querySelectorAll('#f input').forEach(i=>set.push({name:i.name,val:parseFloat(i.value)}));
+ sendReq({type:'set',set:set});}
+function sendPad(cmd){sendReq({type:cmd});}
 function loadPad(){sendPad('padinfo');}
 function padPair(){if(confirm("Appairer une nouvelle manette ?\nCela EFFACE la calibration (il faudra recalibrer)."))sendPad('padpair');}
 function padUnpair(){if(confirm("Désappairer la manette ? (efface aussi la calibration)"))sendPad('padunpair');}
@@ -423,8 +486,7 @@ function showPad(m){
  const cal=m.calstate===1?'⏺ collecte des extrêmes — bouger les sticks à fond':(m.calibrated?'✅ calibrée':'❌ NON calibrée (obligatoire pour rouler)');
  document.getElementById('calstatus').textContent='Calibration : '+cal+(m.pairing?'  ·  appairage ouvert':'');
 }
-function reboot(){if(confirm("Redémarrer le système ? Il redémarrera DÉSARMÉ.")
-   &&ws&&ws.readyState===1)ws.send('{"type":"reboot"}');}
+function reboot(){if(confirm("Redémarrer le système ? Il redémarrera DÉSARMÉ."))sendReq({type:'reboot'});}
 function showWifi(m){
  const e=document.querySelector('#wf [name=ssid]'); if(e&&document.activeElement!==e)e.value=m.ssid||'';
  const c=document.querySelector('#wf [name=enabled]'); if(c&&document.activeElement!==c)c.checked=!!m.enabled;
@@ -432,9 +494,9 @@ function showWifi(m){
   `Mode station : ${m.enabled?'activé':'désactivé'}\nRéseau enregistré : ${m.ssid||'(aucun)'}\n`+
   `Connecté : ${m.connected?'OUI':'non'}\nIP station : ${m.ip}`;
 }
-function loadWifi(){if(ws&&ws.readyState===1)ws.send('{"type":"wifiget"}');}
+function loadWifi(){sendReq({type:'wifiget'});}
 let sysBuilt=false;
-function loadSys(){if(ws&&ws.readyState===1)ws.send(sysBuilt?'{"type":"sysdyn"}':'{"type":"sysinfo"}');}
+function loadSys(){sendReq({type:sysBuilt?'sysdyn':'sysinfo'});}
 function upt(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
  return (d?d+'j ':'')+h+'h '+m+'m '+(s%60)+'s';}
 const heapTxt=m=>`${(m.heap_free/1024).toFixed(1)} ko (min ${(m.heap_min/1024).toFixed(1)} ko)`;
@@ -462,9 +524,8 @@ function saveWifi(){
  const ssid=document.querySelector('#wf [name=ssid]').value;
  const pass=document.querySelector('#wf [name=pass]').value;
  const enabled=document.querySelector('#wf [name=enabled]').checked;
- if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'wifiset',ssid:ssid,pass:pass,enabled:enabled}));
- if(confirm("Enregistré. Redémarrer maintenant pour appliquer ?")
-   &&ws&&ws.readyState===1)ws.send('{"type":"reboot"}');
+ sendReq({type:'wifiset',ssid:ssid,pass:pass,enabled:enabled});
+ if(confirm("Enregistré. Redémarrer maintenant pour appliquer ?"))sendReq({type:'reboot'});
 }
 initCharts();buildBars();buildInds();buildPadBtns();connect();
 </script></body></html>
