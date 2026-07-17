@@ -202,14 +202,21 @@ function buildBars(){
 }
 // Indicateurs (pastilles) : boutons + sorties booléennes
 const INDS=[
- {k:'pad_conn',l:'MANETTE'},{k:'arming',l:'ARMÉ'},
- {k:'brake',l:'FREIN'},{k:'btn_start',l:'START'},{k:'estop',l:'E-STOP'}
+ {k:'pad_conn',l:'MANETTE'},{k:'arming',l:'ARMÉ'},{k:'btn_start',l:'START'}
 ];
+// Mode de freinage EFFECTIF — affiché EN PERMANENCE (source : firmware, brake_mode) :
+// 2 = ACTIF (PID + encodeurs) · 1 = DYNAMIQUE (court-circuit des phases) · 0 = traction.
+const BRAKE_MODES=['⚪ TRACTION','🟠 FREIN DYNAMIQUE (court-circuit)','🟢 FREIN ACTIF (PID)'];
 function buildInds(){
- document.getElementById('ind').innerHTML=INDS.map(i=>`<span class="pill" id="i_${i.k}">${i.l}</span>`).join('');
+ document.getElementById('ind').innerHTML=
+  `<span class="pill brakemode" id="i_brakemode">—</span>`+
+  INDS.map(i=>`<span class="pill" id="i_${i.k}">${i.l}</span>`).join('');
 }
 function updateInds(s){
  INDS.forEach(i=>document.getElementById('i_'+i.k).classList.toggle('on', !!s[i.k]));
+ const b=document.getElementById('i_brakemode'), m=s.brake_mode||0;
+ b.textContent=BRAKE_MODES[m]||m;
+ b.className='pill brakemode bm'+m;
 }
 function updateBars(s){
  BARS.forEach(b=>{

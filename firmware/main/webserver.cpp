@@ -330,7 +330,7 @@ std::string buildStatusJson()
              "{\"type\":\"status\",\"state\":%d,\"fault\":%d,\"faults\":%u,\"vbat\":%.2f,"
              "\"batt_type\":%d,\"batt_lo\":%.1f,\"batt_hi\":%.1f,"
              "\"speed_ms\":%.2f,\"speed_l\":%.2f,\"speed_r\":%.2f,\"fwd\":%.3f,\"turn\":%.3f,"
-             "\"out_l\":%.3f,\"out_r\":%.3f,\"brake\":%s,\"arming\":%s,\"btn_start\":%s,"
+             "\"out_l\":%.3f,\"out_r\":%.3f,\"brake_mode\":%d,\"arming\":%s,\"btn_start\":%s,"
              "\"pad_conn\":%s,\"pad_batt\":%d,\"pad_x\":%.3f,\"pad_y\":%.3f,"
              "\"pad_cx\":%.3f,\"pad_cy\":%.3f,\"pad_zl\":%.2f,\"pad_zr\":%.2f,"
              "\"pad_rx2\":%.3f,\"pad_ry2\":%.3f,\"pad_btns\":%u}",
@@ -341,7 +341,7 @@ std::string buildStatusJson()
              g_status.m_speed_l.load(), g_status.m_speed_r.load(),
              g_status.m_fwd.load(), g_status.m_turn.load(),
              g_status.m_out_l.load(), g_status.m_out_r.load(),
-             g_status.m_brake.load() ? "true" : "false",
+             g_status.m_brake_mode.load(),
              g_status.m_arming.load() ? "true" : "false",
              g_status.m_btn_start.load() ? "true" : "false",
              g_status.m_pad_conn.load() ? "true" : "false",

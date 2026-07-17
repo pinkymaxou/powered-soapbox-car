@@ -47,7 +47,7 @@ void render(const KartConfig& cfg)
                 r = 255;
                 g = 120;       // batterie faible : orange
             }
-            else if (g_status.m_brake.load() && slow)
+            else if ((static_cast<int>(BrakeMode::None) != g_status.m_brake_mode.load()) && slow)
             {
                 g = 255;       // freinage : vert clignotant
             }

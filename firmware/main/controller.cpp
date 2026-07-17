@@ -427,7 +427,8 @@ void tick()
     g_status.m_turn.store(turn);
     g_status.m_out_l.store(out_l);
     g_status.m_out_r.store(out_r);
-    g_status.m_brake.store(braking);
+    g_status.m_brake_mode.store(static_cast<int>(
+        dyn_brake ? BrakeMode::Dynamic : (braking ? BrakeMode::Active : BrakeMode::None)));
     g_status.m_arming.store(m_armed);
 }
 
@@ -449,7 +450,7 @@ void Controller::init()
     board::init();
     input::init();
     setState(State::Lockout, Fault::None);
-    g_status.m_brake.store(true);   // état par défaut : FREINAGE (jamais en roue libre au repos)
+    g_status.m_brake_mode.store(static_cast<int>(BrakeMode::Dynamic));   // défaut : freinage dynamique (jamais en roue libre)
 }
 
 void Controller::start()

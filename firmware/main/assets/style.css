@@ -92,6 +92,11 @@ label[title]{cursor:help}
 .faultcard.info{background:#33301a;border-color:#aa3;color:#f5edc2}
 .faultok{background:#12351b;border:1px solid #3a5;color:#c9f5d4;border-radius:10px;padding:12px 14px;font-size:15px}
 .tab.tabalert{color:#fff;background:var(--red)}
+/* Badge permanent du mode de freinage (traction / dynamique / actif) */
+.pill.brakemode{font-weight:600}
+.pill.bm0{background:#2a3550;color:#cfe2ff}
+.pill.bm1{background:#4a3410;color:#ffd9a0;border:1px solid var(--amber)}
+.pill.bm2{background:#12351b;color:#c9f5d4;border:1px solid #3a5}
 input{width:120px;background:var(--card2);color:var(--txt);border:1px solid var(--line);
  border-radius:8px;padding:7px 9px;font-size:14px;text-align:right}
 input:focus{outline:none;border-color:var(--accent)}

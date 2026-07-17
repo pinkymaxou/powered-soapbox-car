@@ -143,6 +143,10 @@ extern const int       PARAM_COUNT;
 
 // ───────────────────────── Télémétrie ─────────────────────────
 enum class State : int { Lockout = 0, Calibrate = 1, Run = 2, Fault = 3 };
+// Mode de freinage EFFECTIF (affiché en permanence sur la page web) :
+// Dynamic = court-circuit des phases (état par défaut, désarmé, ou repli sans encodeurs) ;
+// Active  = frein PID (consigne vitesse 0) — exige encodeurs présents ET brk_pid_enable=1.
+enum class BrakeMode : int { None = 0, Dynamic = 1, Active = 2 };
 enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4, EncoderDir = 5, EncoderMad = 6, EncoderAbsent = 7 };
 
 // Bits du masque m_faults : TOUTES les conditions actives simultanément (m_fault ne retient
@@ -177,7 +181,7 @@ struct KartStatus
     std::atomic<bool>  m_btn_start{false};
     std::atomic<float> m_out_l{0.f};     // PWM moteur gauche [-1..1]
     std::atomic<float> m_out_r{0.f};     // PWM moteur droite [-1..1]
-    std::atomic<bool>  m_brake{false};
+    std::atomic<int>   m_brake_mode{static_cast<int>(BrakeMode::Dynamic)};   // BrakeMode effectif
     std::atomic<bool>  m_arming{false};
     std::atomic<bool>  m_estop{false};
     std::atomic<bool>  m_pad_conn{false}; // manette connectée
