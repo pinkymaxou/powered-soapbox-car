@@ -99,6 +99,7 @@ label[title]{cursor:help}
 .pill.bm0{background:#2a3550;color:#cfe2ff}
 .pill.bm1{background:#4a3410;color:#ffd9a0;border:1px solid var(--amber)}
 .pill.bm2{background:#12351b;color:#c9f5d4;border:1px solid #3a5}
+button:disabled{opacity:.35;cursor:not-allowed}
 input{width:120px;background:var(--card2);color:var(--txt);border:1px solid var(--line);
  border-radius:8px;padding:7px 9px;font-size:14px;text-align:right}
 input:focus{outline:none;border-color:var(--accent)}

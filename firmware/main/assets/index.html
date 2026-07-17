@@ -72,7 +72,7 @@
   <p class="note"><b>Calibration manette — OBLIGATOIRE pour rouler.</b><br>
   1) Manche au repos → « Démarrer ». 2) Bouger les 2 sticks <b>à fond dans tous les sens</b>. 3) « Terminer ».</p>
   <div class="row">
-   <button class="warn" onclick="calStart()">▶ Démarrer la calibration</button>
+   <button class="warn" id="calstartbtn" onclick="calStart()">▶ Démarrer la calibration</button>
    <button onclick="calFinish()">✓ Terminer</button>
    <button class="alt" onclick="calCancel()">Annuler</button>
   </div>
@@ -316,12 +316,18 @@ function drawPad(s){
  g.strokeStyle='#555'; g.strokeRect(cx-r,cy-r,2*r,2*r);             // carré = cible compensée
  g.strokeStyle='#333'; g.beginPath(); g.arc(cx,cy,r,0,7); g.stroke(); // cercle = limite physique
  g.strokeStyle='#2a2a2a'; g.beginPath(); g.moveTo(cx,cy-r);g.lineTo(cx,cy+r); g.moveTo(cx-r,cy);g.lineTo(cx+r,cy); g.stroke();
+ // ZONE MORTE (thr_deadzone, appliquée PAR AXE sur la consigne compensée) : croix translucide —
+ // bande verticale = pas de virage, bande horizontale = pas d'avance (le centre cumule les deux).
+ const dz=dzVal*r;
+ g.fillStyle='rgba(255,255,255,0.07)';
+ g.fillRect(cx-dz,cy-r,2*dz,2*r);
+ g.fillRect(cx-r,cy-dz,2*r,2*dz);
  const X=v=>cx+(v||0)*r, Y=v=>cy-(v||0)*r;   // y vers le haut = avance
  // trait physique → compensé
  g.strokeStyle='#777'; g.beginPath(); g.moveTo(X(s.pad_x),Y(s.pad_y)); g.lineTo(X(s.pad_cx),Y(s.pad_cy)); g.stroke();
  const dot=(x,y,col,rad)=>{g.beginPath(); g.arc(X(x),Y(y),rad,0,7); g.fillStyle=col; g.fill();};
  dot(s.pad_cx,s.pad_cy,'#fa0',6);   // consigne compensée (carré)
- dot(s.pad_x,s.pad_y,s.estop?'#f55':(s.pad_conn?'#3cf':'#666'),5);   // position physique (cercle)
+ dot(s.pad_x,s.pad_y,(s.faults&1)?'#f55':(s.pad_conn?'#3cf':'#666'),5);   // physique ; rouge si e-stop (bit 0)
 }
 // Stick droit : affichage simple (1 point, cercle, sans compensation ni calibration).
 function drawStick2(s){
@@ -384,8 +390,10 @@ function showStatus(s){
 }
 
 // ── Formulaire de configuration (auto-généré depuis le schéma) ──
+let dzVal=0.06;   // zone morte du manche (thr_deadzone), pour l'affichage du pavé
 function deriveFromCfg(p){
  if(p.name==='speed_limit_ms') speedScale=Math.max(0.3,p.val);
+ if(p.name==='thr_deadzone') dzVal=p.val;
 }
 // Échelle de la jauge batterie : ENTIÈREMENT décidée par le firmware (type détecté, seuils
 // codés en dur côté micro) — le client ne fait qu'appliquer batt_lo/batt_hi reçus du statut.
@@ -485,6 +493,8 @@ function showPad(m){
   (m.batt>=0?(' · batterie '+m.batt+'%'):'');
  const cal=m.calstate===1?'⏺ collecte des extrêmes — bouger les sticks à fond':(m.calibrated?'✅ calibrée':'❌ NON calibrée (obligatoire pour rouler)');
  document.getElementById('calstatus').textContent='Calibration : '+cal+(m.pairing?'  ·  appairage ouvert':'');
+ // Calibration en cours → « Démarrer » grisé jusqu'à Terminer ou Annuler.
+ document.getElementById('calstartbtn').disabled=(m.calstate===1);
 }
 function reboot(){if(confirm("Redémarrer le système ? Il redémarrera DÉSARMÉ."))sendReq({type:'reboot'});}
 function showWifi(m){
