@@ -53,6 +53,7 @@ constexpr uint8_t ADS1115_ADDR = 0x48;
 constexpr float AS5600_CPR    = 4096.0f;  // counts par tour (12 bits)
 constexpr float GEAR_RATIO    = 1.28f;    // tours capteur par tour de roue (sortie de boîte, poulies 32/25)
 constexpr float WHEEL_DIAM_M  = 0.254f;   // roue 10"
+constexpr float MPS_TO_WHEEL_RPM = 60.0f / (3.14159265f * WHEEL_DIAM_M);   // m/s → tr/min roue (~75,2)
 
 constexpr int     I2C_FREQ_HZ       = 400000;  // Fast-mode (le capteur supporte jusqu'à 1 MHz)
 constexpr uint8_t AS5600_ADDR       = 0x36;    // adresse I2C fixe (un seul capteur par bus)

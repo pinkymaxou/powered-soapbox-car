@@ -36,9 +36,9 @@ typedef struct _Status {
     int32_t batt_type; /* 0 en détection, 12 ou 24 */
     float batt_lo; /* échelle de jauge décidée côté firmware */
     float batt_hi;
-    float speed_ms;
-    float speed_l;
-    float speed_r;
+    float speed_ms; /* vitesse VÉHICULE (m/s, signée — 0 en pivot) */
+    float rpm_l; /* vitesse roue GAUCHE en tr/min (signée) */
+    float rpm_r; /* vitesse roue DROITE en tr/min (signée) */
     float fwd;
     float turn;
     float out_l;
@@ -217,8 +217,8 @@ extern "C" {
 #define Status_batt_lo_tag                       6
 #define Status_batt_hi_tag                       7
 #define Status_speed_ms_tag                      8
-#define Status_speed_l_tag                       9
-#define Status_speed_r_tag                       10
+#define Status_rpm_l_tag                         9
+#define Status_rpm_r_tag                         10
 #define Status_fwd_tag                           11
 #define Status_turn_tag                          12
 #define Status_out_l_tag                         13
@@ -332,8 +332,8 @@ X(a, STATIC,   SINGULAR, INT32,    batt_type,         5) \
 X(a, STATIC,   SINGULAR, FLOAT,    batt_lo,           6) \
 X(a, STATIC,   SINGULAR, FLOAT,    batt_hi,           7) \
 X(a, STATIC,   SINGULAR, FLOAT,    speed_ms,          8) \
-X(a, STATIC,   SINGULAR, FLOAT,    speed_l,           9) \
-X(a, STATIC,   SINGULAR, FLOAT,    speed_r,          10) \
+X(a, STATIC,   SINGULAR, FLOAT,    rpm_l,             9) \
+X(a, STATIC,   SINGULAR, FLOAT,    rpm_r,            10) \
 X(a, STATIC,   SINGULAR, FLOAT,    fwd,              11) \
 X(a, STATIC,   SINGULAR, FLOAT,    turn,             12) \
 X(a, STATIC,   SINGULAR, FLOAT,    out_l,            13) \

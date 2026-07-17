@@ -134,8 +134,8 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
       enabled:{type:"bool",id:4},set:{rule:"repeated",type:"ParamVal",id:5}}},
  Status:{fields:{state:{type:"int32",id:1},fault:{type:"int32",id:2},faults:{type:"uint32",id:3},
   vbat:{type:"float",id:4},batt_type:{type:"int32",id:5},batt_lo:{type:"float",id:6},
-  batt_hi:{type:"float",id:7},speed_ms:{type:"float",id:8},speed_l:{type:"float",id:9},
-  speed_r:{type:"float",id:10},fwd:{type:"float",id:11},turn:{type:"float",id:12},
+  batt_hi:{type:"float",id:7},speed_ms:{type:"float",id:8},rpm_l:{type:"float",id:9},
+  rpm_r:{type:"float",id:10},fwd:{type:"float",id:11},turn:{type:"float",id:12},
   out_l:{type:"float",id:13},out_r:{type:"float",id:14},brake_mode:{type:"int32",id:15},
   arming:{type:"bool",id:16},btn_start:{type:"bool",id:17},pad_conn:{type:"bool",id:18},
   pad_batt:{type:"int32",id:19},pad_x:{type:"float",id:20},pad_y:{type:"float",id:21},
@@ -253,8 +253,8 @@ const BARS=[
  {id:'pwml', label:'PWM moteur G',  color:'#6f6', bip:1, sv:s=>s.out_l*100,      t:s=>(s.out_l*100).toFixed(0)+'% '+dirTxt(s.out_l)},
  {id:'pwmr', label:'PWM moteur D',  color:'#fa0', bip:1, sv:s=>s.out_r*100,      t:s=>(s.out_r*100).toFixed(0)+'% '+dirTxt(s.out_r)},
  {id:'spdv', label:'Vitesse véhicule', color:'#f6f', bip:1, sv:s=>s.speed_ms/5*100, t:s=>s.speed_ms.toFixed(2)+' m/s '+dirTxt(s.speed_ms)},
- {id:'spdl', label:'Vitesse roue G', color:'#f6f', bip:1, sv:s=>s.speed_l/5*100, t:s=>s.speed_l.toFixed(2)+' m/s'},
- {id:'spdr', label:'Vitesse roue D', color:'#f9f', bip:1, sv:s=>s.speed_r/5*100, t:s=>s.speed_r.toFixed(2)+' m/s'},
+ {id:'spdl', label:'Roue G (tr/min)', color:'#9e9', bip:1, sv:s=>s.rpm_l/250*100, t:s=>s.rpm_l.toFixed(0)+' tr/min '+dirTxt(s.rpm_l)},
+ {id:'spdr', label:'Roue D (tr/min)', color:'#fc6', bip:1, sv:s=>s.rpm_r/250*100, t:s=>s.rpm_r.toFixed(0)+' tr/min '+dirTxt(s.rpm_r)},
  {id:'batt', label:'Batterie',      color:'#3d9',        v:s=>battPct(s.vbat),    t:s=>s.vbat.toFixed(2)+' V'},
 ];
 function buildBars(){

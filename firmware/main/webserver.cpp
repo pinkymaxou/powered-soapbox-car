@@ -216,8 +216,7 @@ uint8_t u8x10(float v)   // valeur physique ×10 (résolution 0,1 ; bornée 0..2
 // Vitesse roue (m/s) → tr/min, bornée 0..250 (octet ; ~3,3 m/s max avant saturation en roue 10").
 uint8_t rpmU8(float ms)
 {
-    const float circ_m = 3.14159265f * hw::WHEEL_DIAM_M;   // circonférence roue (m)
-    float rpm = fabsf(ms) * 60.f / circ_m;
+    float rpm = fabsf(ms) * hw::MPS_TO_WHEEL_RPM;
     if (rpm > 250.f) rpm = 250.f;
     return static_cast<uint8_t>(rpm + 0.5f);
 }
@@ -385,8 +384,9 @@ size_t buildStatusPb()
     st.batt_lo    = battDispLo();
     st.batt_hi    = battDispHi();
     st.speed_ms   = g_status.m_speed_ms.load();
-    st.speed_l    = g_status.m_speed_l.load();
-    st.speed_r    = g_status.m_speed_r.load();
+    // Roues en TR/MIN (signés), véhicule en m/s — la conversion se fait ICI, côté micro.
+    st.rpm_l      = g_status.m_speed_l.load() * hw::MPS_TO_WHEEL_RPM;
+    st.rpm_r      = g_status.m_speed_r.load() * hw::MPS_TO_WHEEL_RPM;
     st.fwd        = g_status.m_fwd.load();
     st.turn       = g_status.m_turn.load();
     st.out_l      = g_status.m_out_l.load();

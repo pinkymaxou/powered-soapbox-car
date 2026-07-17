@@ -31,9 +31,9 @@ message Status {
   int32  batt_type = 5;         // 0 en détection, 12 ou 24
   float  batt_lo = 6;           // échelle de jauge décidée côté firmware
   float  batt_hi = 7;
-  float  speed_ms = 8;
-  float  speed_l = 9;
-  float  speed_r = 10;
+  float  speed_ms = 8;          // vitesse VÉHICULE (m/s, signée — 0 en pivot)
+  float  rpm_l = 9;             // vitesse roue GAUCHE en tr/min (signée)
+  float  rpm_r = 10;            // vitesse roue DROITE en tr/min (signée)
   float  fwd = 11;
   float  turn = 12;
   float  out_l = 13;
