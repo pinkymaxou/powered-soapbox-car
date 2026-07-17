@@ -186,7 +186,7 @@ static void test_pid()
 // ───────────────────────── Ring ─────────────────────────
 static void test_ring()
 {
-    Ring<4> ring;
+    Ring<uint8_t, 4> ring;
     CHECK(0 == ring.count() && 4 == ring.capacity());
 
     uint8_t lin[8] = {};

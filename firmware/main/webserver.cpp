@@ -190,9 +190,9 @@ constexpr int HIST_BATT_N   = 120;  // 30 min @ 15 s
 constexpr int HIST_BATT_DT  = 15;
 struct
 {
-    Ring<HIST_FAST_N>  accel, pwml, pwmr, rpml, rpmr;   // rpml/rpmr : tr/min roue (0..250)
-    Ring<HIST_SPEED_N> spd;
-    Ring<HIST_BATT_N>  batt;
+    Ring<uint8_t, HIST_FAST_N>  accel, pwml, pwmr, rpml, rpmr;   // rpml/rpmr : tr/min roue (0..250)
+    Ring<uint8_t, HIST_SPEED_N> spd;
+    Ring<uint8_t, HIST_BATT_N>  batt;
     int tick = 0;
 } m_hist;
 SemaphoreHandle_t  m_hist_mtx = nullptr;
@@ -264,7 +264,7 @@ const pb_byte_t* buildHistPb(size_t& len)
     static uint8_t lin_batt[HIST_BATT_N];
     BytesArg args[7];
     xSemaphoreTake(m_hist_mtx, portMAX_DELAY);
-    const Ring<HIST_FAST_N>* fast[5] = {&m_hist.accel, &m_hist.pwml, &m_hist.pwmr,
+    const Ring<uint8_t, HIST_FAST_N>* fast[5] = {&m_hist.accel, &m_hist.pwml, &m_hist.pwmr,
                                         &m_hist.rpml, &m_hist.rpmr};
     for (int k = 0; k < 5; ++k)
     {

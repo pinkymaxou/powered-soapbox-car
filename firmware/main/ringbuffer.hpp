@@ -1,15 +1,15 @@
-// ringbuffer.hpp — Buffer circulaire d'octets (header-only), réutilisable.
+// ringbuffer.hpp — Buffer circulaire (header-only), réutilisable, type d'élément générique.
 // Conserve les CAP dernières valeurs ; copyTo() les linéarise (du plus ancien au plus
-// récent) pour l'encodage protobuf « bytes » de l'historique.
+// récent) — p. ex. pour l'encodage protobuf « bytes » de l'historique (T = uint8_t).
 #pragma once
 
 #include <cstdint>
 
-template <int CAP>
+template <typename T, int CAP>
 class Ring
 {
 public:
-    void push(uint8_t v)
+    void push(T v)
     {
         m_buf[m_head] = v;
         m_head = (m_head + 1) % CAP;
@@ -24,7 +24,7 @@ public:
 
     // Copie linéarisée (du plus ancien au plus récent) dans dst ; retourne le nb d'octets.
     // Pour l'encodage protobuf « bytes » (1 octet/échantillon, zéro tas).
-    int copyTo(uint8_t* dst, int cap) const
+    int copyTo(T* dst, int cap) const
     {
         const int n = (m_count < cap) ? m_count : cap;
         const int oldest = (m_head - m_count + CAP) % CAP;
@@ -33,7 +33,7 @@ public:
     }
 
 private:
-    uint8_t m_buf[CAP] = {};
+    T   m_buf[CAP] = {};
     int     m_count = 0;
     int     m_head = 0;
 };
