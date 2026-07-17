@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include "config.hpp"
 #include "control_math.hpp"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -97,6 +98,18 @@ void calClear()
 
 int64_t input::lastReportUs() { return m_last_report_us.load(); }
 
+namespace
+{
+// La calibration exige des DONNÉES fraîches de la manette (rapport HID < 250 ms, même
+// seuil que le heartbeat) : sans ça, calStart capturerait un centre à zéro (aucun rapport
+// jamais reçu) ou des valeurs périmées d'une connexion précédente.
+bool padDataFresh()
+{
+    return m_connected.load() &&
+           (esp_timer_get_time() - m_last_report_us.load()) < hw::PAD_HB_TIMEOUT_US;
+}
+} // namespace
+
 // ── Hooks appelés par le backend BT (input_bp32.c) ──
 // Trame manette : axes normalisés ~[-1..1] + boutons (arrêt d'urgence, START, masque affichage).
 extern "C" void inputbp_on_data(float x, float y, int estop, int start, uint32_t buttons,
@@ -124,6 +137,11 @@ extern "C" void inputbp_on_data(float x, float y, int estop, int start, uint32_t
 // État de connexion : appelé sur (dé)connexion et à chaque trame (batterie fraîche).
 extern "C" void inputbp_on_conn(int connected, const char* name, int batt)
 {
+    if (0 == connected && 1 == m_cal_state.load())
+    {
+        m_cal_state.store(0);   // manette perdue en pleine collecte → calibration annulée
+        ESP_LOGW(TAG, "Manette déconnectée pendant la calibration → annulée");
+    }
     m_connected.store(0 != connected);
     m_battery.store(batt);
     if (connected)
@@ -215,6 +233,11 @@ void input::unpair()
 
 void input::calStart()
 {
+    if (!padDataFresh())
+    {
+        ESP_LOGW(TAG, "Calibration refusée : aucune donnée récente de la manette");
+        return;   // calstate reste 0 → la page reste à l'état « repos »
+    }
     const float x = m_raw_x.load(), y = m_raw_y.load();
     m_cx.store(x); m_cy.store(y);
     m_min_x = m_max_x = x;
@@ -230,7 +253,11 @@ void input::calFinish()
     const float hx = std::max(cx - m_min_x, m_max_x - cx);
     const float hy = std::max(cy - m_min_y, m_max_y - cy);
     m_cal_state.store(0);
-    if (hx > 0.2f && hy > 0.2f)   // amplitude suffisante
+    if (!padDataFresh())
+    {
+        ESP_LOGW(TAG, "Calibration rejetée : la manette a cessé d'émettre pendant la collecte");
+    }
+    else if (hx > 0.2f && hy > 0.2f)   // amplitude suffisante
     {
         m_hx.store(hx); m_hy.store(hy);
         m_calibrated.store(true);
