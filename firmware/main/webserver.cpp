@@ -21,6 +21,7 @@
 #include <string>
 
 #include "config.hpp"
+#include "hardware.hpp"
 #include "input.hpp"
 #include "ringbuffer.hpp"
 #include "esp_app_desc.h"
@@ -196,10 +197,16 @@ std::string buildWifiJson()
     return buf;
 }
 
-// ── Historique en RAM : rapide 10 min @ 1 s ; vitesse 1 min @ 1 s ; batterie 30 min @ 5 s ──
-constexpr int HIST_FAST_N  = 600;   // 10 min @ 1 s
-constexpr int HIST_SPEED_N = 60;    // 1 min @ 1 s (graphique vitesse dédié)
-constexpr int HIST_BATT_N  = 360;   // 30 min @ 5 s
+// ── Historique en RAM : mêmes fenêtres (10 min / 1 min / 30 min) mais échantillonnage
+// moins dense — l'ancien 600+360 points donnait un JSON de ~17 ko à anneaux PLEINS ; avec
+// 2 clients simultanés, les pics d'allocation épuisaient le tas (~40 ko libres, heap_min
+// mesuré < 11 ko) → malloc en échec dans les internals radio → gels/watchdog. ~120 points
+// suffisent largement à l'écran (graphique ~520 px).
+constexpr int HIST_FAST_N   = 120;  // 10 min @ 5 s
+constexpr int HIST_FAST_DT  = 5;
+constexpr int HIST_SPEED_N  = 60;   // 1 min @ 1 s (graphique vitesse dédié, petit)
+constexpr int HIST_BATT_N   = 120;  // 30 min @ 15 s
+constexpr int HIST_BATT_DT  = 15;
 struct
 {
     Ring<HIST_FAST_N>  accel, pwml, pwmr, rpml, rpmr;   // rpml/rpmr : tr/min roue (0..250)
@@ -236,16 +243,22 @@ uint8_t rpmU8(float ms)
 
 void histSample(void*)
 {
-    xSemaphoreTake(m_hist_mtx, portMAX_DELAY);
-    m_hist.accel.push(pctU8(fabsf(g_status.m_fwd.load()) * 100.f));          // % (consigne avance)
-    m_hist.pwml.push(pctU8(fabsf(g_status.m_out_l.load()) * 100.f));         // %
-    m_hist.pwmr.push(pctU8(fabsf(g_status.m_out_r.load()) * 100.f));         // %
-    m_hist.rpml.push(rpmU8(g_status.m_speed_l.load()));                      // tr/min roue G
-    m_hist.rpmr.push(rpmU8(g_status.m_speed_r.load()));                      // tr/min roue D
-    m_hist.spd.push(u8x10(fabsf(g_status.m_speed_ms.load())));               // |v véhicule| m/s ×10 (0 en pivot)
-    if (0 == (m_hist.tick % 5))   // batterie toutes les 5 s
+    // Tourne dans la tâche esp_timer (priorité 22, partagée avec les timers Wi-Fi/BT) :
+    // il est INTERDIT d'y bloquer. Mutex occupé (un client construit le JSON) → on saute
+    // l'échantillon, tant pis — l'historique est indicatif.
+    if (pdTRUE != xSemaphoreTake(m_hist_mtx, 0)) return;
+    m_hist.spd.push(u8x10(fabsf(g_status.m_speed_ms.load())));               // |v véhicule| m/s ×10, chaque s
+    if (0 == (m_hist.tick % HIST_FAST_DT))
     {
-        m_hist.batt.push(u8x10(g_status.m_vbat.load()));                    // V ×10
+        m_hist.accel.push(pctU8(fabsf(g_status.m_fwd.load()) * 100.f));      // % (consigne avance)
+        m_hist.pwml.push(pctU8(fabsf(g_status.m_out_l.load()) * 100.f));     // %
+        m_hist.pwmr.push(pctU8(fabsf(g_status.m_out_r.load()) * 100.f));     // %
+        m_hist.rpml.push(rpmU8(g_status.m_speed_l.load()));                  // tr/min roue G
+        m_hist.rpmr.push(rpmU8(g_status.m_speed_r.load()));                  // tr/min roue D
+    }
+    if (0 == (m_hist.tick % HIST_BATT_DT))
+    {
+        m_hist.batt.push(u8x10(g_status.m_vbat.load()));                     // V ×10
     }
     ++m_hist.tick;
     xSemaphoreGive(m_hist_mtx);
@@ -253,8 +266,19 @@ void histSample(void*)
 
 std::string buildHistJson()
 {
-    std::string out = "{\"type\":\"hist\",\"dt_fast\":1,\"dt_batt\":5,";
+    // Construit AU PLUS une fois par seconde : les clients supplémentaires reçoivent la
+    // même chaîne (copie ~3 ko) au lieu de reconstruire — lisse les pics d'allocation.
+    static std::string cache;
+    static int64_t     cache_us = -1;
+    const int64_t now = esp_timer_get_time();
     xSemaphoreTake(m_hist_mtx, portMAX_DELAY);
+    if (cache_us >= 0 && (now - cache_us) < 1000000)
+    {
+        std::string out = cache;
+        xSemaphoreGive(m_hist_mtx);
+        return out;
+    }
+    std::string out = "{\"type\":\"hist\",\"dt_fast\":5,\"dt_spd\":1,\"dt_batt\":15,";
     m_hist.accel.appendJson(out, "accel"); out += ',';
     m_hist.pwml.appendJson(out, "pwml");   out += ',';
     m_hist.pwmr.appendJson(out, "pwmr");   out += ',';
@@ -262,8 +286,10 @@ std::string buildHistJson()
     m_hist.rpmr.appendJson(out, "rpmr");   out += ',';
     m_hist.spd.appendJson(out, "spd");     out += ',';
     m_hist.batt.appendJson(out, "batt");
-    xSemaphoreGive(m_hist_mtx);
     out += '}';
+    cache = out;
+    cache_us = now;
+    xSemaphoreGive(m_hist_mtx);
     return out;
 }
 
@@ -433,10 +459,11 @@ std::string buildSysDynJson()
 {
     char buf[128];
     snprintf(buf, sizeof(buf),
-             "{\"type\":\"sysdyn\",\"uptime_s\":%lld,\"heap_free\":%lu,\"heap_min\":%lu}",
+             "{\"type\":\"sysdyn\",\"uptime_s\":%lld,\"heap_free\":%lu,\"heap_min\":%lu,\"ledc_fix\":%lu}",
              static_cast<long long>(esp_timer_get_time() / 1000000),
              static_cast<unsigned long>(esp_get_free_heap_size()),
-             static_cast<unsigned long>(esp_get_minimum_free_heap_size()));
+             static_cast<unsigned long>(esp_get_minimum_free_heap_size()),
+             static_cast<unsigned long>(board::ledcClkFixCount()));
     return buf;
 }
 

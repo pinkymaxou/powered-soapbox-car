@@ -4,6 +4,7 @@
 #include "hardware.hpp"
 
 #include <atomic>
+#include "soc/dport_reg.h"
 
 #include <cmath>
 
@@ -34,13 +35,46 @@ int                       m_angle_last[2] = {-1, -1};      // dernier angle brut
 Ads1115                   m_ads;                           // ADC externe (bus 0), Vbat sur A0
 bool                      m_led_on = false;
 
+// SENTINELLE horloge LEDC — diagnostic + auto-réparation de la course soupçonnée :
+// crash récurrent « Interrupt WDT » avec PC figé sur une ÉCRITURE de registre LEDC, sous
+// charge radio (Wi-Fi/BT). Hypothèse : un read-modify-write concurrent (non verrouillé côté
+// blobs radio) sur DPORT_PERIP_CLK_EN_REG perd le bit d'horloge du LEDC ; or écrire dans un
+// périphérique SANS horloge fige le bus APB sur ESP32 → watchdog d'interruption sans dump.
+// On vérifie le bit AVANT chaque écriture moteur : coupé → réparé + compté (page Système).
+std::atomic<uint32_t> m_ledc_clk_fix{0};
+
+inline void ledcClockGuard()
+{
+    if (0 == (DPORT_REG_READ(DPORT_PERIP_CLK_EN_REG) & DPORT_LEDC_CLK_EN))
+    {
+        DPORT_REG_SET_BIT(DPORT_PERIP_CLK_EN_REG, DPORT_LEDC_CLK_EN);
+        DPORT_REG_CLR_BIT(DPORT_PERIP_RST_EN_REG, DPORT_LEDC_RST);
+        const uint32_t n = m_ledc_clk_fix.fetch_add(1) + 1;
+        ESP_LOGE(TAG, "Horloge LEDC trouvée COUPÉE (course DPORT/radio ?) — réparée (n=%lu)",
+                 static_cast<unsigned long>(n));
+    }
+}
+
+// Caches d'état des sorties : on n'écrit LEDC/GPIO QUE si la valeur change. À 500 Hz en
+// freinage permanent, ça élimine ~2000 écritures APB/s inutiles (et réduit d'autant la
+// fenêtre d'exposition à la course d'horloge ci-dessus).
+uint32_t m_duty_last[2] = {UINT32_MAX, UINT32_MAX};
+int      m_dir_last[2]  = {-1, -1};
+
 void dirPin(gpio_num_t pin, Dir d)
 {
+    const int idx = (pins::DIR_L == pin) ? 0 : 1;
+    if (m_dir_last[idx] == static_cast<int>(d)) return;
+    m_dir_last[idx] = static_cast<int>(d);
     gpio_set_level(pin, static_cast<int>(d));
 }
 
 void setDuty(ledc_channel_t ch, uint32_t duty)
 {
+    const int idx = (LEDC_CHANNEL_0 == ch) ? 0 : 1;
+    if (m_duty_last[idx] == duty) return;
+    ledcClockGuard();
+    m_duty_last[idx] = duty;
     ledc_set_duty(LEDC_LOW_SPEED_MODE, ch, duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, ch);
 }
@@ -274,6 +308,8 @@ void board::motorsBrake()
     dirPin(pins::DIR_L, Dir::Reverse);
     dirPin(pins::DIR_R, Dir::Reverse);
 }
+
+uint32_t board::ledcClkFixCount() { return m_ledc_clk_fix.load(); }
 
 int board::encLeftDelta()  { return angleDelta(0); }
 int board::encRightDelta() { return angleDelta(1); }
