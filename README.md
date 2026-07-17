@@ -155,6 +155,14 @@ Repère 0 = essieu **avant** (roues motrices) ; cotes mesurées **vers l'arrièr
 
 ➡️ **Arrêt d'urgence au sommet du dossier (centré)** : le **champignon matériel** (coupe-circuit en série dans la gate du latch) est monté **en haut du dossier, au centre** — accessible aux **deux enfants** et à un **adulte qui suit le kart**. Il **coupe tout** (puissance **et** ESP32), en complément de l'arrêt d'urgence **logiciel** de la manette (bouton **B**). **Garde-corps latéraux** de chaque côté de la banquette (pas de séparation centrale : banquette continue). Le **pilotage reste à la manette Bluetooth**.
 
+> ⚠️ **Alimentation coupée = roue libre.** Le court-circuit des phases (freinage dynamique)
+> exige des MOSFET **activement fermés** : driver hors tension → interrupteurs ouverts →
+> **aucun frein électrique**. Il reste le frein moteur passif (rétro-entraînement ×16 à
+> travers le réducteur — efficace sur le plat, **insuffisant en pente**). Remède fail-safe
+> si besoin : un **relais à contacts normalement fermés en travers de chaque moteur**
+> (bobine sur le rail principal) — toute coupure referme les contacts → freinage dynamique
+> automatique, sans électronique.
+
 ### Vue de côté
 
 ```mermaid
