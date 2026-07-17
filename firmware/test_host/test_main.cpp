@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <string>
 
 #include "control_math.hpp"
 #include "pid.hpp"
@@ -199,6 +201,16 @@ static void test_ring()
     CHECK(4 == ring.count());
     out.clear(); ring.appendJson(out, "v");
     CHECK(out == "\"v\":[2,3,4,5]");
+
+    // Variante SANS TAS : même sortie, bornée, terminée par NUL.
+    char buf[64];
+    const size_t n = ring.appendJsonC(buf, sizeof(buf), "v");
+    CHECK(std::string(buf) == "\"v\":[2,3,4,5]");
+    CHECK(n == std::strlen(buf));
+    char tiny[8];                                   // capacité insuffisante → tronqué PROPREMENT
+    const size_t t = ring.appendJsonC(tiny, sizeof(tiny), "v");
+    CHECK(t == 7 && '\0' == tiny[7]);
+    CHECK(std::string(tiny) == "\"v\":[2,");
 }
 
 int main()

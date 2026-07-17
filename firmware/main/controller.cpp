@@ -215,7 +215,14 @@ void tick()
     // DÉCONNECTÉE (désarmement + freinage immédiats, sans attendre le timeout Bluetooth).
     const bool pad_stale = in.connected &&
                            ((now - input::lastReportUs()) > hw::PAD_HB_TIMEOUT_US);
-    const float vraw = board::vbatVolts(hw::ADC_OVERSAMPLE);   // < 0 si capteur (ADS1115) absent
+    // Tension lue à 20 Hz seulement (hw::VBAT_READ_TICKS) : l'ADS1115 à 128 SPS ne produit
+    // rien de neuf plus vite, et ça évite ~4000 transactions I2C/s dans la boucle 500 Hz.
+    static int   vbat_tick = 0;
+    static float vraw = -1.f;   // < 0 si capteur (ADS1115) absent
+    if (0 == (vbat_tick++ % hw::VBAT_READ_TICKS))
+    {
+        vraw = board::vbatVolts(hw::ADC_OVERSAMPLE);
+    }
     const bool  vbat_valid = (vraw > 0.05f);
     const float vbat = vbat_valid ? vraw * cfg.vbat_div_ratio : 0.f;
     const float sl_raw = use_enc ? countsToMps(board::encLeftDelta())  : 0.f;
@@ -295,7 +302,7 @@ void tick()
     // ── Armement par appui maintenu sur START (anti-démarrage : manche centré + manette connectée) ──
     // START = bouton physique OU bouton START/Options de la manette (même fonction).
     const bool start_held = board::btnStart() || in.start;
-    const bool centered = (fabsf(in.x) < 0.08f) && (fabsf(in.y) < 0.08f);
+    const bool centered = (fabsf(in.x) < hw::ARM_CENTER_MAX) && (fabsf(in.y) < hw::ARM_CENTER_MAX);
     if (start_held)
     {
         if (0 == m_hold_start_us) m_hold_start_us = now;
@@ -313,13 +320,17 @@ void tick()
     }
 
     // ── Retours haptiques manette (sur fronts) ──
-    const bool hard_fault = (Fault::Lvc == fault) || (Fault::Encoder == fault);
+    // Défaut « dur » (rumble fort) : LVC ou N'IMPORTE QUEL défaut encodeur (bloqué/inversé/
+    // aberrant/absent) — tous forcent l'arrêt et méritent un retour haptique appuyé.
+    const bool hard_fault = (Fault::Lvc == fault) || (Fault::Encoder == fault) ||
+                            (Fault::EncoderDir == fault) || (Fault::EncoderMad == fault) ||
+                            (Fault::EncoderAbsent == fault);
     if (m_armed && !m_armed_prev)                               // vient d'être armé → doux
         input::rumble(90, 160, 220);
     if ((hard_fault && !m_hardfault_prev) || (in.estop && !m_estop_prev))  // erreur soudaine / e-stop → fort
         input::rumble(255, 255, 450);
-    const bool pushing = (fabsf(in.rx) > 0.5f) || (fabsf(in.ry) > 0.5f);
-    if (pushing && !can_drive && (now - m_rumble_block_us) > 800000)       // bouge mais bloqué → fort (répété)
+    const bool pushing = (fabsf(in.rx) > hw::PUSH_MIN) || (fabsf(in.ry) > hw::PUSH_MIN);
+    if (pushing && !can_drive && (now - m_rumble_block_us) > hw::RUMBLE_BLOCK_INTERVAL_US)   // bouge mais bloqué → fort (répété)
     {
         input::rumble(220, 220, 250);
         m_rumble_block_us = now;

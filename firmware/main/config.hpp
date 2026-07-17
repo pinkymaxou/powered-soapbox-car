@@ -35,6 +35,10 @@ constexpr float MOTOR_V_NOM        = 12.0f;
 constexpr float VBAT_CAP_EMA_ALPHA = 0.002f;
 
 constexpr int ADC_OVERSAMPLE = 8;   // nb de lectures ADS1115 moyennées (lisse le résidu de bruit)
+// L'ADS1115 en continu à 128 SPS ne produit une nouvelle valeur que toutes les ~8 ms : lire
+// la tension à chaque tick de 2 ms gaspillerait ~4000 transactions I2C/s pour relire la même
+// valeur. On lit à 20 Hz — largement assez pour la LVC (anti-rebond 500 ms) et le plafond PWM.
+constexpr int VBAT_READ_TICKS = 25;   // 500 Hz / 25 = 20 Hz
 
 // Convertisseur A/N externe ADS1115 (16 bits, I2C) — remplace l'ADC interne de l'ESP32.
 // Sur le bus 0 (avec l'AS5600 gauche). Adresse réglée par ADDR ; 0x48 = ADDR→GND.
@@ -89,6 +93,11 @@ constexpr int   ENC_MAD_MS          = 200;
 // (~0,08 m/s par count avec GEAR_RATIO 1,28 / roue 10"). α ~0,25 → cte de temps ~4 ticks (8 ms).
 constexpr float SPEED_EMA_ALPHA      = 0.25f;
 constexpr int   BTN_DEBOUNCE_TICKS   = 3;
+
+// Armement et retours haptiques (nommés — pas de nombres magiques dans le contrôleur).
+constexpr float ARM_CENTER_MAX   = 0.08f;    // stick considéré « centré » pour armer
+constexpr float PUSH_MIN         = 0.5f;     // stick considéré « poussé » (rumble si bloqué)
+constexpr int64_t RUMBLE_BLOCK_INTERVAL_US = 800000;   // répétition du rumble « bloqué »
 // Heartbeat manette : les manettes streament leurs rapports HID en continu (~10-20 ms).
 // Lien « connecté » mais silence > 250 ms = communication perdue → désarmement + freinage
 // IMMÉDIATS (le timeout de supervision Bluetooth, lui, prend plusieurs secondes).
