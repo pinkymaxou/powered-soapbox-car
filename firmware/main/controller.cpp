@@ -211,6 +211,10 @@ void tick()
 
     board::pollButtons();
     const input::State in = input::get();
+    // Heartbeat : « connectée » mais aucun rapport HID depuis 250 ms → traitée comme
+    // DÉCONNECTÉE (désarmement + freinage immédiats, sans attendre le timeout Bluetooth).
+    const bool pad_stale = in.connected &&
+                           ((now - input::lastReportUs()) > hw::PAD_HB_TIMEOUT_US);
     const float vraw = board::vbatVolts(hw::ADC_OVERSAMPLE);   // < 0 si capteur (ADS1115) absent
     const bool  vbat_valid = (vraw > 0.05f);
     const float vbat = vbat_valid ? vraw * cfg.vbat_div_ratio : 0.f;
@@ -274,6 +278,7 @@ void tick()
     if (in.connected && !input::calibrated())    fmask |= fb::NOCAL;
     if (m_enc_fault)                             fmask |= fb::ENC_STUCK;
     if (!in.connected)                           fmask |= fb::PAD_LOST;
+    if (pad_stale)                               fmask |= fb::PAD_STALE;
     if (!vbat_valid)                             fmask |= fb::NO_VBAT;
     if (m_enc_rev_fault)                         fmask |= fb::ENC_REV;
     if (m_enc_mad_fault)                         fmask |= fb::ENC_MAD;
@@ -283,9 +288,9 @@ void tick()
 
     // Manette absente / e-stop manette / DÉFAUT → on désarme et on freine (sécurité absolue).
     // Un défaut force le désarmement : il faudra réarmer (START maintenu) une fois résolu.
-    if (!in.connected || in.estop || (Fault::None != fault)) m_armed = false;
+    if (!in.connected || pad_stale || in.estop || (Fault::None != fault)) m_armed = false;
 
-    const bool can_drive = m_armed && in.connected && !in.estop && (Fault::None == fault);
+    const bool can_drive = m_armed && in.connected && !pad_stale && !in.estop && (Fault::None == fault);
 
     // ── Armement par appui maintenu sur START (anti-démarrage : manche centré + manette connectée) ──
     // START = bouton physique OU bouton START/Options de la manette (même fonction).

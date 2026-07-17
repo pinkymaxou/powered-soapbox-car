@@ -12,6 +12,7 @@
 #include <cstring>
 #include "control_math.hpp"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "nvs.h"
 
 static const char* TAG = "input";
@@ -26,6 +27,7 @@ namespace
 constexpr char NVS_NS[] = "pad";
 
 // État live (écrit par le backend BT, lu par la tâche de contrôle).
+std::atomic<int64_t> m_last_report_us{0};   // heartbeat : date du dernier rapport HID reçu
 std::atomic<float> m_raw_x{0.f};
 std::atomic<float> m_raw_y{0.f};
 std::atomic<bool>  m_connected{false};
@@ -93,11 +95,14 @@ void calClear()
 }
 } // namespace
 
+int64_t input::lastReportUs() { return m_last_report_us.load(); }
+
 // ── Hooks appelés par le backend BT (input_bp32.c) ──
 // Trame manette : axes normalisés ~[-1..1] + boutons (arrêt d'urgence, START, masque affichage).
 extern "C" void inputbp_on_data(float x, float y, int estop, int start, uint32_t buttons,
                                 float zl, float zr, float rx2, float ry2)
 {
+    m_last_report_us.store(esp_timer_get_time());
     m_raw_x.store(x);
     m_raw_y.store(y);
     m_estop.store(0 != estop);

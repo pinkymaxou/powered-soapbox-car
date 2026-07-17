@@ -7,10 +7,12 @@
 body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
 header{
  background:linear-gradient(90deg,#143055,#0e1116);
- padding:16px 20px;font-size:22px;font-weight:700;letter-spacing:.3px;
+ padding:12px 20px;font-size:22px;font-weight:700;letter-spacing:.3px;
  border-bottom:1px solid var(--line);
- display:flex;align-items:center;justify-content:space-between;gap:12px;
+ display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+ position:sticky;top:0;z-index:50;   /* pastilles d'état TOUJOURS visibles en défilant */
 }
+header .brakemode{margin-left:auto}   /* état courant : frein/traction + armé, à droite */
 .hdr-state{font-size:14px;font-weight:700;padding:5px 12px;border-radius:999px;
  background:#333;color:#fff;white-space:nowrap}
 .hdr-state.s0{background:#64748b}                       /* IDLE (désarmé) */

@@ -9,6 +9,7 @@
 
 namespace input
 {
+int64_t lastReportUs();   // date (µs, esp_timer) du dernier rapport HID — heartbeat manette
 
 struct State
 {

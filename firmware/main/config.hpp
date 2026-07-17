@@ -89,6 +89,10 @@ constexpr int   ENC_MAD_MS          = 200;
 // (~0,08 m/s par count avec GEAR_RATIO 1,28 / roue 10"). α ~0,25 → cte de temps ~4 ticks (8 ms).
 constexpr float SPEED_EMA_ALPHA      = 0.25f;
 constexpr int   BTN_DEBOUNCE_TICKS   = 3;
+// Heartbeat manette : les manettes streament leurs rapports HID en continu (~10-20 ms).
+// Lien « connecté » mais silence > 250 ms = communication perdue → désarmement + freinage
+// IMMÉDIATS (le timeout de supervision Bluetooth, lui, prend plusieurs secondes).
+constexpr int64_t PAD_HB_TIMEOUT_US  = 250000;
 } // namespace hw
 
 // ───────────────────────── Configuration (champs nommés, persistée) ─────────────────────────
@@ -164,6 +168,7 @@ constexpr unsigned ENC_REV   = 1u << 6;   // encodeur/moteur câblé à l'envers
 constexpr unsigned ENC_MAD   = 1u << 7;   // mesure de vitesse aberrante
 constexpr unsigned ENC_L_ABS = 1u << 8;   // AS5600 gauche absent (I2C muet) — si use_encoders=1
 constexpr unsigned ENC_R_ABS = 1u << 9;   // AS5600 droit absent — si use_encoders=1
+constexpr unsigned PAD_STALE = 1u << 10;  // manette « connectée » mais muette > 250 ms (heartbeat)
 } // namespace fb
 
 struct KartStatus

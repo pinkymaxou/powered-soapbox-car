@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="/style.css">
 <script src="/chart.js"></script>
 </head><body>
-<header>🛞 Kart électrique<span class="hdr-state" id="hdrstate">…</span></header>
+<header>🛞 Kart électrique<span class="pill brakemode" id="i_brakemode">—</span><span class="hdr-state" id="hdrstate">…</span></header>
 <nav class="tabs">
  <button class="tab active" data-tab="dash">Tableau de bord</button>
  <button class="tab" data-tab="cfg">Configuration</button>
@@ -209,7 +209,6 @@ const INDS=[
 const BRAKE_MODES=['⚪ TRACTION','🟠 FREIN DYNAMIQUE (court-circuit)','🟢 FREIN ACTIF (PID)'];
 function buildInds(){
  document.getElementById('ind').innerHTML=
-  `<span class="pill brakemode" id="i_brakemode">—</span>`+
   INDS.map(i=>`<span class="pill" id="i_${i.k}">${i.l}</span>`).join('');
 }
 function updateInds(s){
@@ -288,13 +287,10 @@ function drawDpad(s){
 }
 // Pourquoi le véhicule ne peut pas bouger (peut cumuler plusieurs raisons).
 function whyBlocked(s){
- const b=[];
- if(!s.pad_conn) b.push("Manette déconnectée");
- if(s.estop) b.push("Arrêt d'urgence manette actif (bouton B)");
- if(s.fault===FAULT.LVC) b.push("Tension batterie trop basse (LVC)");
- if(s.fault===FAULT.ENCODER) b.push("Défaut capteur de roue (blocage / courroie ?)");
- if(s.fault===FAULT.NOT_CALIBRATED) b.push("Manette NON calibrée → onglet Manette, calibration obligatoire");
- if(s.pad_conn && !s.estop && !s.arming) b.push("Non armé : maintenir START ~1 s (manche au centre)");
+ // Une seule source de vérité : les défauts graves actifs du masque (FAULTS_DESC),
+ // plus le cas « rien ne bloque sauf l'armement ».
+ const b=FAULTS_DESC.filter(f=>f.grave&&(s.faults>>>f.b&1)).map(f=>f.t);
+ if(!b.length && !s.arming) b.push("Non armé : maintenir START ~1 s (manche au centre)");
  return b;
 }
 function showStatus(s){
@@ -350,6 +346,7 @@ const FAULTS_DESC=[
  {b:6, t:'Encodeur : sens inversé',               d:'La roue tourne franchement à l\u2019opposé de la commande : capteur ou moteur câblé à l\u2019envers. ARRÊT TOTAL, verrouillé jusqu\u2019au redémarrage.', grave:true},
  {b:8, t:'Encodeur GAUCHE absent (AS5600)',       d:'Aucune réponse du capteur gauche sur le bus I2C. Vérifier câblage et aimant — ou mettre use_encoders à 0 pour rouler sans asservissement.', grave:true},
  {b:9, t:'Encodeur DROIT absent (AS5600)',        d:'Aucune réponse du capteur droit sur le bus I2C. Vérifier câblage et aimant — ou mettre use_encoders à 0 pour rouler sans asservissement.', grave:true},
+ {b:10,t:'Manette muette (heartbeat)',           d:'Lien Bluetooth « connecté » mais aucun rapport reçu depuis plus de 250 ms : communication perdue. Désarmement et freinage immédiats.', grave:true},
  {b:7, t:'Encodeur : mesure aberrante',           d:'Vitesse mesurée physiquement impossible pour le kart. Capteur ou aimant défectueux. ARRÊT TOTAL, verrouillé jusqu\u2019au redémarrage.', grave:true},
 ];
 let lastFaults=-1;

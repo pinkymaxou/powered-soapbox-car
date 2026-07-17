@@ -333,7 +333,7 @@ std::string buildStatusJson()
              "\"out_l\":%.3f,\"out_r\":%.3f,\"brake_mode\":%d,\"arming\":%s,\"btn_start\":%s,"
              "\"pad_conn\":%s,\"pad_batt\":%d,\"pad_x\":%.3f,\"pad_y\":%.3f,"
              "\"pad_cx\":%.3f,\"pad_cy\":%.3f,\"pad_zl\":%.2f,\"pad_zr\":%.2f,"
-             "\"pad_rx2\":%.3f,\"pad_ry2\":%.3f,\"pad_btns\":%u}",
+             "\"pad_rx2\":%.3f,\"pad_ry2\":%.3f,\"pad_btns\":%u,\"pad_age_ms\":%d}",
              g_status.m_state.load(), g_status.m_fault.load(), g_status.m_faults.load(),
              g_status.m_vbat.load(), g_status.m_batt_type.load(),
              battDispLo(), battDispHi(),
@@ -350,7 +350,8 @@ std::string buildStatusJson()
              g_status.m_pad_cx.load(), g_status.m_pad_cy.load(),
              g_status.m_pad_zl.load(), g_status.m_pad_zr.load(),
              g_status.m_pad_rx2.load(), g_status.m_pad_ry2.load(),
-             g_status.m_pad_btns.load());
+             g_status.m_pad_btns.load(),
+             static_cast<int>(std::min<int64_t>((esp_timer_get_time() - input::lastReportUs()) / 1000, 99999)));
     return buf;
 }
 
