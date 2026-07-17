@@ -26,6 +26,8 @@ void motorsBrake();
 // Capteurs d'angle AS5600 (un par roue avant) : Δcounts signé (12 bits) depuis le dernier appel.
 int encLeftDelta();    // roue avant gauche  (bus I2C 0)
 int encRightDelta();   // roue avant droite  (bus I2C 1)
+bool encLeftPresent();   // dernière lecture I2C du AS5600 gauche réussie
+bool encRightPresent();  // idem droite
 
 // Bouton START : pollButtons() une fois par tick (anti-rebond), puis btnStart().
 void pollButtons();

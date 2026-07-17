@@ -143,7 +143,7 @@ extern const int       PARAM_COUNT;
 
 // ───────────────────────── Télémétrie ─────────────────────────
 enum class State : int { Lockout = 0, Calibrate = 1, Run = 2, Fault = 3 };
-enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4, EncoderDir = 5, EncoderMad = 6 };
+enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4, EncoderDir = 5, EncoderMad = 6, EncoderAbsent = 7 };
 
 // Bits du masque m_faults : TOUTES les conditions actives simultanément (m_fault ne retient
 // que la plus prioritaire). Source unique côté firmware ; miroir de présentation côté web :
@@ -158,6 +158,8 @@ constexpr unsigned PAD_LOST  = 1u << 4;   // manette déconnectée
 constexpr unsigned NO_VBAT   = 1u << 5;   // capteur de tension absent (info)
 constexpr unsigned ENC_REV   = 1u << 6;   // encodeur/moteur câblé à l'envers
 constexpr unsigned ENC_MAD   = 1u << 7;   // mesure de vitesse aberrante
+constexpr unsigned ENC_L_ABS = 1u << 8;   // AS5600 gauche absent (I2C muet) — si use_encoders=1
+constexpr unsigned ENC_R_ABS = 1u << 9;   // AS5600 droit absent — si use_encoders=1
 } // namespace fb
 
 struct KartStatus

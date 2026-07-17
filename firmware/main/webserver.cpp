@@ -63,6 +63,8 @@ constexpr char CMD_WIFIGET[]   = "wifiget";
 constexpr char CMD_HIST[]      = "hist";
 constexpr char CMD_SET[]       = "\"set\"";
 constexpr char CMD_STATUS[]    = "status";
+constexpr char CMD_VALS[]      = "\"vals\"";  // valeurs des paramètres (métadonnées : « get », 1× à l'ouverture)
+constexpr char CMD_SYSDYN[]    = "sysdyn";    // partie dynamique de l'onglet Système (uptime/heap)
 constexpr char CMD_SYSINFO[]   = "sysinfo";
 // Manette Bluetooth
 constexpr char CMD_PADINFO[]   = "padinfo";
@@ -304,6 +306,23 @@ float battDispHi()
     return (24 == bt) ? hw::VBAT24_FULL_V : (12 == bt) ? hw::VBAT12_FULL_V : 0.f;
 }
 
+// Valeurs des paramètres SEULES (~0,6 ko) : les métadonnées (desc/cat/help/min/max) sont
+// immuables en cours d'exécution et ne partent qu'avec « get », une fois à l'ouverture.
+std::string buildValsJson()
+{
+    const KartConfig cfg = configSnapshot();
+    std::string out = "{\"type\":\"vals\",\"params\":[";
+    char num[80];
+    for (int i = 0; i < PARAM_COUNT; ++i)
+    {
+        snprintf(num, sizeof(num), "%s{\"name\":\"%s\",\"val\":%g}",
+                 i ? "," : "", PARAMS[i].name, cfg.*(PARAMS[i].field));
+        out += num;
+    }
+    out += "]}";
+    return out;
+}
+
 std::string buildStatusJson()
 {
     char buf[576];
@@ -407,6 +426,19 @@ std::string ip6ArrayJson(esp_netif_t* netif)
 }
 
 // Infos système (page « Système ») : version/commit, uptime, MAC, IP v4/v6, heap, chip…
+// Partie DYNAMIQUE de l'onglet Système : le reste (puce, MAC, version…) est immuable et
+// ne part qu'avec « sysinfo », une fois — le navigateur garde la table construite.
+std::string buildSysDynJson()
+{
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+             "{\"type\":\"sysdyn\",\"uptime_s\":%lld,\"heap_free\":%lu,\"heap_min\":%lu}",
+             static_cast<long long>(esp_timer_get_time() / 1000000),
+             static_cast<unsigned long>(esp_get_free_heap_size()),
+             static_cast<unsigned long>(esp_get_minimum_free_heap_size()));
+    return buf;
+}
+
 std::string buildSysInfoJson()
 {
     const esp_app_desc_t* app = esp_app_get_description();
@@ -612,6 +644,14 @@ esp_err_t wsHandler(httpd_req_t* req)
     {
         return wsReply(req, buildWifiJson());
     }
+    if (std::string::npos != body.find(CMD_VALS))
+    {
+        return wsReply(req, buildValsJson());
+    }
+    if (std::string::npos != body.find(CMD_SYSDYN))
+    {
+        return wsReply(req, buildSysDynJson());
+    }
     if (std::string::npos != body.find(CMD_HIST))
     {
         return wsReply(req, buildHistJson());
@@ -619,7 +659,7 @@ esp_err_t wsHandler(httpd_req_t* req)
     if (std::string::npos != body.find(CMD_SET))
     {
         applyConfigJson(body);
-        return wsReply(req, buildConfigJson());
+        return wsReply(req, buildValsJson());   // métadonnées déjà chez le client (« get » à l'ouverture)
     }
     if (std::string::npos != body.find(CMD_SYSINFO))
     {

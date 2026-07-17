@@ -253,8 +253,14 @@ void tick()
     const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(duty_max, 0.f, 1.f));
 
     // ── Défauts / conditions de non-conduite ──
+    // Encodeurs ABSENTS (I2C muet) : avec use_encoders=1 c'est bloquant — frein PID et
+    // limiteur croiraient la roue arrêtée. Avec use_encoders=0 (banc) : simplement ignorés.
+    const bool enc_l_abs = use_enc && !board::encLeftPresent();
+    const bool enc_r_abs = use_enc && !board::encRightPresent();
+
     Fault fault = Fault::None;
     if (m_lvc_tripped)                              fault = Fault::Lvc;
+    else if (enc_l_abs || enc_r_abs)                fault = Fault::EncoderAbsent;  // capteur muet
     else if (m_enc_mad_fault)                       fault = Fault::EncoderMad;     // mesure impossible
     else if (m_enc_rev_fault)                       fault = Fault::EncoderDir;     // sens inversé
     else if (m_enc_fault)                           fault = Fault::Encoder;        // roue bloquée
@@ -271,6 +277,8 @@ void tick()
     if (!vbat_valid)                             fmask |= fb::NO_VBAT;
     if (m_enc_rev_fault)                         fmask |= fb::ENC_REV;
     if (m_enc_mad_fault)                         fmask |= fb::ENC_MAD;
+    if (enc_l_abs)                               fmask |= fb::ENC_L_ABS;
+    if (enc_r_abs)                               fmask |= fb::ENC_R_ABS;
     g_status.m_faults.store(fmask);
 
     // Manette absente / e-stop manette / DÉFAUT → on désarme et on freine (sécurité absolue).

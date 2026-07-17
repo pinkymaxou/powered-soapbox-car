@@ -3,6 +3,8 @@
 // passe par les fonctions libres du namespace `board`.
 #include "hardware.hpp"
 
+#include <atomic>
+
 #include <cmath>
 
 #include "ads1115.hpp"
@@ -129,6 +131,10 @@ void initEncoders()
     }
 }
 
+// Présence de chaque AS5600 : dernière lecture I2C réussie ? (rafraîchi à 500 Hz par la
+// boucle de contrôle via angleDelta → alimente les défauts « encodeur absent » par roue).
+std::atomic<bool> m_enc_present[2] = {false, false};
+
 // Angle brut 12 bits (0..4095) du capteur `i`. Retourne -1 si absent/erreur.
 int readAngleRaw(int i)
 {
@@ -137,8 +143,10 @@ int readAngleRaw(int i)
     uint8_t buf[2] = {0, 0};
     if (ESP_OK != i2c_master_transmit_receive(m_as[i], &reg, 1, buf, 2, 20))
     {
+        m_enc_present[i].store(false);
         return -1;
     }
+    m_enc_present[i].store(true);
     return ((buf[0] & 0x0F) << 8) | buf[1];
 }
 
@@ -269,6 +277,8 @@ void board::motorsBrake()
 
 int board::encLeftDelta()  { return angleDelta(0); }
 int board::encRightDelta() { return angleDelta(1); }
+bool board::encLeftPresent()  { return m_enc_present[0].load(); }
+bool board::encRightPresent() { return m_enc_present[1].load(); }
 
 void board::pollButtons()
 {
