@@ -17,6 +17,15 @@ jobs:
       - name: Tests hôte (g++)
         run: firmware/test_host/run_tests.sh
 
+  # Simulation physique : les SCÉNARIOS (anti-renversement, pannes, pentes, chargements
+  # asymétriques…) doivent tous passer — c'est le banc d'essai virtuel du kart.
+  simulation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scénarios physiques (contrôleur réel + modèle du véhicule)
+        run: firmware/test_host/run_sim.sh
+
   build:
     runs-on: ubuntu-latest
     # Image Docker officielle ESP-IDF 6.1 (branche release/v6.1, comme en local).

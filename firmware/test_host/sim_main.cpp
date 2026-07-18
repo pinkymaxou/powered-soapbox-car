@@ -193,6 +193,17 @@ void testScenarios()
         CHECK(r.ever_armed && !r.ever_fault);
         CHECK(std::fabs(r.final_v) < 0.5f);   // pas d'emballement dans la pente
     }
+
+    // Pente 8 %, frein DYNAMIQUE seul : ne peut pas s'arrêter (force ∝ v) mais doit
+    // PLAFONNER la descente à une vitesse terminale rampante — pas d'emballement.
+    {
+        const RunResult r = run(get("descente_frein_dynamique"));
+        std::printf("  descente_frein_dynamique (8 %%, court-circuit seul) : v finale=%.2f m/s\n",
+                    std::fabs(r.final_v));
+        CHECK(r.ever_armed && !r.ever_fault);
+        CHECK(std::fabs(r.final_v) < 0.7f);   // vitesse terminale rampante (« il tient »)
+        CHECK(std::fabs(r.final_v) > 0.05f);  // …mais ne S'ARRÊTE pas : limite documentée
+    }
 }
 
 // Balayage de paramètres : toute la plage UTILE des réglages web doit rester sans bascule.

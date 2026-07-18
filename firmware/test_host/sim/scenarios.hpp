@@ -302,6 +302,22 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
+    // Descente 8 % avec FREIN DYNAMIQUE SEUL (brk_pid_enable=0) : le court-circuit ne peut
+    // pas arrêter (force ∝ vitesse) mais doit PLAFONNER la descente à une vitesse terminale
+    // rampante — la question du scénario : « est-ce qu'il tient quand même ? »
+    v.push_back({
+        "descente_frein_dynamique",
+        "Pente 8 %, frein dynamique SEUL (sans PID) : vitesse terminale bornée attendue",
+        18.f,
+        [](KartConfig& c) { c.brk_pid_enable = 0.f; },
+        [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.08f); },
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = (t < 4.f) ? 0.4f : 0.f;   // s'engage dans la pente puis relâche tout
+            return c;
+        }});
+
     // CHARGEMENT ASYMÉTRIQUE — un seul enfant assis sur le siège GAUCHE (pas au centre).
     // 33 kg à +0,20 m (demi-banquette) → y_cg = 33×0,20/(32+33) ≈ +0,10 m ; CG un peu plus
     // bas et plus avant (moins de masse sur la banquette arrière).
