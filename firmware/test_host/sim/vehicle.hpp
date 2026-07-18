@@ -103,6 +103,12 @@ public:
         m_vterm = m_p.batt_v0 - m_p.batt_rint * itot;
         if (m_vterm < 0.f) m_vterm = 0.f;
 
+        // ÉNERGIE tirée de la batterie (estimation) : P = V_bornes × Σ|i| pendant la traction
+        // et le frein PID (plugging = courant batterie) ; le court-circuit (frein dynamique)
+        // dissipe dans le moteur SANS tirer sur la batterie. Pas de récupération modélisée.
+        m_power_w = brake ? 0.f : m_vterm * itot;
+        m_energy_wh += m_power_w * dt / 3600.f;
+
         // Encodeurs : accumulation d'angle CAPTEUR (tours roue × GEAR_RATIO × CPR)
         accumulate(m_acc_l, vlNow());
         accumulate(m_acc_r, vrNow());
@@ -139,6 +145,8 @@ public:
     float heading() const { return m_h; }
     float t() const { return m_t; }
     float vterm() const { return m_vterm; }
+    float powerW() const { return m_power_w; }       // puissance batterie instantanée (estimée)
+    float energyWh() const { return m_energy_wh; }   // énergie batterie cumulée (estimée)
     float wheelV(bool left) const { return left ? vlNow() : vrNow(); }
 
     // Accélération latérale de basculement du TRICYCLE : le triangle de sustentation se
@@ -189,6 +197,8 @@ private:
     float m_x = 0.f, m_y = 0.f, m_h = 0.f, m_t = 0.f;
     float m_vterm;
     float m_il = 0.f, m_ir = 0.f;        // courants moteurs (pour le sag batterie)
+    float m_power_w = 0.f;               // puissance batterie instantanée (estimation)
+    float m_energy_wh = 0.f;             // énergie batterie cumulée (estimation)
     double m_acc_l = 0.0, m_acc_r = 0.0; // angle capteur accumulé (counts, fractionnaire)
     long   m_last_l = 0, m_last_r = 0;
 };

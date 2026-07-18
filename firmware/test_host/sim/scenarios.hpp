@@ -318,6 +318,33 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
+    // Pente 16 % (raide !) — frein PID ACTIF : doit retenir le kart près de l'arrêt.
+    v.push_back({
+        "descente16_frein_actif",
+        "Pente 16 %, frein PID actif : le kart doit être retenu près de l'arrêt",
+        18.f, nullptr,
+        [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.16f); },
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = (t < 4.f) ? 0.4f : 0.f;
+            return c;
+        }});
+
+    // Pente 16 % — frein DYNAMIQUE seul : vitesse terminale plus élevée (∝ pente), bornée ?
+    v.push_back({
+        "descente16_frein_dynamique",
+        "Pente 16 %, frein dynamique SEUL : vitesse terminale ~1 m/s attendue",
+        18.f,
+        [](KartConfig& c) { c.brk_pid_enable = 0.f; },
+        [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.16f); },
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = (t < 4.f) ? 0.4f : 0.f;
+            return c;
+        }});
+
     // CHARGEMENT ASYMÉTRIQUE — un seul enfant assis sur le siège GAUCHE (pas au centre).
     // 33 kg à +0,20 m (demi-banquette) → y_cg = 33×0,20/(32+33) ≈ +0,10 m ; CG un peu plus
     // bas et plus avant (moins de masse sur la banquette arrière).

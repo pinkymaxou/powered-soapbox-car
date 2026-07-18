@@ -54,6 +54,8 @@
   <span>t <b id="st">0.0</b> s</span>
   <span>v <b id="sv">0.00</b> m/s</span>
   <span>a_lat <b id="sa">0.00</b> m/s²</span>
+  <span><b id="sp">0</b> W</span>
+  <span><b id="se">0.00</b> Wh</span>
   <span>marge renversement</span>
  </div>
  <div id="marginwrap"><div id="marginbar"></div></div>
@@ -67,6 +69,7 @@
  <h3>Sorties moteurs (PWM signé)</h3><canvas id="co" height="110"></canvas>
  <h3>Encodeurs (tr/min capteur) — mesuré vs réel</h3><canvas id="ce" height="110"></canvas>
  <h3>Manette — stick vs consigne effective (rampes + anti-renversement)</h3><canvas id="cp" height="110"></canvas>
+ <h3>Énergie batterie (estimation) — Wh cumulés · W instantanés ÷ 100</h3><canvas id="cw" height="110"></canvas>
 </div>
 <div id="hypo">
  <span class="close" onclick="document.getElementById('hypo').style.display='none'">✕</span>
@@ -194,7 +197,7 @@ function mkChart(id, series, ymin, ymax){
               y:{min:ymin, max:ymax, ticks:{color:'#8b949e'}, grid:{color:'#21262d'}}},
       plugins:{legend:{labels:{color:'#e6edf3', boxWidth:14}}}}});
 }
-let chV, chA, chO, chE, chP, lastChartUpd = 0;
+let chV, chA, chO, chE, chP, chW, lastChartUpd = 0;
 function initCharts(){
   chV = mkChart('cv', [{l:'v', c:'#58a6ff'}, {l:'limite', c:'#8b949e', d:[5,4]}], -1, 4);
   chA = mkChart('ca', [{l:'|a_lat|', c:'#d29922'}, {l:'a_tip (bascule)', c:'#f85149', d:[5,4]}], 0, 7);
@@ -203,9 +206,10 @@ function initCharts(){
                        {l:'G réel', c:'#3fb950', d:[4,4]}, {l:'D réel', c:'#ffa657', d:[4,4]}], -150, 450);
   chP = mkChart('cp', [{l:'virage stick', c:'#8cf', d:[4,4]}, {l:'virage effectif', c:'#58a6ff'},
                        {l:'avance stick', c:'#f8c', d:[4,4]}, {l:'avance effective', c:'#ff2ea6'}], -1.15, 1.15);
+  chW = mkChart('cw', [{l:'Wh cumulés', c:'#e3b341'}, {l:'W ÷ 100', c:'#7ee787', d:[4,4]}], 0, 6);
 }
 function resetCharts(){
-  for (const ch of [chV, chA, chO, chE, chP]) ch.data.datasets.forEach(d => d.data = []);
+  for (const ch of [chV, chA, chO, chE, chP, chW]) ch.data.datasets.forEach(d => d.data = []);
 }
 function chartPush(m){
   chV.data.datasets[0].data.push({x:m.t, y:m.v});
@@ -222,10 +226,12 @@ function chartPush(m){
   chP.data.datasets[1].data.push({x:m.t, y:m.padx});
   chP.data.datasets[2].data.push({x:m.t, y:m.sticky});
   chP.data.datasets[3].data.push({x:m.t, y:m.pady});
+  chW.data.datasets[0].data.push({x:m.t, y:m.e_wh});
+  chW.data.datasets[1].data.push({x:m.t, y:m.p_w / 100});
   const now = performance.now();
   if (now - lastChartUpd > 250){
     lastChartUpd = now;
-    for (const ch of [chV, chA, chO, chE, chP]) ch.update('none');
+    for (const ch of [chV, chA, chO, chE, chP, chW]) ch.update('none');
   }
 }
 function toggleCharts(){
@@ -301,6 +307,8 @@ function animate(){
     document.getElementById('st').textContent = cur.t.toFixed(1);
     document.getElementById('sv').textContent = cur.v.toFixed(2);
     document.getElementById('sa').textContent = cur.alat.toFixed(2);
+    document.getElementById('sp').textContent = Math.round(cur.p_w);
+    document.getElementById('se').textContent = cur.e_wh.toFixed(2);
     const pct = Math.max(0, Math.min(100, 100 * cur.margin / atip));
     const bar = document.getElementById('marginbar');
     bar.style.width = pct + '%';

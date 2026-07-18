@@ -194,6 +194,23 @@ void testScenarios()
         CHECK(std::fabs(r.final_v) < 0.5f);   // pas d'emballement dans la pente
     }
 
+    // Pente 16 % (raide) : le frein ACTIF retient près de l'arrêt (cycle limite autour de
+    // EBRAKE_MIN_MPS, ~0,15 m/s) en tirant sur la batterie ; le frein DYNAMIQUE seul laisse
+    // rouler à ~1,1 m/s (vitesse terminale ∝ pente) sans consommer.
+    {
+        const RunResult r = run(get("descente16_frein_actif"));
+        std::printf("  descente16 frein ACTIF : v finale=%.2f m/s\n", std::fabs(r.final_v));
+        CHECK(r.ever_armed && !r.ever_fault);
+        CHECK(std::fabs(r.final_v) < 0.3f);   // retenu près de l'arrêt malgré 16 %
+    }
+    {
+        const RunResult r = run(get("descente16_frein_dynamique"));
+        std::printf("  descente16 frein DYNAMIQUE : v finale=%.2f m/s (terminale)\n",
+                    std::fabs(r.final_v));
+        CHECK(r.ever_armed && !r.ever_fault);
+        CHECK(std::fabs(r.final_v) > 0.8f && std::fabs(r.final_v) < 1.5f);   // roule au pas, borné
+    }
+
     // Pente 8 %, frein DYNAMIQUE seul : ne peut pas s'arrêter (force ∝ v) mais doit
     // PLAFONNER la descente à une vitesse terminale rampante — pas d'emballement.
     {
@@ -279,6 +296,7 @@ int streamScenario(const std::string& name, bool realtime)
         std::printf("{\"t\":%.3f,\"x\":%.3f,\"y\":%.3f,\"h\":%.4f,\"v\":%.3f,\"w\":%.3f,"
                     "\"alat\":%.3f,\"margin\":%.3f,\"outl\":%.3f,\"outr\":%.3f,"
                     "\"encl\":%.2f,\"encr\":%.2f,\"encl_vrai\":%.2f,\"encr_vrai\":%.2f,"
+                    "\"p_w\":%.1f,\"e_wh\":%.3f,"
                     "\"stickx\":%.2f,\"sticky\":%.2f,"
                     "\"padx\":%.2f,\"pady\":%.2f,\"state\":%d,\"fault\":%d,\"faults\":%u,"
                     "\"brake\":%d,\"armed\":%s,\"vbat\":%.2f}\n",
@@ -286,6 +304,7 @@ int streamScenario(const std::string& name, bool realtime)
                     v.aLat(), v.tipMargin(), c.lastOutL(), c.lastOutR(),
                     t.speed_l * mps2rpm, t.speed_r * mps2rpm,
                     v.wheelV(true) * mps2rpm, v.wheelV(false) * mps2rpm,
+                    v.powerW(), v.energyWh(),
                     c.padX(), c.padY(),
                     t.turn, t.fwd, static_cast<int>(t.state), static_cast<int>(t.fault),
                     t.faults, static_cast<int>(t.brake_mode), t.armed ? "true" : "false",
