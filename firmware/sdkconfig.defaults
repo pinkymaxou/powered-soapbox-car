@@ -38,7 +38,8 @@ CONFIG_HTTPD_WS_SUPPORT=y
 # Watchdog de tâche : 5 s. La boucle de contrôle s'y abonne et le réarme ;
 # si elle se bloque > 5 s, le panic déclenché redémarre l'ESP32.
 CONFIG_ESP_TASK_WDT_INIT=y
-CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=2
 CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
 CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
 # Sur panic (dont watchdog) → redémarrage automatique

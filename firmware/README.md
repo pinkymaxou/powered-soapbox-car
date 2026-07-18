@@ -87,6 +87,21 @@ Si la manette **se déconnecte** (hors de portée, batterie vide, désappairage)
 passe à `false` et le contrôleur **met immédiatement les 2 moteurs en mode freinage**.
 Idem si non armé, non calibré, arrêt d'urgence, ou défaut capteur/LVC.
 
+### Sécurité : défaut électrique = frein (dead-man)
+
+- **Watchdog de tâche à 2 s avec PANIC** : une boucle de contrôle gelée → reboot (et non
+  un simple avertissement) ; au redémarrage les moteurs repartent en frein dynamique.
+- **Broches moteur : tout bas = frein** (duty 0 + DIR bas court-circuitent le pont). Le
+  firmware arme des **pull-down internes** sur PWM/DIR (haute impédance → frein tant que
+  la puce tourne) et force l'état frein dès la première ligne d'`app_main`.
+- ⚠️ **Câblage requis** : les pull-down internes **ne survivent pas à un reset** (registres
+  IO_MUX). Pendant le bootloader (~700 ms), seuls des **pull-down EXTERNES** (~10 kΩ) sur
+  les entrées PWM/DIR du driver garantissent le frein — les prévoir (ou vérifier que le
+  module driver les intègre). Idem pour le **latch d'alimentation** (`POWER_HOLD`, actif
+  bas) : prévoir la résistance/le condensateur qui maintient l'alimentation pendant un
+  reboot, sinon un reset en pente = driver hors tension = **roue libre** (scénarios
+  `coupure_pente*` de la simulation).
+
 ## Mesures analogiques (ADC externe ADS1115)
 
 Toutes les entrées analogiques passent par un **ADS1115** (16 bits, I²C, PGA) au lieu de

@@ -130,10 +130,14 @@ void initMotors()
     gpio_config_t io{};
     io.pin_bit_mask = (1ULL << pins::DIR_L) | (1ULL << pins::DIR_R);
     io.mode = GPIO_MODE_OUTPUT;
+    io.pull_down_en = GPIO_PULLDOWN_ENABLE;
     gpio_config(&io);
+    // L'attache LEDC reconfigure les broches PWM : réarmer leurs pull-down internes.
+    gpio_pulldown_en(pins::PWM_L);
+    gpio_pulldown_en(pins::PWM_R);
     dirPin(pins::DIR_L, Dir::Forward);
     dirPin(pins::DIR_R, Dir::Forward);
-    board::motorsStop();
+    board::motorsBrake();   // état par défaut : freinage dynamique (jamais en roue libre)
 }
 
 // Deux bus I2C indépendants, un capteur AS5600 (0x36) par bus.
@@ -337,6 +341,7 @@ void board::powerLatch()
     gpio_config_t io{};
     io.pin_bit_mask = (1ULL << pins::POWER_HOLD);
     io.mode = GPIO_MODE_OUTPUT;
+    io.pull_down_en = GPIO_PULLDOWN_ENABLE;   // actif BAS : même en haute impédance, rester « maintenu »
     gpio_config(&io);
     gpio_set_level(pins::POWER_HOLD, 0);
 }
@@ -348,12 +353,17 @@ void board::powerOff()
 
 void board::motorsIdleEarly()
 {
-    // PWM/DIR en sortie à l'état BAS (0 % de rapport cyclique) dès le boot, avant l'init LEDC,
-    // pour ne pas laisser les broches flotter (le driver pourrait envoyer une impulsion parasite).
+    // PWM/DIR en sortie à l'état BAS dès le boot, avant l'init LEDC : tout bas = FREINAGE
+    // DYNAMIQUE (les deux sorties du pont au niveau bas court-circuitent le moteur). Les
+    // PULL-DOWN internes sont armés en plus : si une broche repasse en haute impédance
+    // pendant que la puce tourne, elle retombe côté frein. ⚠️ Un RESET efface ces pulls
+    // (registres IO_MUX) : le défaut électrique pendant le bootloader dépend des pull-down
+    // EXTERNES du driver — à garantir côté câblage (voir README).
     gpio_config_t io{};
     io.pin_bit_mask = (1ULL << pins::PWM_L) | (1ULL << pins::DIR_L) |
                       (1ULL << pins::PWM_R) | (1ULL << pins::DIR_R);
     io.mode = GPIO_MODE_OUTPUT;
+    io.pull_down_en = GPIO_PULLDOWN_ENABLE;
     gpio_config(&io);
     gpio_set_level(pins::PWM_L, 0);
     gpio_set_level(pins::DIR_L, 0);
