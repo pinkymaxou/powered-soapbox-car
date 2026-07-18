@@ -83,6 +83,23 @@
   <li><b>Batterie</b> : source idéale + résistance interne (V = V₀ − R·I). Pas de modèle de décharge.</li>
   <li><b>Capteurs</b> : AS5600 quantifiés 12 bits ×1,28 (comme le vrai) ; manette parfaite (le script parle en consigne calibrée) ; pannes injectables (absent/inversé/figé/aberrant).</li>
  </ul>
+ <h3>Énergie (estimation) — comment le calcul est fait</h3>
+ <ul>
+  <li><b>Courant de chaque moteur</b> : i = (V<sub>appliquée</sub> − k<sub>e</sub>·ω<sub>moteur</sub>) / R<sub>a</sub>,
+      avec V<sub>appliquée</sub> = PWM signé × plafond duty × V<sub>bornes</sub> et
+      ω<sub>moteur</sub> = (v<sub>roue</sub>/r<sub>roue</sub>) × réduction.</li>
+  <li><b>Tension aux bornes</b> : V<sub>bornes</sub> = V₀ − R<sub>int</sub>·(|i<sub>G</sub>| + |i<sub>D</sub>|)
+      — l'affaissement de la batterie sous charge est donc inclus dans le calcul.</li>
+  <li><b>Puissance batterie</b> : P = V<sub>bornes</sub> × (|i<sub>G</sub>| + |i<sub>D</sub>|) pendant la
+      <b>traction</b> et le <b>frein PID</b> (le plugging tire un vrai courant batterie) ;
+      <b>P = 0 pendant le frein dynamique</b> — le court-circuit fait circuler le courant dans
+      R<sub>a</sub> du moteur, l'énergie se dissipe en chaleur moteur, pas depuis la batterie.</li>
+  <li><b>Énergie cumulée</b> : E = ∫ P·dt, intégrée à 500 Hz, affichée en Wh.</li>
+  <li><b>Limites de l'estimation</b> : pas de récupération (régénération) modélisée, pertes du
+      driver et câblage ignorées, |i| sommé sans signe (borne haute honnête pour un pont en H
+      sans retour réseau). C'est un <b>ordre de grandeur pour comparer les scénarios</b>, pas un
+      bilan de charge de la batterie.</li>
+ </ul>
  <h3>Masses et centre de gravité</h3>
  <ul>
   <li><b>Masse totale ≈ 98 kg</b> : kart ≈ 32 kg (châssis bois, moteurs, batterie au museau,
