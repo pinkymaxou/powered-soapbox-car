@@ -9,8 +9,36 @@
 static const char* TAG = "cfg";
 
 KartConfig        g_cfg;
-KartStatus        g_status;
 SemaphoreHandle_t g_cfg_mtx = nullptr;
+
+namespace
+{
+KartStatus        g_status;               // état partagé — accès UNIQUEMENT via les fonctions
+SemaphoreHandle_t g_status_mtx = nullptr; // créé par configInit()
+}
+
+KartStatus statusSnapshot()
+{
+    xSemaphoreTake(g_status_mtx, portMAX_DELAY);
+    const KartStatus copy = g_status;
+    xSemaphoreGive(g_status_mtx);
+    return copy;
+}
+
+bool statusTrySnapshot(KartStatus& out)
+{
+    if (pdTRUE != xSemaphoreTake(g_status_mtx, 0)) return false;
+    out = g_status;
+    xSemaphoreGive(g_status_mtx);
+    return true;
+}
+
+void statusPublish(const KartStatus& s)
+{
+    xSemaphoreTake(g_status_mtx, portMAX_DELAY);
+    g_status = s;
+    xSemaphoreGive(g_status_mtx);
+}
 
 namespace
 {
@@ -43,6 +71,7 @@ void writeFloat(nvs_handle_t handle, const char* key, float value)
 void configInit()
 {
     g_cfg_mtx = xSemaphoreCreateMutex();
+    g_status_mtx = xSemaphoreCreateMutex();
     if (!configLoad())
     {
         ESP_LOGW(TAG, "Aucun réglage en NVS → valeurs par défaut");
@@ -113,7 +142,7 @@ void configUpdate(const KartConfig& cfg, bool persist)
         // Kart ARMÉ → différer l'écriture NVS : les écritures flash suspendent le cache et
         // gèlent la boucle de contrôle plusieurs dizaines de ms — pas pendant la conduite.
         // Les valeurs sont déjà ACTIVES (g_cfg) ; la persistance suivra au désarmement.
-        if (g_status.m_arming.load()) m_save_pending.store(true);
+        if (statusSnapshot().m_arming) m_save_pending.store(true);
         else                          configSave();
     }
     xSemaphoreGive(g_cfg_mtx);

@@ -26,7 +26,8 @@ void render(const KartConfig& cfg)
     uint8_t g = 0;
     uint8_t b = 0;
 
-    switch (static_cast<State>(g_status.m_state.load()))
+    const KartStatus st = statusSnapshot();
+    switch (static_cast<State>(st.m_state))
     {
         case State::Fault:
             if (fast)
@@ -40,14 +41,14 @@ void render(const KartConfig& cfg)
         case State::Run:
         {
             // Seuil d'avertissement selon la batterie détectée (12/24 V) ; type inconnu → pas d'alerte.
-            const int   bt     = g_status.m_batt_type.load();
+            const int   bt     = st.m_batt_type;
             const float warn_v = (24 == bt) ? hw::VBAT24_WARN_V : hw::VBAT12_WARN_V;
-            if ((0 != bt) && g_status.m_vbat.load() < warn_v)
+            if ((0 != bt) && st.m_vbat < warn_v)
             {
                 r = 255;
                 g = 120;       // batterie faible : orange
             }
-            else if ((static_cast<int>(BrakeMode::None) != g_status.m_brake_mode.load()) && slow)
+            else if ((static_cast<int>(BrakeMode::None) != st.m_brake_mode) && slow)
             {
                 g = 255;       // freinage : vert clignotant
             }
@@ -59,7 +60,7 @@ void render(const KartConfig& cfg)
         }
         case State::Lockout:
         default:
-            if (g_status.m_arming.load())
+            if (st.m_arming)
             {
                 if (slow)
                 {

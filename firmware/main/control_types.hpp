@@ -49,7 +49,6 @@ constexpr uint8_t ADS1115_ADDR = 0x48;
 constexpr float AS5600_CPR    = 4096.0f;  // counts par tour (12 bits)
 constexpr float GEAR_RATIO    = 1.28f;    // tours capteur par tour de roue (sortie de boîte, poulies 32/25)
 constexpr float WHEEL_DIAM_M  = 0.254f;   // roue 10"
-constexpr float MPS_TO_WHEEL_RPM = 60.0f / (3.14159265f * WHEEL_DIAM_M);   // m/s → tr/min roue (~75,2)
 
 constexpr int     I2C_FREQ_HZ       = 400000;  // Fast-mode (le capteur supporte jusqu'à 1 MHz)
 constexpr uint8_t AS5600_ADDR       = 0x36;    // adresse I2C fixe (un seul capteur par bus)
@@ -132,6 +131,12 @@ struct KartConfig
     float led_count;
     float led_brightness;
 
+    // Conversion des ticks d'encodeur — DONNÉE AU CONTRÔLEUR PAR CONFIGURATION (l'hôte peut
+    // la changer : capteur/réduction/roue différents). Hors PARAMS : ni NVS ni page web —
+    // c'est du matériel, pas du réglage. Défauts (setDefaults) : AS5600 + réducteur réels.
+    float enc_mps_per_cps;   // (m/s roue) par (count/s) — soit : mètres par count
+    float enc_rpm_per_cps;   // (tr/min roue) par (count/s)
+
     void setDefaults();
     void clampAll();
 };
@@ -176,5 +181,24 @@ constexpr unsigned ENC_MAD   = 1u << 7;   // mesure de vitesse aberrante
 constexpr unsigned ENC_L_ABS = 1u << 8;   // AS5600 gauche absent (I2C muet) — si use_encoders=1
 constexpr unsigned ENC_R_ABS = 1u << 9;   // AS5600 droit absent — si use_encoders=1
 constexpr unsigned PAD_STALE = 1u << 10;  // manette « connectée » mais muette > 250 ms (heartbeat)
+
+// Agrégats : BLOCKING interdit la conduite (désarmement + State::Fault) ;
+// HARD mérite le rumble fort (tout défaut bloquant sauf la calibration manquante).
+constexpr unsigned BLOCKING = LVC | NOCAL | ENC_STUCK | ENC_REV | ENC_MAD | ENC_L_ABS | ENC_R_ABS;
+constexpr unsigned HARD     = BLOCKING & ~NOCAL;
 } // namespace fb
+
+// Défaut PRIORITAIRE dérivé du bitset — le cœur ne publie QUE le masque ; l'enum Fault ne
+// sert qu'à l'affichage (champ « fault » du protobuf) et aux asserts des tests. Même ordre
+// de priorité que l'ancienne cascade du contrôleur.
+inline Fault primaryFault(unsigned faults)
+{
+    if (faults & fb::LVC)                         return Fault::Lvc;
+    if (faults & (fb::ENC_L_ABS | fb::ENC_R_ABS)) return Fault::EncoderAbsent;
+    if (faults & fb::ENC_MAD)                     return Fault::EncoderMad;
+    if (faults & fb::ENC_REV)                     return Fault::EncoderDir;
+    if (faults & fb::ENC_STUCK)                   return Fault::Encoder;
+    if (faults & fb::NOCAL)                       return Fault::NotCalibrated;
+    return Fault::None;
+}
 

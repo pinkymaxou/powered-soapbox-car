@@ -105,6 +105,9 @@ void KartConfig::setDefaults()
     {
         this->*(PARAMS[i].field) = PARAMS[i].def;
     }
+    // Ratios encodeur (hors PARAMS — voir control_types.hpp) : roue 10" via AS5600 + réducteur.
+    enc_mps_per_cps = 3.14159265f * hw::WHEEL_DIAM_M / (hw::AS5600_CPR * hw::GEAR_RATIO);
+    enc_rpm_per_cps = 60.f / (hw::AS5600_CPR * hw::GEAR_RATIO);
 }
 
 void KartConfig::clampAll()

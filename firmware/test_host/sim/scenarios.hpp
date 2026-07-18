@@ -81,7 +81,7 @@ inline RunResult runScenario(const Scenario& sc, const FrameHook& hook = nullptr
     for (int i = 0; i < steps; ++i)
     {
         ctrl.stepOnce(cfg);
-        const CtrlTelemetry& t = ctrl.telemetry();
+        const CtrlTelemetry t = ctrl.telemetry();
 
         r.min_tip_margin = std::min(r.min_tip_margin, veh.tipMargin());
         r.max_v = std::max(r.max_v, std::fabs(veh.v()));
@@ -89,7 +89,7 @@ inline RunResult runScenario(const Scenario& sc, const FrameHook& hook = nullptr
         r.ever_armed |= t.armed;
         r.wheel_lifted |= (0 != veh.liftSide());
         r.tipped |= veh.tipped();
-        if (Fault::None != t.fault)
+        if (0 != (t.faults & fb::BLOCKING))
         {
             r.ever_fault = true;
             if (r.t_first_fault < 0.f) r.t_first_fault = veh.t();
@@ -100,7 +100,7 @@ inline RunResult runScenario(const Scenario& sc, const FrameHook& hook = nullptr
         if (hook) hook(veh, ctrl, t);
     }
     r.final_v = veh.v();
-    r.final_fault = ctrl.telemetry().fault;
+    r.final_fault = primaryFault(ctrl.telemetry().faults);
     r.batt_type = ctrl.telemetry().batt_type;
     r.powered_off = ctrl.powered_off;
     return r;

@@ -42,7 +42,7 @@ void traceHook(const char* scen, const Vehicle& v, const SimController& c, const
     std::fprintf(g_trace, "%s,%.3f,%.3f,%.3f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%u\n",
                  scen, v.t(), v.v(), v.yawRate(), v.aLat(), v.tipMargin(),
                  c.lastOutL(), c.lastOutR(), t.fwd, t.turn,
-                 static_cast<int>(t.state), static_cast<int>(t.fault),
+                 static_cast<int>(t.state), static_cast<int>(primaryFault(t.faults)),
                  static_cast<int>(t.brake_mode), t.faults);
 }
 
@@ -307,7 +307,7 @@ void printFrame(const Vehicle& v, const SimController& c, const CtrlTelemetry& t
                 v.wheelV(true) * mps2rpm, v.wheelV(false) * mps2rpm,
                 v.powerW(), v.energyWh(),
                 c.padX(), c.padY(),
-                t.turn, t.fwd, static_cast<int>(t.state), static_cast<int>(t.fault),
+                t.turn, t.fwd, static_cast<int>(t.state), static_cast<int>(primaryFault(t.faults)),
                 t.faults, static_cast<int>(t.brake_mode), t.armed ? "true" : "false",
                 c.powered() ? "true" : "false", t.vbat);
     std::fflush(stdout);

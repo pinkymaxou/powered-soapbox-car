@@ -1,14 +1,8 @@
-// controller.cpp — Liaison MATÉRIELLE du cœur de contrôle (voir controller_core.hpp).
-// EspController branche les callbacks io* sur board::/input::/esp_timer, publie la
-// télémétrie dans g_status (atomics lus par le webserver et les LED) et fait tourner
-// la boucle à 500 Hz sous watchdog. TOUTE la logique vit dans controller_core.cpp —
-// identique en simulation (test_host/sim).
+// controller.cpp — Implémentation d'EspController + amorçage (namespace Controller).
 #include "controller.hpp"
 
 #include "config.hpp"
-#include "controller_core.hpp"
 #include "hardware.hpp"
-#include "input.hpp"
 #include "rtos.hpp"
 
 #include "esp_task_wdt.h"
@@ -16,83 +10,115 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+// Callback capteurs : encodeurs + tension batterie — les ERREURS de lecture voyagent dans
+// le retour (enc_ok_*/vbat_ok), et la tension part en VOLTS BATTERIE (la conversion broche
+// ADC → batterie, ratio du diviseur, se fait ICI, pas dans le cœur).
+SensorReadings EspController::readSensors()
+{
+    SensorReadings s;
+    s.enc_delta_l = board::encLeftDelta();
+    s.enc_delta_r = board::encRightDelta();
+    s.enc_ok_l = board::encLeftPresent();
+    s.enc_ok_r = board::encRightPresent();
+    const float pin_v = board::vbatVolts(hw::ADC_OVERSAMPLE);
+    s.vbat_ok = (pin_v >= 0.f);
+    s.vbat_v = s.vbat_ok ? pin_v * m_ctrl.config().vbat_div_ratio : -1.f;
+    return s;
+}
+
+// Callback sorties : la commande moteur, rien d'autre (voir CtrlOutputs).
+void EspController::applyOutputs(const CtrlOutputs& out)
+{
+    if (out.dyn_brake) board::motorsBrake();
+    else               board::motorsSet(out.out_l, out.out_r, out.cap);
+}
+
+// Pousse le dernier état manette au cœur (fonction d'entrée setPad).
+void EspController::pushPad()
+{
+    m_in = input::get();   // instantané complet, gardé pour publier les champs d'affichage
+    PadInputs p;
+    p.x = m_in.x;
+    p.y = m_in.y;
+    p.rx = m_in.rx;
+    p.ry = m_in.ry;
+    p.connected = m_in.connected;
+    p.calibrated = input::calibrated();
+    p.estop = m_in.estop;
+    p.start = m_in.start;
+    p.last_report_us = input::lastReportUs();
+    m_ctrl.setPad(p);
+    m_pad_in = p;
+}
+
+// Publie la télémétrie du tick + les champs d'affichage manette (hors logique).
+void EspController::publish(const CtrlTelemetry& t)
+{
+    KartStatus st;
+    st.m_state      = static_cast<int>(t.state);
+    st.m_fault      = static_cast<int>(primaryFault(t.faults));   // dérivé du bitset
+    st.m_faults     = t.faults;
+    st.m_vbat       = t.vbat;
+    st.m_batt_type  = t.batt_type;
+    st.m_rpm_l      = t.rpm_l;
+    st.m_rpm_r      = t.rpm_r;
+    st.m_speed_ms   = t.speed_ms;
+    st.m_fwd        = t.fwd;
+    st.m_turn       = t.turn;
+    st.m_out_l      = t.out_l;
+    st.m_out_r      = t.out_r;
+    st.m_brake_mode = static_cast<int>(t.brake_mode);
+    st.m_arming     = t.armed;
+    st.m_btn_start  = t.btn_start;
+
+    st.m_estop    = m_in.estop;
+    st.m_pad_conn = m_in.connected;
+    st.m_pad_batt = input::battery();
+    st.m_pad_x    = m_in.rx;      // position physique du stick (cercle)
+    st.m_pad_y    = m_in.ry;
+    st.m_pad_cx   = m_in.x;       // consigne compensée cercle→carré
+    st.m_pad_cy   = m_in.y;
+    st.m_pad_zl   = m_in.zl;
+    st.m_pad_zr   = m_in.zr;
+    st.m_pad_rx2  = m_in.rx2;
+    st.m_pad_ry2  = m_in.ry2;
+    st.m_pad_btns = m_in.buttons;
+    statusPublish(st);
+}
+
+void EspController::init()
+{
+    board::init();
+    input::init();
+    m_ctrl.setCallbacks([this] { return readSensors(); },
+                        [this](const CtrlOutputs& out) { applyOutputs(out); });
+    statusPublish(KartStatus{});   // défauts sûrs : Lockout, frein dynamique, aucun défaut
+}
+
+void EspController::tickOnce()
+{
+    board::pollButtons();               // échantillonnage/anti-rebond du bouton START
+    pushPad();
+    m_ctrl.setStartButton(board::btnStart());
+    m_ctrl.setConfig(configSnapshot());   // la config web peut changer à tout moment
+    const int64_t now = esp_timer_get_time();
+    m_ctrl.tick(now);
+
+    // Décisions d'HÔTE dérivées de la télémétrie (hors du cœur, voir advisors.hpp).
+    const CtrlTelemetry t = m_ctrl.telemetry();
+    const RumbleCmd r = m_rumble.update(t, m_pad_in, now);
+    if (r.active) input::rumble(r.strong, r.weak, r.duration_ms);
+    if (m_poweroff.update(t, now)) board::powerOff();
+    if (m_was_armed && !t.armed) configFlushPending();   // « set » différé reçu en roulant
+    m_was_armed = t.armed;
+
+    publish(t);
+}
+
+// ── Amorçage : l'instance, la tâche 500 Hz, la boucle sur tickOnce(). Rien d'autre. ──
 namespace
 {
-
-class EspController final : public ControllerBase
-{
-protected:
-    int64_t ioNowUs() override { return esp_timer_get_time(); }
-
-    CtrlPad ioPad() override
-    {
-        m_in = input::get();   // instantané complet, gardé pour publier les champs d'affichage
-        CtrlPad p;
-        p.x = m_in.x;
-        p.y = m_in.y;
-        p.rx = m_in.rx;
-        p.ry = m_in.ry;
-        p.connected = m_in.connected;
-        p.estop = m_in.estop;
-        p.start = m_in.start;
-        return p;
-    }
-
-    int64_t ioPadLastReportUs() override { return input::lastReportUs(); }
-    bool    ioPadCalibrated() override   { return input::calibrated(); }
-    bool    ioBtnStart() override        { return board::btnStart(); }
-    float   ioVbatRaw() override         { return board::vbatVolts(hw::ADC_OVERSAMPLE); }
-    int     ioEncDeltaL() override       { return board::encLeftDelta(); }
-    int     ioEncDeltaR() override       { return board::encRightDelta(); }
-    bool    ioEncPresentL() override     { return board::encLeftPresent(); }
-    bool    ioEncPresentR() override     { return board::encRightPresent(); }
-
-    void ioMotorsSet(float l, float r, uint32_t cap) override { board::motorsSet(l, r, cap); }
-    void ioMotorsBrake() override                             { board::motorsBrake(); }
-    void ioRumble(uint8_t s, uint8_t w, uint16_t ms) override { input::rumble(s, w, ms); }
-    void ioPowerOff() override                                { board::powerOff(); }
-    void ioFlushPendingConfig() override                      { configFlushPending(); }
-
-public:
-    // Publie la télémétrie du tick + les champs d'affichage manette (hors logique).
-    void publish()
-    {
-        const CtrlTelemetry& t = telemetry();
-        g_status.m_state.store(static_cast<int>(t.state));
-        g_status.m_fault.store(static_cast<int>(t.fault));
-        g_status.m_faults.store(t.faults);
-        g_status.m_vbat.store(t.vbat);
-        g_status.m_batt_type.store(t.batt_type);
-        g_status.m_speed_l.store(t.speed_l);
-        g_status.m_speed_r.store(t.speed_r);
-        g_status.m_speed_ms.store(t.speed_ms);
-        g_status.m_fwd.store(t.fwd);
-        g_status.m_turn.store(t.turn);
-        g_status.m_out_l.store(t.out_l);
-        g_status.m_out_r.store(t.out_r);
-        g_status.m_brake_mode.store(static_cast<int>(t.brake_mode));
-        g_status.m_arming.store(t.armed);
-        g_status.m_btn_start.store(t.btn_start);
-
-        g_status.m_estop.store(m_in.estop);
-        g_status.m_pad_conn.store(m_in.connected);
-        g_status.m_pad_batt.store(input::battery());
-        g_status.m_pad_x.store(m_in.rx);     // position physique du stick (cercle)
-        g_status.m_pad_y.store(m_in.ry);
-        g_status.m_pad_cx.store(m_in.x);     // consigne compensée cercle→carré
-        g_status.m_pad_cy.store(m_in.y);
-        g_status.m_pad_zl.store(m_in.zl);
-        g_status.m_pad_zr.store(m_in.zr);
-        g_status.m_pad_rx2.store(m_in.rx2);
-        g_status.m_pad_ry2.store(m_in.ry2);
-        g_status.m_pad_btns.store(m_in.buttons);
-    }
-
-private:
-    input::State m_in;   // dernier instantané complet (ioPad le rafraîchit à chaque tick)
-};
-
-EspController m_ctrl;
+EspController m_controller;
 
 void controlTask(void*)
 {
@@ -100,26 +126,23 @@ void controlTask(void*)
     TickType_t last = xTaskGetTickCount();
     while (true)
     {
-        board::pollButtons();               // échantillonnage/anti-rebond du bouton START
-        m_ctrl.tick(configSnapshot());
-        m_ctrl.publish();
+        m_controller.tickOnce();
         esp_task_wdt_reset();
         vTaskDelayUntil(&last, pdMS_TO_TICKS(hw::CTRL_DT_MS));
     }
 }
 } // namespace
 
-void Controller::init()
+namespace Controller
 {
-    board::init();
-    input::init();
-    g_status.m_state.store(static_cast<int>(State::Lockout));
-    g_status.m_fault.store(static_cast<int>(Fault::None));
-    g_status.m_brake_mode.store(static_cast<int>(BrakeMode::Dynamic));   // défaut : freinage (jamais en roue libre)
+void init()
+{
+    m_controller.init();
 }
 
-void Controller::start()
+void start()
 {
     xTaskCreatePinnedToCore(controlTask, rtos::CONTROL.name, rtos::CONTROL.stack, nullptr,
                             rtos::CONTROL.prio, nullptr, rtos::CONTROL.core);
 }
+} // namespace Controller

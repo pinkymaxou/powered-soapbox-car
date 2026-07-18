@@ -221,9 +221,9 @@ uint8_t u8x10(float v)   // valeur physique ×10 (résolution 0,1 ; bornée 0..2
 }
 
 // Vitesse roue (m/s) → tr/min, bornée 0..250 (octet ; ~3,3 m/s max avant saturation en roue 10").
-uint8_t rpmU8(float ms)
+uint8_t rpmU8(float rpm_in)
 {
-    float rpm = fabsf(ms) * hw::MPS_TO_WHEEL_RPM;
+    float rpm = fabsf(rpm_in);
     if (rpm > 250.f) rpm = 250.f;
     return static_cast<uint8_t>(rpm + 0.5f);
 }
@@ -234,18 +234,24 @@ void histSample(void*)
     // il est INTERDIT d'y bloquer. Mutex occupé (un client construit le JSON) → on saute
     // l'échantillon, tant pis — l'historique est indicatif.
     if (pdTRUE != xSemaphoreTake(m_hist_mtx, 0)) return;
-    m_hist.spd.push(u8x10(fabsf(g_status.m_speed_ms.load())));               // |v véhicule| m/s ×10, chaque s
+    KartStatus st;
+    if (!statusTrySnapshot(st))   // même règle que m_hist_mtx : statut occupé → échantillon sauté
+    {
+        xSemaphoreGive(m_hist_mtx);
+        return;
+    }
+    m_hist.spd.push(u8x10(fabsf(st.m_speed_ms)));                        // |v véhicule| m/s ×10, chaque s
     if (0 == (m_hist.tick % HIST_FAST_DT))
     {
-        m_hist.accel.push(pctU8(fabsf(g_status.m_fwd.load()) * 100.f));      // % (consigne avance)
-        m_hist.pwml.push(pctU8(fabsf(g_status.m_out_l.load()) * 100.f));     // %
-        m_hist.pwmr.push(pctU8(fabsf(g_status.m_out_r.load()) * 100.f));     // %
-        m_hist.rpml.push(rpmU8(g_status.m_speed_l.load()));                  // tr/min roue G
-        m_hist.rpmr.push(rpmU8(g_status.m_speed_r.load()));                  // tr/min roue D
+        m_hist.accel.push(pctU8(fabsf(st.m_fwd) * 100.f));               // % (consigne avance)
+        m_hist.pwml.push(pctU8(fabsf(st.m_out_l) * 100.f));              // %
+        m_hist.pwmr.push(pctU8(fabsf(st.m_out_r) * 100.f));              // %
+        m_hist.rpml.push(rpmU8(st.m_rpm_l));                             // tr/min roue G
+        m_hist.rpmr.push(rpmU8(st.m_rpm_r));                             // tr/min roue D
     }
     if (0 == (m_hist.tick % HIST_BATT_DT))
     {
-        m_hist.batt.push(u8x10(g_status.m_vbat.load()));                     // V ×10
+        m_hist.batt.push(u8x10(st.m_vbat));                              // V ×10
     }
     ++m_hist.tick;
     xSemaphoreGive(m_hist_mtx);
@@ -367,14 +373,12 @@ size_t buildValsPb()
 
 // Échelle d'affichage de la jauge batterie — décidée ICI (le client ne connaît aucun seuil) :
 // bas = seuil de coupure LVC du type détecté, haut = tension pleine charge au repos.
-float battDispLo()
+float battDispLo(int bt)
 {
-    const int bt = g_status.m_batt_type.load();
     return (24 == bt) ? hw::VBAT24_CUT_V : (12 == bt) ? hw::VBAT12_CUT_V : 0.f;
 }
-float battDispHi()
+float battDispHi(int bt)
 {
-    const int bt = g_status.m_batt_type.load();
     return (24 == bt) ? hw::VBAT24_FULL_V : (12 == bt) ? hw::VBAT12_FULL_V : 0.f;
 }
 
@@ -382,36 +386,37 @@ size_t buildStatusPb()
 {
     Msg msg = Msg_init_zero;
     msg.which_body = Msg_status_tag;
+    const KartStatus s = statusSnapshot();
     Status& st = msg.body.status;
-    st.state      = g_status.m_state.load();
-    st.fault      = g_status.m_fault.load();
-    st.faults     = g_status.m_faults.load();
-    st.vbat       = g_status.m_vbat.load();
-    st.batt_type  = g_status.m_batt_type.load();
-    st.batt_lo    = battDispLo();
-    st.batt_hi    = battDispHi();
-    st.speed_ms   = g_status.m_speed_ms.load();
+    st.state      = s.m_state;
+    st.fault      = s.m_fault;
+    st.faults     = s.m_faults;
+    st.vbat       = s.m_vbat;
+    st.batt_type  = s.m_batt_type;
+    st.batt_lo    = battDispLo(s.m_batt_type);
+    st.batt_hi    = battDispHi(s.m_batt_type);
+    st.speed_ms   = s.m_speed_ms;
     // Roues en TR/MIN (signés), véhicule en m/s — la conversion se fait ICI, côté micro.
-    st.rpm_l      = g_status.m_speed_l.load() * hw::MPS_TO_WHEEL_RPM;
-    st.rpm_r      = g_status.m_speed_r.load() * hw::MPS_TO_WHEEL_RPM;
-    st.fwd        = g_status.m_fwd.load();
-    st.turn       = g_status.m_turn.load();
-    st.out_l      = g_status.m_out_l.load();
-    st.out_r      = g_status.m_out_r.load();
-    st.brake_mode = g_status.m_brake_mode.load();
-    st.arming     = g_status.m_arming.load();
-    st.btn_start  = g_status.m_btn_start.load();
-    st.pad_conn   = g_status.m_pad_conn.load();
-    st.pad_batt   = g_status.m_pad_batt.load();
-    st.pad_x      = g_status.m_pad_x.load();
-    st.pad_y      = g_status.m_pad_y.load();
-    st.pad_cx     = g_status.m_pad_cx.load();
-    st.pad_cy     = g_status.m_pad_cy.load();
-    st.pad_zl     = g_status.m_pad_zl.load();
-    st.pad_zr     = g_status.m_pad_zr.load();
-    st.pad_rx2    = g_status.m_pad_rx2.load();
-    st.pad_ry2    = g_status.m_pad_ry2.load();
-    st.pad_btns   = g_status.m_pad_btns.load();
+    st.rpm_l      = s.m_rpm_l;   // déjà en tr/min : ratio enc_rpm_per_cps du contrôleur
+    st.rpm_r      = s.m_rpm_r;
+    st.fwd        = s.m_fwd;
+    st.turn       = s.m_turn;
+    st.out_l      = s.m_out_l;
+    st.out_r      = s.m_out_r;
+    st.brake_mode = s.m_brake_mode;
+    st.arming     = s.m_arming;
+    st.btn_start  = s.m_btn_start;
+    st.pad_conn   = s.m_pad_conn;
+    st.pad_batt   = s.m_pad_batt;
+    st.pad_x      = s.m_pad_x;
+    st.pad_y      = s.m_pad_y;
+    st.pad_cx     = s.m_pad_cx;
+    st.pad_cy     = s.m_pad_cy;
+    st.pad_zl     = s.m_pad_zl;
+    st.pad_zr     = s.m_pad_zr;
+    st.pad_rx2    = s.m_pad_rx2;
+    st.pad_ry2    = s.m_pad_ry2;
+    st.pad_btns   = s.m_pad_btns;
     st.pad_age_ms = static_cast<int32_t>(
         std::min<int64_t>((esp_timer_get_time() - input::lastReportUs()) / 1000, 99999));
     return encodeMsg(msg);
@@ -422,7 +427,7 @@ size_t buildPadPb()
     Msg msg = Msg_init_zero;
     msg.which_body = Msg_pad_tag;
     Pad& pd = msg.body.pad;
-    pd.conn = g_status.m_pad_conn.load();
+    pd.conn = statusSnapshot().m_pad_conn;
     pd.name.funcs.encode = encStr;
     pd.name.arg = const_cast<char*>(input::name());
     pd.batt = input::battery();
