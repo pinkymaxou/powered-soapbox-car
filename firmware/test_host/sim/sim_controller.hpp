@@ -22,6 +22,8 @@ struct PadCmd
     bool  estop = false;      // bouton B
     bool  connected = true;
     bool  reports = true;     // false = lien « connecté » mais plus AUCUN rapport (heartbeat)
+    bool  sys_power = true;   // false = CHAMPIGNON : alimentation coupée (ESP32 éteint,
+                              // MOSFET ouverts → roue libre) — le contrôleur ne tourne plus
 };
 using PadScript = std::function<PadCmd(float t)>;
 
@@ -39,10 +41,20 @@ public:
     {
         m_now_us += static_cast<int64_t>(hw::CTRL_DT_S * 1e6f);
         m_cmd = m_script(m_veh.t());
+        if (!m_cmd.sys_power)
+        {
+            // Alimentation coupée : le contrôleur NE TOURNE PLUS (pas de tick), les ponts
+            // sont ouverts — le véhicule continue sa vie en roue libre.
+            m_veh.step(DriveMode::Float, 0.f, 0.f, 0, hw::CTRL_DT_S);
+            return;
+        }
         if (m_cmd.connected && m_cmd.reports) m_last_report_us = m_now_us;
         tick(cfg);
-        m_veh.step(m_brake_out, m_out_l, m_out_r, m_cap, hw::CTRL_DT_S);
+        m_veh.step(m_brake_out ? DriveMode::Brake : DriveMode::Drive,
+                   m_out_l, m_out_r, m_cap, hw::CTRL_DT_S);
     }
+
+    bool powered() const { return m_cmd.sys_power; }
 
     bool calibrated = true;    // la calibration est un préalable, pas l'objet de la physique
     int  rumbles = 0;          // nb de vibrations émises (retours haptiques)

@@ -50,6 +50,8 @@ struct RunResult
     float stop_dist = -1.f;        // distance parcourue depuis le début du freinage (si mesurée)
     bool  ever_armed = false;
     bool  ever_fault = false;
+    bool  wheel_lifted = false;   // une roue a quitté le sol (même brièvement)
+    bool  tipped = false;         // renversé (point de non-retour franchi)
     Fault final_fault = Fault::None;
     int   batt_type = 0;
     bool  powered_off = false;
@@ -85,6 +87,8 @@ inline RunResult runScenario(const Scenario& sc, const FrameHook& hook = nullptr
         r.max_v = std::max(r.max_v, std::fabs(veh.v()));
         r.max_alat = std::max(r.max_alat, std::fabs(veh.aLat()));
         r.ever_armed |= t.armed;
+        r.wheel_lifted |= (0 != veh.liftSide());
+        r.tipped |= veh.tipped();
         if (Fault::None != t.fault)
         {
             r.ever_fault = true;
@@ -289,12 +293,13 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // RÉALISTE : descente, stick relâché — le frein actif retient le kart dans la pente.
+    // RÉALISTE : descente 8 %, stick relâché — le frein actif retient le kart dans la pente
+    // (dans la capacité des moteurs : ~134 N de retenue contre 77 N de gravité).
     v.push_back({
         "descente_frein",
-        "Pente −8° : stick relâché, le frein (PID) doit retenir le kart",
+        "Pente 8 % : stick relâché, le frein (PID) doit retenir le kart",
         12.f, nullptr,
-        [](Vehicle& v) { v.params().slope_rad = -8.f * PI_F / 180.f; },
+        [](Vehicle& v) { v.params().slope_rad = -std::atan(0.08f); },
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
@@ -342,6 +347,35 @@ inline std::vector<Scenario> allScenarios()
             PadCmd c;
             if (armPhase(t, c)) return c;
             c.y = (t < 4.f) ? 0.4f : 0.f;
+            return c;
+        }});
+
+    // CHAMPIGNON EN PENTE : alimentation coupée → MOSFET ouverts → ROUE LIBRE. Il ne reste
+    // que le roulement (~30 N) contre la gravité : sur 8 % (77 N) comme sur 16 % (152 N),
+    // le kart S'EMBALLE — c'est la démonstration chiffrée de l'avertissement du README
+    // (remède matériel : relais normalement fermé en travers des moteurs).
+    v.push_back({
+        "coupure_pente8",
+        "Pente 8 % : champignon actionné à t=6 s → roue libre, emballement attendu",
+        14.f, nullptr,
+        [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.08f); },
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = (t < 5.f) ? 0.3f : 0.f;
+            if (t >= 6.f) c.sys_power = false;   // champignon
+            return c;
+        }});
+    v.push_back({
+        "coupure_pente16",
+        "Pente 16 % : champignon actionné à t=6 s → emballement rapide",
+        14.f, nullptr,
+        [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.16f); },
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = (t < 5.f) ? 0.3f : 0.f;
+            if (t >= 6.f) c.sys_power = false;
             return c;
         }});
 

@@ -11,6 +11,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <functional>
 
 #include "control_types.hpp"
 
@@ -36,6 +37,12 @@ struct VehicleParams
     // ── Moteur CC 12 V (par roue) — 4615 tr/min à vide, ~19,6 A nominal ──
     float ke        = 12.f / (4615.f * 2.f * PI_F / 60.f);   // V·s/rad ≈ 0,0248 (= kt)
     float ra_ohm    = 0.15f;    // résistance d'induit (blocage ≈ 85 A, ~4× le nominal 19,6 A)
+    // LIMITE DE COURANT par moteur : la borne la plus basse du système est le MOTEUR
+    // lui-même — 12 V / ~19,6 A (~172 W) d'après ses spécifications — sous la limite du
+    // driver (20 A continu / 60 A crête). Couple, force, appel batterie et énergie sont
+    // plafonnés partout à kt·i_max : la simulation ne peut JAMAIS dépasser la capacité
+    // théorique des moteurs (blocage réel 85 A et plugging ~150 A sont donc écrêtés).
+    float i_max_a   = 19.6f;
     float gear      = 16.f;     // réduction totale moteur → roue (1:16,0)
     float eta       = 0.85f;    // rendement boîte + courroie
     float wheel_r_m = hw::WHEEL_DIAM_M / 2.f;
@@ -50,20 +57,48 @@ struct VehicleParams
     float vdiv      = 7.667f;   // pont diviseur de la mesure (≈ hw:: défaut vbat_div_ratio)
 
     float slope_rad = 0.f;      // pente (+ = montée) — F = m·g·sin(θ) opposée à l'avance
+
+    // Complaisance de roulis (pneus + châssis + enfants qui penchent) : appui VISIBLE en
+    // virage AVANT toute levée de roue — jusqu'à ~4° quand a_lat approche la limite.
+    float lean_max_rad = 0.07f;
+    float lean_tau_s   = 0.15f;
 };
 
 // Défaillances d'encodeur simulables (par roue) — pour tester les défauts du contrôleur.
 enum class EncMode { Ok, Absent, Reversed, Stuck, Crazy };
+
+// Mode d'entraînement du pas de simulation :
+// Drive = PWM signé appliqué · Brake = court-circuit des phases (frein dynamique) ·
+// Float = ALIMENTATION COUPÉE (champignon) : MOSFET ouverts, moteurs flottants, AUCUNE
+// force électrique — il ne reste que le roulement et la pente (roue libre).
+enum class DriveMode { Drive, Brake, Float };
 
 class Vehicle
 {
 public:
     explicit Vehicle(const VehicleParams& p = {}) : m_p(p), m_vterm(p.batt_v0) {}
 
-    // Sorties du contrôleur pour ce pas. brake=true → court-circuit des phases (freinage
-    // dynamique) ; sinon PWM signé [-1..1] × plafond duty (cap / PWM_MAX) comme le matériel.
-    void step(bool brake, float out_l, float out_r, uint32_t cap, float dt)
+    // Sorties du contrôleur pour ce pas (voir DriveMode). En Drive : PWM signé [-1..1]
+    // × plafond duty (cap / PWM_MAX), comme le matériel.
+    void step(DriveMode mode, float out_l, float out_r, uint32_t cap, float dt)
     {
+        if (m_tipped)
+        {
+            // RENVERSÉ : le kart est sur le flanc — plus de traction, il glisse et s'arrête
+            // (frottement de caisse ~0,4 g), le roulis finit sa course vers ~85°.
+            const float dec = 0.4f * G_MPS2 * dt;
+            if (std::fabs(m_v) > dec) m_v -= (m_v > 0 ? dec : -dec); else m_v = 0.f;
+            m_w = 0.f;
+            m_roll += (m_roll > 0 ? 1.f : -1.f) * 2.5f * dt;
+            if (std::fabs(m_roll) > 1.48f) m_roll = (m_roll > 0 ? 1.48f : -1.48f);
+            m_x += m_v * std::cos(m_h) * dt;
+            m_y += m_v * std::sin(m_h) * dt;
+            m_t += dt;
+            m_power_w = 0.f;
+            m_il = m_ir = 0.f;
+            return;
+        }
+        const bool brake = (DriveMode::Brake == mode);
         const float duty_cap = static_cast<float>(cap) / hw::PWM_MAX;
 
         // Vitesses de roue actuelles (cinématique différentielle ; ω>0 = virage à droite)
@@ -77,12 +112,21 @@ public:
         // NB : le court-circuit (brake) = V = 0 aux bornes → le moteur débite dans Ra seul,
         // couple opposé à ω (freinage dynamique réaliste, s'affaiblit avec la vitesse).
 
-        const float fl = wheelForce(v_l, vl, m_il);
-        const float fr = wheelForce(v_r, vr, m_ir);
+        float fl, fr;
+        if (DriveMode::Float == mode || m_air)
+        {
+            fl = fr = 0.f;      // circuits ouverts (ou roues EN L'AIR) : aucune force au sol
+            m_il = m_ir = 0.f;
+        }
+        else
+        {
+            fl = wheelForce(v_l, vl, m_il);
+            fr = wheelForce(v_r, vr, m_ir);
+        }
 
-        // Longitudinal : moteurs − roulement − pente
-        const float f_roll = (std::fabs(m_v) > 0.02f) ? m_p.roll_n * (m_v > 0 ? 1.f : -1.f) : 0.f;
-        const float f_slope = m_p.mass() * G_MPS2 * std::sin(m_p.slope_rad);
+        // Longitudinal : moteurs − roulement − pente (rien de tout ça en vol)
+        const float f_roll = (!m_air && std::fabs(m_v) > 0.02f) ? m_p.roll_n * (m_v > 0 ? 1.f : -1.f) : 0.f;
+        const float f_slope = m_air ? 0.f : m_p.mass() * G_MPS2 * std::sin(m_p.slope_rad);
         const float dv = (fl + fr - f_roll - f_slope) / m_p.mass();
 
         // Lacet : différence de force × demi-voie, amorti (roulette, ripage des pneus)
@@ -106,12 +150,94 @@ public:
         // ÉNERGIE tirée de la batterie (estimation) : P = V_bornes × Σ|i| pendant la traction
         // et le frein PID (plugging = courant batterie) ; le court-circuit (frein dynamique)
         // dissipe dans le moteur SANS tirer sur la batterie. Pas de récupération modélisée.
-        m_power_w = brake ? 0.f : m_vterm * itot;
+        m_power_w = (DriveMode::Drive == mode) ? m_vterm * itot : 0.f;
         m_energy_wh += m_power_w * dt / 3600.f;
+
+        // ── VERTICAL : suivi du sol, décollage balistique sur les arêtes, atterrissage ──
+        const float zg = ground_fn ? ground_fn(m_x, m_y) : 0.f;
+        if (!m_z_init)
+        {
+            m_z = m_zg_prev = zg;   // départ POSÉ sur le sol (pas de vz parasite au 1er pas)
+            m_z_init = true;
+        }
+        const float z_ball = m_z + m_vz * dt;              // trajectoire balistique candidate
+        const float vz_ball = m_vz - G_MPS2 * dt;
+        if (z_ball <= zg + 1e-4f)
+        {
+            m_air = false;
+            // Le sol impose la vitesse verticale — bornée par la géométrie : un sol ne peut
+            // pas monter plus vite que la distance parcourue (pente ≤ ~45°). Ça neutralise
+            // les discontinuités (entrer dans le FLANC du tremplin = choc, pas une fusée).
+            const float vz_max = std::fabs(m_v) + 0.5f;
+            float vz_g = (zg - m_zg_prev) / dt;
+            if (vz_g >  vz_max) vz_g =  vz_max;
+            if (vz_g < -vz_max) vz_g = -vz_max;
+            m_vz = vz_g;
+            m_z = zg;
+        }
+        else
+        {
+            m_air = true;                                  // le sol se dérobe : EN VOL
+            m_z = z_ball;
+            m_vz = vz_ball;
+        }
+        m_zg_prev = zg;
+
+        // Tangage : suit la pente au sol ; en vol, s'aligne doucement sur la trajectoire.
+        const float pitch_tgt = m_air ? std::atan2(m_vz, std::fabs(m_v) + 0.5f) : m_p.slope_rad;
+        m_pitch += (pitch_tgt - m_pitch) * std::fmin(1.f, dt / 0.25f);
+
+        // Complaisance de roulis : appui proportionnel à a_lat/a_tip (visible AVANT la levée).
+        const float lean_tgt = m_p.lean_max_rad *
+            std::fmax(-1.f, std::fmin(1.f, aLat() / aTip()));
+        m_lean += (lean_tgt - m_lean) * std::fmin(1.f, dt / m_p.lean_tau_s);
+
+        // ── ROULIS PHYSIQUE : rotation autour de l'arête chargée du triangle ──
+        // Levée quand le moment de l'accélération latérale dépasse le moment de rappel de la
+        // gravité ; point de NON-RETOUR quand le CG franchit la verticale de l'arête ; sinon
+        // le kart RETOMBE sur ses roues dès que la force relâche. (Simplification : tant que
+        // la roue est levée, la dynamique plane v/ω continue inchangée.)
+        if (!m_air) stepRoll(dt);   // pas de levée d'arête en vol (déjà en l'air !)
 
         // Encodeurs : accumulation d'angle CAPTEUR (tours roue × GEAR_RATIO × CPR)
         accumulate(m_acc_l, vlNow());
         accumulate(m_acc_r, vrNow());
+    }
+
+    // Intègre le roulis autour de l'arête (φ > 0 = penche à GAUCHE — virage à droite).
+    void stepRoll(float dt)
+    {
+        const float al = aLat();
+        if (0 == m_lift)
+        {
+            // Au sol : une roue lève dès que |a_lat| dépasse la limite du côté chargé.
+            if      (al >  aTipLeft())  m_lift = +1;
+            else if (-al > aTipRight()) m_lift = -1;
+            else return;
+        }
+        const float s = static_cast<float>(m_lift);
+        const float w_e = (m_lift > 0) ? (wEff() - m_p.ycg_m) : (wEff() + m_p.ycg_m);
+        const float h = m_p.hcg_m;
+        const float phi = s * m_roll;                       // angle positif côté levé
+        const float cs = std::cos(phi), sn = std::sin(phi);
+        // Rotation autour de l'arête : I·φ̈ = m·a_lat·(h·cosφ + w·sinφ) − m·g·(w·cosφ − h·sinφ)
+        // (par unité de masse ; inertie ≈ 1,3·m·(w²+h²) — corps + parallèle-axe approximés)
+        const float inertia = 1.3f * (w_e * w_e + h * h);
+        const float acc = (s * al * (h * cs + w_e * sn) - G_MPS2 * (w_e * cs - h * sn)) / inertia;
+        m_rollrate += acc * dt;
+        float nphi = phi + m_rollrate * dt;                 // rate exprimé côté levé (positif)
+        if (nphi <= 0.f)
+        {
+            m_roll = 0.f;                                   // retombe sur ses roues
+            m_rollrate = 0.f;
+            m_lift = 0;
+            return;
+        }
+        if (nphi >= std::atan2(w_e, h))
+        {
+            m_tipped = true;                                // CG passé l'arête : non-retour
+        }
+        m_roll = s * nphi;
     }
 
     // ── Capteurs pour SimController ──
@@ -145,6 +271,12 @@ public:
     float heading() const { return m_h; }
     float t() const { return m_t; }
     float vterm() const { return m_vterm; }
+    float roll() const { return m_roll + m_lean; }   // roulis affiché : levée RIGIDE + appui (complaisance)
+    float pitch() const { return m_pitch; }           // tangage (pente au sol / trajectoire en vol)
+    float z() const { return m_z; }                   // altitude du châssis
+    bool  airborne() const { return m_air; }          // toutes roues EN L'AIR
+    int   liftSide() const { return m_lift; }         // 0 au sol, +1 roue droite levée (penche à gauche), -1 inverse
+    bool  tipped() const { return m_tipped; }         // renversé (point de non-retour franchi)
     float powerW() const { return m_power_w; }       // puissance batterie instantanée (estimée)
     float energyWh() const { return m_energy_wh; }   // énergie batterie cumulée (estimée)
     float wheelV(bool left) const { return left ? vlNow() : vrNow(); }
@@ -166,6 +298,9 @@ public:
     }
 
     // ── Réglages de scénario ──
+    // Hauteur du sol sous (x, y) — nullptr = plat (scénarios). Le mode conduite branche le
+    // terrain vallonné : le kart le SUIT au sol et DÉCOLLE (balistique) sur les arêtes.
+    std::function<float(float, float)> ground_fn;
     EncMode enc_mode_l = EncMode::Ok;
     EncMode enc_mode_r = EncMode::Ok;
     bool    vbat_sensor = true;
@@ -173,10 +308,14 @@ public:
 
 private:
     // Force à la roue d'un moteur CC alimenté sous v_applied, roue à v_wheel (m/s).
+    // Le courant est ÉCRÊTÉ à ±i_max_a (limite du driver) : couple, force, appel batterie
+    // et énergie ne peuvent jamais dépasser la capacité réelle du système.
     float wheelForce(float v_applied, float v_wheel, float& i_out) const
     {
         const float w_motor = (v_wheel / m_p.wheel_r_m) * m_p.gear;   // rad/s côté moteur
-        const float i = (v_applied - m_p.ke * w_motor) / m_p.ra_ohm;
+        float i = (v_applied - m_p.ke * w_motor) / m_p.ra_ohm;
+        if (i >  m_p.i_max_a) i =  m_p.i_max_a;
+        if (i < -m_p.i_max_a) i = -m_p.i_max_a;
         i_out = i;
         const float torque_wheel = m_p.ke * i * m_p.gear * m_p.eta;
         return torque_wheel / m_p.wheel_r_m;
@@ -197,6 +336,16 @@ private:
     float m_x = 0.f, m_y = 0.f, m_h = 0.f, m_t = 0.f;
     float m_vterm;
     float m_il = 0.f, m_ir = 0.f;        // courants moteurs (pour le sag batterie)
+    float m_z = 0.f, m_vz = 0.f;         // altitude / vitesse verticale (saut !)
+    bool  m_z_init = false;              // premier pas : se poser sur le sol réel
+    float m_zg_prev = 0.f;               // hauteur du sol au pas précédent
+    bool  m_air = false;                 // toutes roues en l'air (balistique)
+    float m_pitch = 0.f;                 // tangage affiché
+    float m_lean = 0.f;                  // complaisance de roulis (appui en virage)
+    float m_roll = 0.f;                  // roulis autour de l'arête (rad, signé)
+    float m_rollrate = 0.f;              // vitesse de roulis (rad/s, magnitude côté levé)
+    int   m_lift = 0;                    // arête chargée : +1 gauche levée… voir liftSide()
+    bool  m_tipped = false;
     float m_power_w = 0.f;               // puissance batterie instantanée (estimation)
     float m_energy_wh = 0.f;             // énergie batterie cumulée (estimation)
     double m_acc_l = 0.0, m_acc_r = 0.0; // angle capteur accumulé (counts, fractionnaire)

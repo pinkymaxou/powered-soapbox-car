@@ -18,10 +18,14 @@
  #stats b{color:#58a6ff}
  #marginwrap{width:220px;height:14px;background:#21262d;border-radius:7px;overflow:hidden}
  #marginbar{height:100%;width:100%;background:#2ea043;transition:width .1s,background .2s}
- #tipflash{position:fixed;inset:0;background:#f001;display:none;z-index:5;pointer-events:none;
-      outline:8px solid #f00;outline-offset:-8px}
- #tipmsg{position:fixed;top:40%;width:100%;text-align:center;font-size:42px;font-weight:900;
-      color:#ff5555;text-shadow:0 0 18px #000;display:none;z-index:6}
+ #tipflash{position:fixed;inset:0;background:#000a;display:none;z-index:5;pointer-events:none;
+      outline:10px solid #a00;outline-offset:-10px;transition:background .6s}
+ #tipmsg{position:fixed;top:36%;width:100%;text-align:center;display:none;z-index:6;
+      font-family:Georgia,'Times New Roman',serif;font-weight:900;font-size:96px;
+      letter-spacing:14px;color:#b81d1d;-webkit-text-stroke:2px #300;
+      text-shadow:0 4px 22px #000,0 0 60px #900}
+ #tipmsg.lift{font-size:44px;letter-spacing:4px;color:#ffb84d;-webkit-text-stroke:0;
+      text-shadow:0 0 18px #000}
  #desc{position:fixed;bottom:10px;left:14px;color:#8b949e;z-index:10}
  #massinfo{position:fixed;bottom:34px;left:14px;z-index:10;background:#161b22cc;
       border:1px solid #30363d;border-radius:10px;padding:8px 12px;font-size:13px;
@@ -79,9 +83,29 @@
   <li><b>Contrôleur</b> : la <b>vraie logique du firmware</b> (controller_core.cpp, identique au kart) à 500 Hz — mêmes défauts de config (PARAMS), mêmes seuils <code>hw::</code>.</li>
   <li><b>Châssis</b> : corps rigide plan à 2 degrés de liberté (vitesse longitudinale + lacet). Les roues <b>ne glissent pas</b> latéralement (le ripage n'apparaît que comme amortissement de lacet).</li>
   <li><b>Renversement</b> : critère <b>quasi-statique</b> — bascule autour de l'arête roue-avant↔roulette du triangle de sustentation. Demi-largeur effective au CG : w_eff = (voie/2)·(1 − x_cg/empattement) ; limite a_tip = g·w_eff/h_cg. Les transitoires de suspension/pneus sont ignorés.</li>
-  <li><b>Moteurs</b> : CC linéaires (k<sub>t</sub> = k<sub>e</sub>), courant i = (V − k<sub>e</sub>·ω)/R<sub>a</sub>. Freinage dynamique = court-circuit (V = 0, le moteur débite dans R<sub>a</sub>).</li>
+  <li><b>Moteurs</b> : CC linéaires (k<sub>t</sub> = k<sub>e</sub>), courant i = (V − k<sub>e</sub>·ω)/R<sub>a</sub>,
+      <b>écrêté à ±19,6 A par moteur</b> — la capacité théorique du MOTEUR (12 V / ~19,6 A,
+      ~172 W, sous la limite du driver 20 A continu / 60 A crête) : couple, force, appel
+      batterie et énergie ne peuvent jamais la dépasser, y compris en blocage et en plugging
+      (V + f.c.é.m. sur R<sub>a</sub> donnerait ~150 A sans cette borne). Force max à la roue
+      ≈ 52 N par moteur. Freinage dynamique = court-circuit (V = 0, débit dans R<sub>a</sub>).</li>
   <li><b>Batterie</b> : source idéale + résistance interne (V = V₀ − R·I). Pas de modèle de décharge.</li>
   <li><b>Capteurs</b> : AS5600 quantifiés 12 bits ×1,28 (comme le vrai) ; manette parfaite (le script parle en consigne calibrée) ; pannes injectables (absent/inversé/figé/aberrant).</li>
+  <li><b>Coupure d'alimentation (champignon)</b> : le contrôleur cesse de tourner et les ponts
+      s'ouvrent → moteurs FLOTTANTS, aucune force électrique — il ne reste que le roulement
+      contre la pente (scénarios <code>coupure_pente8/16</code> : emballement démontré).</li>
+ </ul>
+ <h3>Capacité des moteurs et retenue en pente</h3>
+ <ul>
+  <li><b>Force motrice max</b> : i écrêté à 19,6 A → couple roue = k<sub>t</sub>·i·16·0,85 →
+      <b>≈ 52 N par roue, ≈ 104 N au total</b> (+ ~30 N de roulement qui aide à retenir).</li>
+  <li><b>Pente maximale retenable</b> (kart chargé 98 kg) : m·g·sin θ ≤ 134 N →
+      <b>≈ 11 %</b>. En-dessous (8 % : 77 N), le frein PID tient près de l'arrêt ; au-delà
+      (16 % : 152 N), le kart GLISSE même frein actif — les scénarios
+      <code>descente16_*</code> le démontrent. Une pente raide exige un frein mécanique.</li>
+  <li><b>Frein dynamique écrêté</b> : en court-circuit, i = k<sub>e</sub>·ω/R<sub>a</sub>
+      atteint 19,6 A vers ~0,9 m/s — au-delà, sa force est CONSTANTE (~104 N), elle ne croît
+      plus avec la vitesse.</li>
  </ul>
  <h3>Énergie (estimation) — comment le calcul est fait</h3>
  <ul>
@@ -126,8 +150,7 @@
 'use strict';
 // ── Scène ──
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d1117);
-scene.fog = new THREE.Fog(0x0d1117, 30, 90);
+scene.fog = new THREE.Fog(0xa8c8e8, 40, 170);   // brume à la couleur de l'horizon
 const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 200);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
@@ -137,22 +160,181 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
-scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x223311, 1.0));
+// ── Textures PROCÉDURALES (canvas — aucun fichier externe) ──
+function canvasTex(size, draw, repeat){
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  draw(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c);
+  if (repeat){ t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat, repeat); }
+  return t;
+}
+function noisy(ctx, s, base, tones, n){   // fond + taches aléatoires (herbe, asphalte…)
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, s, s);
+  for (let i = 0; i < n; i++){
+    ctx.fillStyle = tones[(Math.random() * tones.length) | 0];
+    const r = 1 + Math.random() * 3;
+    ctx.globalAlpha = 0.25 + Math.random() * 0.4;
+    ctx.beginPath();
+    ctx.arc(Math.random() * s, Math.random() * s, r, 0, 7);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+const grassTex = canvasTex(256, (g, s) => noisy(g, s, '#3f7a34',
+  ['#356c2c','#4c8a3e','#2f6127','#5d9a4b','#84a558'], 2600), 24);
+const asphaltTex = canvasTex(256, (g, s) => noisy(g, s, '#3a3f46',
+  ['#31363d','#454b53','#2c3037','#50565e'], 2200), 30);
+const woodTex = canvasTex(128, (g, s) => {
+  noisy(g, s, '#b98a54', ['#a97b47','#c79a63','#9f7040'], 700);
+  g.globalAlpha = 0.35;
+  g.strokeStyle = '#7d5a33';
+  for (let y = 6; y < s; y += 14){ g.beginPath(); g.moveTo(0, y); g.lineTo(s, y + 3); g.stroke(); }
+  g.globalAlpha = 1;
+}, 2);
+
+// ── Ciel : dôme en dégradé + nuages peints ──
+const skyTex = canvasTex(512, (g, s) => {
+  const grad = g.createLinearGradient(0, 0, 0, s);
+  grad.addColorStop(0.0, '#3d7edb');
+  grad.addColorStop(0.55, '#8ab8ea');
+  grad.addColorStop(1.0, '#cfe3f5');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, s, s);
+});
+const sky = new THREE.Mesh(new THREE.SphereGeometry(190, 32, 16),
+  new THREE.MeshBasicMaterial({map: skyTex, side: THREE.BackSide, fog: false}));
+scene.add(sky);
+
+// Nuages : sprites (toujours face caméra) qui dérivent doucement
+const cloudTex = canvasTex(256, (g, s) => {
+  g.clearRect(0, 0, s, s);
+  for (let i = 0; i < 14; i++){
+    const x = 40 + Math.random() * (s - 80), y = 80 + Math.random() * 90,
+          r = 22 + Math.random() * 30;
+    const rad = g.createRadialGradient(x, y, 2, x, y, r);
+    rad.addColorStop(0, 'rgba(255,255,255,0.95)');
+    rad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = rad;
+    g.beginPath();
+    g.arc(x, y, r, 0, 7);
+    g.fill();
+  }
+});
+const clouds = [];
+for (let i = 0; i < 8; i++){
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: cloudTex, transparent: true,
+                                                        opacity: 0.9, fog: false}));
+  sp.scale.set(38 + Math.random() * 26, 15 + Math.random() * 9, 1);
+  sp.position.set((Math.random() - 0.5) * 280, 34 + Math.random() * 26, (Math.random() - 0.5) * 280);
+  sp.userData.v = 0.4 + Math.random() * 0.7;   // vitesse de dérive (m/s)
+  scene.add(sp);
+  clouds.push(sp);
+}
+
+// Arcs-en-ciel : 7 demi-tores concentriques (deux arches au loin)
+function rainbow(x, z, radius, rotY){
+  const g = new THREE.Group();
+  for (let i = 0; i < 7; i++){
+    const arc = new THREE.Mesh(
+      new THREE.TorusGeometry(radius - i * radius * 0.022, radius * 0.011, 8, 60, Math.PI),
+      new THREE.MeshBasicMaterial({color: new THREE.Color().setHSL(i / 7.5, 1, 0.55),
+                                   transparent: true, opacity: 0.55, fog: false}));
+    g.add(arc);
+  }
+  g.position.set(x, 0, z);
+  g.rotation.y = rotY;
+  scene.add(g);
+}
+rainbow(-90, -110, 42, 0.6);
+rainbow(120, 80, 30, -1.1);
+
+scene.add(new THREE.HemisphereLight(0xd8e8ff, 0x3a5a30, 1.05));
 const sun = new THREE.DirectionalLight(0xffffff, 0.9);
 sun.position.set(10, 20, 5);
 scene.add(sun);
-scene.add(new THREE.GridHelper(200, 200, 0x2f81f7, 0x21262d));
+const grid = new THREE.GridHelper(200, 200, 0xffffff, 0x9aa4ad);
+grid.material.opacity = 0.25;
+grid.material.transparent = true;
+grid.position.y = 0.01;
+scene.add(grid);
+const flatGround = new THREE.Mesh(new THREE.PlaneGeometry(260, 260).rotateX(-Math.PI / 2),
+  new THREE.MeshStandardMaterial({map: asphaltTex}));
+scene.add(flatGround);
+
+// ── Terrain vallonné du mode conduite — MIROIR de test_host/sim/terrain.hpp ──
+const HILLS = [[60,20,18,4],[-50,40,22,5],[30,-70,25,6],[-70,-60,20,3.5],[90,-30,16,3]];
+function terrainH(x, y){
+  let h = (y >= -2.5 && y <= 2.5 && x >= 14 && x <= 17) ? 0.6*(x-14)/3 : 0;   // TREMPLIN
+  for (const [cx, cy, s, a] of HILLS){
+    const dx = x - cx, dy = y - cy;
+    h += a * Math.exp(-(dx*dx + dy*dy) / (2*s*s));
+  }
+  return h;
+}
+const terrGeo = new THREE.PlaneGeometry(260, 260, 260, 260);   // 1 m : l'arête du tremplin ressort
+terrGeo.rotateX(-Math.PI/2);
+{
+  const pos = terrGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++){
+    pos.setY(i, terrainH(pos.getX(i), pos.getZ(i)));
+  }
+  terrGeo.computeVertexNormals();
+}
+const terrain = new THREE.Mesh(terrGeo,
+  new THREE.MeshStandardMaterial({map: grassTex, flatShading: true}));
+terrain.visible = false;   // seulement en conduite manuelle (les scénarios sont à plat)
+scene.add(terrain);
+
+// ── Arbres (décor du mode conduite — PAS de collision, décoratif) ──
+// Placement pseudo-aléatoire DÉTERMINISTE (LCG), posés sur le terrain, en épargnant le
+// couloir de départ et le tremplin (|x|<25, |y|<8).
+const trees = new THREE.Group();
+{
+  let seed = 42;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const trunkMat = new THREE.MeshStandardMaterial({color: 0x6b4a2b});
+  const pineMat  = new THREE.MeshStandardMaterial({color: 0x1e5c2f, flatShading: true});
+  const leafMat  = new THREE.MeshStandardMaterial({color: 0x3e8a3e, flatShading: true});
+  for (let i = 0; i < 70; i++){
+    const x = (rnd() - 0.5) * 230, z = (rnd() - 0.5) * 230;
+    if (Math.abs(x) < 25 && Math.abs(z) < 8) continue;   // couloir de départ + tremplin
+    const s = 0.8 + rnd() * 1.4;                          // taille
+    const t = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.09 * s, 0.14 * s, 1.1 * s, 6), trunkMat);
+    trunk.position.y = 0.55 * s;
+    t.add(trunk);
+    if (rnd() < 0.6){                                     // conifère : 2 cônes empilés
+      const c1 = new THREE.Mesh(new THREE.ConeGeometry(0.75 * s, 1.5 * s, 7), pineMat);
+      c1.position.y = 1.6 * s;
+      const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.55 * s, 1.2 * s, 7), pineMat);
+      c2.position.y = 2.3 * s;
+      t.add(c1, c2);
+    } else {                                              // feuillu : boule
+      const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8 * s, 1), leafMat);
+      ball.position.y = 1.6 * s;
+      t.add(ball);
+    }
+    t.position.set(x, terrainH(x, z), z);
+    t.rotation.y = rnd() * Math.PI * 2;
+    trees.add(t);
+  }
+}
+trees.visible = false;
+scene.add(trees);
 
 // ── Kart (proportions du concept : voie 0,84, roues Ø0,254, museau, banquette) ──
 const kart = new THREE.Group();
 const mat = c => new THREE.MeshStandardMaterial({color:c});
-const floor = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.05, 0.62), mat(0xc9a066));
+const woodMat = new THREE.MeshStandardMaterial({map: woodTex});
+const floor = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.05, 0.62), woodMat);
 floor.position.set(0.17, 0.15, 0);   // essieu à l'origine (repère LOCAL : museau vers −x)
 kart.add(floor);
 const nose = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.09, 0.09), mat(0x222222));
 nose.position.set(-0.2, 0.23, 0);    // batterie dans le museau
 kart.add(nose);
-const seat = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.8), mat(0xa0714f));
+const seat = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.8), woodMat);
 seat.position.set(0.42, 0.24, 0);
 kart.add(seat);
 const back = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.36, 0.8), mat(0xa0714f));
@@ -202,6 +384,75 @@ const FA = ['—','E-STOP','BATTERIE BASSE','NON CALIBRÉ','ENCODEUR BLOQUÉ','E
             'ENCODEUR ABERRANT','ENCODEUR ABSENT'];
 const BRK = ['⚪ traction','🟠 frein dynamique','🟢 frein actif (PID)'];
 let atip = 5.0, vlim = 3.3, cur = null, es = null;
+
+// ── Caméra : poursuite du kart + ORBITE À LA SOURIS (glisser = tourner, molette = zoom) ──
+const cam = {yaw: Math.PI, pitch: 0.42, dist: 4.5};   // offsets relatifs au cap du kart
+let dragging = false, lastMX = 0, lastMY = 0;
+renderer.domElement.addEventListener('mousedown', e => { dragging = true; lastMX = e.clientX; lastMY = e.clientY; });
+addEventListener('mouseup', () => dragging = false);
+addEventListener('mousemove', e => {
+  if (!dragging) return;
+  cam.yaw   -= (e.clientX - lastMX) * 0.008;
+  cam.pitch  = Math.max(0.08, Math.min(1.35, cam.pitch + (e.clientY - lastMY) * 0.005));
+  lastMX = e.clientX; lastMY = e.clientY;
+});
+addEventListener('wheel', e => {
+  cam.dist = Math.max(2, Math.min(30, cam.dist * (e.deltaY > 0 ? 1.12 : 0.89)));
+}, {passive:true});
+
+// ── Conduite MANUELLE au clavier ──
+const keys = {up:0, down:0, left:0, right:0, start:0, estop:0};
+let driveTimer = null;
+const KEYMAP = {ArrowUp:'up', w:'up', z:'up', ArrowDown:'down', s:'down',
+                ArrowLeft:'left', a:'left', q:'left', ArrowRight:'right', d:'right',
+                Enter:'start', ' ':'estop'};
+addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R'){ play(); return; }
+  const k = KEYMAP[e.key];
+  if (k){ keys[k] = 1; e.preventDefault(); }
+});
+addEventListener('keyup', e => {
+  const k = KEYMAP[e.key];
+  if (k) keys[k] = 0;
+});
+// ── Manette dans le navigateur (API Gamepad) : stick gauche = conduire ──
+let padSeen = false;
+addEventListener('gamepadconnected', e => {
+  padSeen = true;
+  document.getElementById('desc').textContent += '  ·  🎮 manette détectée (stick gauche)';
+});
+// Compensation cercle→carré — MIROIR de ctl::squareMap (control_math.hpp) : sans elle, les
+// diagonales du stick plafonnent à ~0,71 alors que le vrai firmware les étire jusqu'à 1.
+function squareMap(x, y){
+  const m = Math.max(Math.abs(x), Math.abs(y));
+  if (m < 1e-3) return [0, 0];
+  const k = Math.hypot(x, y) / m;
+  return [Math.max(-1, Math.min(1, x * k)), Math.max(-1, Math.min(1, y * k))];
+}
+function readGamepad(){
+  if (!navigator.getGamepads) return null;
+  for (const gp of navigator.getGamepads()){
+    if (!gp || !gp.connected) continue;
+    let x = gp.axes[0] || 0, y = -(gp.axes[1] || 0);   // pousser = avancer
+    if (Math.hypot(x, y) < 0.08){ x = 0; y = 0; }      // petite zone morte matérielle
+    [x, y] = squareMap(x, y);
+    return {x, y,
+            start: gp.buttons[9] && gp.buttons[9].pressed,   // START/Options → armement
+            estop: gp.buttons[1] && gp.buttons[1].pressed};  // B → arrêt d'urgence
+  }
+  return null;
+}
+function sendInput(){
+  const gp = readGamepad();
+  const kx = keys.right - keys.left, ky = keys.up - keys.down;
+  const cmd = {
+    x: Math.max(-1, Math.min(1, kx + (gp ? gp.x : 0))),
+    y: Math.max(-1, Math.min(1, ky + (gp ? gp.y : 0))),
+    start: keys.start || (gp && gp.start) ? 1 : 0,
+    estop: keys.estop || (gp && gp.estop) ? 1 : 0,
+  };
+  fetch('/input', {method:'POST', body: JSON.stringify(cmd)}).catch(() => {});
+}
 
 // ── Graphiques (Chart.js vendorisé) ──
 function mkChart(id, series, ymin, ymax){
@@ -269,13 +520,22 @@ function play(){
   document.getElementById('tipmsg').style.display = 'none';
   document.getElementById('tipflash').style.display = 'none';
   const name = document.getElementById('scen').value;
+  clearInterval(driveTimer);
+  driveTimer = null;
+  if (name === '__drive__') driveTimer = setInterval(sendInput, 50);   // clavier → kart à 20 Hz
   es = new EventSource('/stream?scenario=' + encodeURIComponent(name));
   es.onmessage = e => {
     const m = JSON.parse(e.data);
     if (m.meta){
       atip = m.atip;
       vlim = m.vlim || 3.3;
-      document.getElementById('desc').textContent = m.desc;
+      terrain.visible = !!m.terrain;
+      trees.visible = !!m.terrain;
+      grid.visible = !m.terrain;
+      flatGround.visible = !m.terrain;
+      document.getElementById('desc').textContent = m.desc +
+        (m.terrain ? '  ·  ↑↓←→/ZQSD ou 🎮 stick gauche · Enter/START (1 s) armer · Espace/B e-stop · R recommencer'
+                   + (padSeen ? '  ·  🎮 manette détectée' : '') : '');
       if (m.params){
         fillParams(m.params);
         const p = m.params;
@@ -293,7 +553,7 @@ function play(){
     cur = m;
     chartPush(m);
     if (trailN < TRAIL_MAX){
-      trailPos[trailN*3] = m.x; trailPos[trailN*3+1] = 0.02; trailPos[trailN*3+2] = m.y;
+      trailPos[trailN*3] = m.x; trailPos[trailN*3+1] = (m.z || 0) + 0.03; trailPos[trailN*3+2] = m.y;
       trailGeo.setDrawRange(0, ++trailN);
       trailGeo.attributes.position.needsUpdate = true;
     }
@@ -304,21 +564,30 @@ function play(){
 // ── Rendu ──
 function animate(){
   requestAnimationFrame(animate);
+  for (const c of clouds){
+    c.position.x += c.userData.v * 0.016;
+    if (c.position.x > 150) c.position.x = -150;
+  }
+  if (cur) sky.position.set(cur.x, 0, cur.y);   // le dôme suit le kart (horizon infini)
   if (cur){
-    kart.position.set(cur.x, 0, cur.y);
-    kart.rotation.set(0, Math.PI - cur.h, 0);
-    // Roulis proportionnel à a_lat/a_tip ; au-delà de la limite → le kart se COUCHE.
-    const tipped = cur.margin <= 0;
-    const roll = tipped ? 0.5 * Math.sign(cur.alat || 1)
-                        : 0.16 * Math.max(-1, Math.min(1, cur.alat / atip));
-    kart.rotation.z = -Math.max(-0.6, Math.min(0.6, roll));
+    const gz = cur.z || 0;
+    kart.position.set(cur.x, gz, cur.y);
+    // Ordre YXZ : lacet (Y), puis ROULIS autour de l'axe longitudinal (X), puis TANGAGE (Z).
+    kart.rotation.order = 'YXZ';
+    kart.rotation.set(Math.max(-1.6, Math.min(1.6, cur.roll || 0)),
+                      Math.PI - cur.h,
+                      -(cur.pitch || 0), 'YXZ');
+    const tipped = !!cur.tipped;
     const spin = cur.v / 0.127;
     wl.rotation.z -= spin / 60; wr.rotation.z -= spin / 60; caster.rotation.z -= spin / 60;
 
-    // Caméra de poursuite
-    const behind = new THREE.Vector3(-4.2 * Math.cos(cur.h), 2.4, -4.2 * Math.sin(cur.h));
-    camera.position.lerp(new THREE.Vector3(cur.x, 0, cur.y).add(behind), 0.06);
-    camera.lookAt(cur.x, 0.3, cur.y);
+    // Caméra : poursuite orientée par le cap + offsets souris (orbite/zoom)
+    const az = cur.h + cam.yaw;
+    const off = new THREE.Vector3(Math.cos(az) * Math.cos(cam.pitch) * cam.dist,
+                                  Math.sin(cam.pitch) * cam.dist,
+                                  Math.sin(az) * Math.cos(cam.pitch) * cam.dist);
+    camera.position.lerp(new THREE.Vector3(cur.x, gz, cur.y).add(off), 0.08);
+    camera.lookAt(cur.x, gz + 0.3, cur.y);
 
     // HUD
     document.getElementById('st').textContent = cur.t.toFixed(1);
@@ -331,14 +600,23 @@ function animate(){
     bar.style.width = pct + '%';
     bar.style.background = pct > 40 ? '#2ea043' : (pct > 15 ? '#d29922' : '#f85149');
     const bs = document.getElementById('bstate');
-    bs.textContent = (ST[cur.state] || cur.state) + (cur.armed ? '' : ' · désarmé');
-    bs.className = 'badge ' + (cur.state === 2 ? 'ok' : (cur.state === 3 ? 'bad' : ''));
+    if (cur.power === false){
+      bs.textContent = '⚡ ALIMENTATION COUPÉE — roue libre';
+      bs.className = 'badge bad';
+    } else {
+      bs.textContent = (ST[cur.state] || cur.state) + (cur.armed ? '' : ' · désarmé');
+      bs.className = 'badge ' + (cur.state === 2 ? 'ok' : (cur.state === 3 ? 'bad' : ''));
+    }
     document.getElementById('bbrake').textContent = BRK[cur.brake] || cur.brake;
     const bf = document.getElementById('bfault');
     bf.style.display = cur.fault ? '' : 'none';
     bf.textContent = FA[cur.fault] || ('défaut ' + cur.fault);
     bf.className = 'badge bad';
-    document.getElementById('tipmsg').style.display = tipped ? 'block' : 'none';
+    const lifted = !tipped && 0 !== (cur.lift || 0);
+    const tm = document.getElementById('tipmsg');
+    tm.textContent = tipped ? 'WASTED' : '⚠️ ROUE LEVÉE !';
+    tm.className = tipped ? '' : 'lift';
+    tm.style.display = (tipped || lifted) ? 'block' : 'none';
     document.getElementById('tipflash').style.display = tipped ? 'block' : 'none';
   }
   renderer.render(scene, camera);
@@ -347,6 +625,7 @@ function animate(){
 initCharts();
 fetch('/scenarios').then(r => r.json()).then(list => {
   const sel = document.getElementById('scen');
+  list.unshift({name:'__drive__', desc:'🎮 CONDUITE MANUELLE au clavier — terrain vallonné'});
   for (const s of list){
     const o = document.createElement('option');
     o.value = s.name;

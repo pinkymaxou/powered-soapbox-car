@@ -21,6 +21,20 @@ FW = HERE.parent
 SIM_BIN = pathlib.Path("/tmp/kart_sim_viewer_bin")
 
 
+def sim_stale() -> bool:
+    """Binaire absent ou plus vieux qu'une des sources → recompiler (évite de conduire
+    une physique périmée sur un décor à jour…)."""
+    if not SIM_BIN.exists():
+        return True
+    bin_mtime = SIM_BIN.stat().st_mtime
+    sources = [FW / "test_host/sim_main.cpp", FW / "main/controller_core.cpp",
+               FW / "main/controller_core.hpp", FW / "main/config_params.cpp",
+               FW / "main/control_types.hpp", FW / "main/control_math.hpp",
+               FW / "main/pid.hpp"]
+    sources += (FW / "test_host/sim").glob("*.hpp")
+    return any(s.stat().st_mtime > bin_mtime for s in sources)
+
+
 def build_sim() -> None:
     """(Re)compile le binaire de simulation depuis les MÊMES sources que les tests."""
     cmd = [
@@ -43,9 +57,33 @@ def scenario_list():
     return scen
 
 
+DRIVE = {"proc": None}   # processus de conduite manuelle en cours (un seul à la fois)
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):   # silencieux
         pass
+
+    def do_POST(self):
+        # Entrées clavier du navigateur → stdin du simulateur en mode conduite.
+        if urlparse(self.path).path != "/input":
+            self.send_error(404)
+            return
+        n = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(n).decode()
+        proc = DRIVE["proc"]
+        ok = False
+        if proc and proc.poll() is None:
+            try:
+                proc.stdin.write(body + "\n")
+                proc.stdin.flush()
+                ok = True
+            except (BrokenPipeError, OSError):
+                pass
+        self.send_response(200 if ok else 409)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_GET(self):
         url = urlparse(self.path)
@@ -80,9 +118,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def stream(self, name: str):
-        """SSE : relaie chaque ligne JSON du simulateur --realtime vers le navigateur."""
-        proc = subprocess.Popen([str(SIM_BIN), "--stream", name, "--realtime"],
-                                stdout=subprocess.PIPE, text=True)
+        """SSE : relaie chaque ligne JSON du simulateur vers le navigateur.
+        Le pseudo-scénario __drive__ = conduite MANUELLE : stdin ouvert pour le clavier."""
+        if name == "__drive__":
+            proc = subprocess.Popen([str(SIM_BIN), "--drive"],
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            old = DRIVE["proc"]
+            if old and old.poll() is None:
+                old.kill()
+            DRIVE["proc"] = proc
+        else:
+            proc = subprocess.Popen([str(SIM_BIN), "--stream", name, "--realtime"],
+                                    stdout=subprocess.PIPE, text=True)
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Type", "text/event-stream")
@@ -108,7 +155,7 @@ def main():
     ap.add_argument("--rebuild", action="store_true", help="recompiler le binaire de simulation")
     args = ap.parse_args()
 
-    if args.rebuild or not SIM_BIN.exists():
+    if args.rebuild or sim_stale():
         build_sim()
 
     print(f"Visualisateur en écoute sur {args.host}:{args.port} — ouvrables :")
