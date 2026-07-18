@@ -51,6 +51,8 @@
  <button onclick="play()">▶ Rejouer</button>
  <button onclick="toggleCharts()">📈 Graphiques</button>
  <button onclick="document.getElementById('hypo').style.display='block'">ℹ️ Hypothèses</button>
+ <label id="tlwrap" style="display:none;gap:6px;align-items:center;cursor:pointer">
+  <input type="checkbox" id="tl" checked> 🛡️ anti-renversement</label>
  <span class="badge" id="bstate">—</span>
  <span class="badge" id="bbrake">—</span>
  <span class="badge" id="bfault" style="display:none">—</span>
@@ -450,6 +452,7 @@ function sendInput(){
     y: Math.max(-1, Math.min(1, ky + (gp ? gp.y : 0))),
     start: keys.start || (gp && gp.start) ? 1 : 0,
     estop: keys.estop || (gp && gp.estop) ? 1 : 0,
+    tl: document.getElementById('tl').checked ? 1 : 0,   // 🛡️ anti-renversement (turn_limit_en)
   };
   fetch('/input', {method:'POST', body: JSON.stringify(cmd)}).catch(() => {});
 }
@@ -531,6 +534,7 @@ function play(){
       vlim = m.vlim || 3.3;
       terrain.visible = !!m.terrain;
       trees.visible = !!m.terrain;
+      document.getElementById('tlwrap').style.display = m.terrain ? 'flex' : 'none';
       grid.visible = !m.terrain;
       flatGround.visible = !m.terrain;
       document.getElementById('desc').textContent = m.desc +

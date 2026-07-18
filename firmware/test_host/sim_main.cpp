@@ -413,7 +413,15 @@ int driveInteractive()
         size_t nl;
         while ((nl = acc.find('\n')) != std::string::npos)
         {
-            parseCmd(acc.substr(0, nl), cmd);
+            const std::string line = acc.substr(0, nl);
+            parseCmd(line, cmd);
+            // Interrupteur d'anti-renversement (case à cocher du visualisateur) : même
+            // paramètre que sur le vrai kart (turn_limit_en), appliqué au vol.
+            const size_t p = line.find("\"tl\":");
+            if (p != std::string::npos)
+            {
+                cfg.turn_limit_en = (std::atof(line.c_str() + p + 5) != 0.0) ? 1.f : 0.f;
+            }
             acc.erase(0, nl + 1);
         }
 
