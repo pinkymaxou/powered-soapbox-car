@@ -140,7 +140,8 @@
   <li><b>Chargement asymétrique modélisé</b> (y_cg) : la bascule devient asymétrique — l'arête
       du côté chargé perd sa marge. Les scénarios <code>enfant_seul_cote</code> et
       <code>adulte_enfant</code> montrent qu'avec les réglages PAR DÉFAUT un CG décalé peut
-      basculer en manœuvre extrême ; <code>turn_hi = 0,35</code> protège aussi ces cas.</li>
+      basculer en manœuvre extrême ; la limite iso-a_lat (∝ 1/v, <code>turn_at_vmax = 0,2</code>,
+      gain de virage 1,0) protège aussi ces cas.</li>
   <li><b>Limite du modèle</b> : des passagers qui se penchent déplacent le CG réel en dynamique
       — c'est pourquoi les tests exigent une <b>marge</b> et pas seulement « ne bascule pas ».</li>
  </ul>

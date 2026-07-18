@@ -27,26 +27,26 @@ const ParamDesc PARAMS[] =
      "Pente maximale de la consigne d'avance (pleine echelle par seconde). Plus petit = departs et arrets plus doux.",
      PType::Float, 0.2f,  2.f,    20.f,   &KartConfig::thr_ramp_per_s},
     {"turn_gain",       "Gain de virage (0-1)",    "Manette",
-     "Part du differentiel gauche/droite a fond de stick. 0,6 = pivot sur place plafonne a 60 % de la puissance.",
-     PType::Float, 0.f,   0.6f,   1.f,    &KartConfig::turn_gain},
+     "Part du differentiel gauche/droite a fond de stick. 1 = pivot sur place a pleine puissance.",
+     PType::Float, 0.f,   1.f,    1.f,    &KartConfig::turn_gain},
     {"turn_rate",       "Douceur virage (D/s)",    "Manette",
      "Pente maximale de la consigne de virage (pleine echelle par seconde). Adoucit les coups de stick brusques.",
      PType::Float, 0.3f,  3.0f,   20.f,   &KartConfig::turn_rate},
-    // Anti-renversement « rampe » : virage ±100 % sous turn_full_ms, décroît linéairement
-    // jusqu'à turn_hi à speed_limit_ms (vitesse MESURÉE). Recul plafonné à rev_limit.
+    // Anti-renversement « iso-a_lat » : virage ±100 % sous turn_full_ms (et partout où
+    // 1/v le permet), puis limite ∝ 1/v jusqu'à turn_hi à speed_limit_ms (vitesse MESURÉE),
+    // et continue de se resserrer au-delà (emballement). Recul plafonné à rev_limit.
     {"turn_limit_en",   "Anti-renversement (0/1)", "Anti-renversement",
      "1 = la limite de virage suit la vitesse mesuree (rampe anti-renversement). 0 = desactive — pour les essais au banc uniquement, virage a 100 % a toute vitesse.",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::turn_limit_en},
     {"turn_full_ms",    "Virage 100% sous (m/s)",  "Anti-renversement",
      "Sous cette vitesse vehicule (m/s), le virage est autorise a 100 % (pivot sur place permis). Au-dela, la limite descend lineairement jusqu'a la limite Vmax.",
-     PType::Float, 0.1f,  0.5f,   3.f,    &KartConfig::turn_full_ms},
-    // Défaut abaissé 0,50 → 0,35 : la simulation physique montre qu'un CHARGEMENT DÉCALÉ
-    // (un seul enfant sur un côté, ou adulte+enfant) bascule à 0,50 en manœuvre extrême,
-    // et tient à 0,35 (scénarios enfant_seul_cote / adulte_enfant). Clé renommée
-    // (ex-turn_hi) pour que les kart déjà configurés repartent du défaut SÛR.
-    {"turn_at_vmax",    "Virage max a Vmax (0-1)", "Anti-renversement",
-     "Limite de virage atteinte a la vitesse maximale. 0,35 = a fond de vitesse on ne braque qu'a 35 % — protege aussi les chargements decales (un seul enfant d'un cote, adulte+enfant), verifie par simulation physique.",
-     PType::Float, 0.1f,  0.35f,  1.f,    &KartConfig::turn_hi},
+     PType::Float, 0.1f,  0.5f,   0.8f,   &KartConfig::turn_full_ms},
+    // Défaut 0,2 + courbe 1/v (gain de virage 1,0) : la simulation physique montre qu'un
+    // CHARGEMENT DÉCALÉ (enfant seul d'un côté, adulte+enfant) renverse avec l'ancienne
+    // rampe linéaire dès gain=1 — l'iso-a_lat à 0,2 redonne des marges saines (≥ +0,8 m/s²).
+    {"turn_alat_vmax",  "Virage max a Vmax (0-1)", "Anti-renversement",
+     "Limite de virage a la vitesse maximale ; entre les deux la limite suit 1/v (meme acceleration laterale a toute vitesse). 0,2 = seule valeur verifiee sure par simulation pour les chargements decales (enfant seul d'un cote, adulte+enfant) avec gain de virage 1.",
+     PType::Float, 0.1f,  0.2f,   0.4f,   &KartConfig::turn_hi},
     {"rev_limit",       "Limite recul (0-1)",      "Anti-renversement",
      "Plafond de puissance en marche arriere. 0,5 = on recule au maximum a 50 % — evite de reculer dangereusement vite.",
      PType::Float, 0.f,   0.5f,   1.f,    &KartConfig::rev_limit},

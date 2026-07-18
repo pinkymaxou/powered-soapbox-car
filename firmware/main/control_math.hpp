@@ -41,15 +41,18 @@ inline void mixArcade(float fwd, float turn, float gain, float& out_l, float& ou
     out_r = clampf(fwd - turn * gain, -1.f, 1.f);
 }
 
-// Anti-renversement « rampe » : limite de virage selon la vitesse VÉHICULE MESURÉE (m/s).
-// |v| ≤ v_full → ±100 % (pivot sur place permis, v≈0) ; puis décroissance LINÉAIRE jusqu'à
-// hi_limit (ex. 0,5 = ±50 %) atteint à v_max. Ex. v_full=0,5 : sous 0,5 m/s on tourne à fond.
+// Anti-renversement « ISO-ACCÉLÉRATION LATÉRALE » : a_lat ≈ k·v·δ (δ = différentiel
+// commandé) ⇒ la limite de virage décroît en 1/v — la MÊME accélération latérale est
+// autorisée à toutes les vitesses, calée pour valoir hi_limit à v_max. En dessous de
+// v_full — et partout où hi·v_max/v dépasse 100 % (v ≤ hi·v_max) — virage à fond :
+// le pivot sur place à pleine puissance reste permis. Au-delà de v_max (emballement en
+// descente), la limite CONTINUE de se resserrer : moins d'autorité = moins de risque.
+// Remplace l'ancienne rampe linéaire : son excès à mi-vitesse renversait les chargements
+// décalés dès que turn_gain = 1 (prouvé par simulation, scénario adulte_enfant).
 inline float turnLimit(float v_abs, float v_full, float v_max, float hi_limit)
 {
     if (v_abs <= v_full) return 1.f;
-    const float span = (v_max - v_full > 0.1f) ? (v_max - v_full) : 0.1f;
-    const float f = clampf((v_abs - v_full) / span, 0.f, 1.f);
-    return 1.f + f * (hi_limit - 1.f);
+    return clampf(hi_limit * v_max / std::max(v_abs, 0.05f), 0.f, 1.f);
 }
 
 // Plafond PWM automatique selon la tension batterie MESURÉE : les moteurs (v_nom, ex. 12 V)

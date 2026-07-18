@@ -94,11 +94,12 @@ static void test_turn_limit()
     // Rampe anti-renversement : ±100 % sous v_full, décroissance linéaire jusqu'à hi à v_max.
     CHECK(near(ctl::turnLimit(0.0f, 0.5f, 3.3f, 0.5f), 1.f));    // pivot sur place → 100 %
     CHECK(near(ctl::turnLimit(0.5f, 0.5f, 3.3f, 0.5f), 1.f));    // au seuil → encore 100 %
+    CHECK(near(ctl::turnLimit(1.0f, 0.5f, 3.3f, 0.5f), 1.f));    // 1/v > 100 % → encore à fond
     CHECK(near(ctl::turnLimit(3.3f, 0.5f, 3.3f, 0.5f), 0.5f));   // à Vmax → 50 %
-    CHECK(near(ctl::turnLimit(9.0f, 0.5f, 3.3f, 0.5f), 0.5f));   // au-delà → plafonné à 50 %
-    const float mid = ctl::turnLimit(1.9f, 0.5f, 3.3f, 0.5f);    // milieu de rampe → ~75 %
-    CHECK(near(mid, 0.75f, 1e-3f));
-    CHECK(near(ctl::turnLimit(2.0f, 0.5f, 0.5f, 0.5f), 0.5f));   // span dégénéré → pas de division/0
+    CHECK(near(ctl::turnLimit(9.0f, 0.5f, 3.3f, 0.5f), 0.5f * 3.3f / 9.f));   // emballement → se resserre encore (iso-a_lat)
+    const float mid = ctl::turnLimit(1.9f, 0.5f, 3.3f, 0.5f);    // mi-vitesse → hi·vmax/v ≈ 87 %
+    CHECK(near(mid, 0.5f * 3.3f / 1.9f, 1e-3f));
+    CHECK(near(ctl::turnLimit(2.0f, 0.5f, 0.5f, 0.5f), 0.125f)); // v_max ≤ v_full → 1/v direct, pas de division/0
 }
 
 static void test_duty_cap_volts()

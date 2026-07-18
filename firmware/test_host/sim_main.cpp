@@ -168,11 +168,11 @@ void testScenarios()
     }
 
     // CHARGEMENT ASYMÉTRIQUE — c'est CE résultat qui a fait abaisser le défaut de turn_hi
-    // à 0,35 : à l'ancien réglage (0,50) un CG décalé basculait en manœuvre extrême.
+    // (défauts : gain 1,0 + iso-a_lat 0,2) ; à l'ancienne rampe linéaire un CG décalé basculait.
     // Le DÉFAUT protège désormais ces cas ; l'ancien réglage reste testé comme preuve.
     {
         const RunResult r = run(get("enfant_seul_cote"));
-        std::printf("  enfant_seul_cote (défaut 0,35) : marge min=%.2f m/s²\n", r.min_tip_margin);
+        std::printf("  enfant_seul_cote (défauts) : marge min=%.2f m/s²\n", r.min_tip_margin);
         CHECK(r.min_tip_margin > 0.3f);   // le défaut SÛR protège le chargement décalé
         CHECK(!r.ever_fault);
         CHECK(!r.wheel_lifted && !r.tipped);
@@ -188,7 +188,7 @@ void testScenarios()
     }
     {
         const RunResult r = run(get("adulte_enfant"));
-        std::printf("  adulte_enfant (défaut 0,35) : marge min=%.2f m/s²\n", r.min_tip_margin);
+        std::printf("  adulte_enfant (défauts) : marge min=%.2f m/s²\n", r.min_tip_margin);
         CHECK(r.min_tip_margin > 0.25f);
         CHECK(!r.ever_fault);
     }
@@ -262,7 +262,7 @@ void testParamSweep()
     int runs = 0;
     float worst = 1e9f;
     float worst_hi = 0, worst_full = 0, worst_lim = 0;
-    for (float turn_hi : {0.3f, 0.5f, 0.7f})
+    for (float turn_hi : {0.2f, 0.3f, 0.4f})
         for (float turn_full : {0.3f, 0.5f, 0.8f})
             for (float vlim : {2.0f, 3.3f})
             {

@@ -249,12 +249,15 @@ passe en rouge dès qu'un défaut grave est présent.
 Un tricycle (2 roues motrices + 1 roulette) bascule facilement si on tourne trop fort ou
 trop vite. Le virage est protégé sur **deux plans** :
 
-1. **Rampe vitesse→virage** (`ctl::turnLimit`, testée sur l'hôte) — la limite suit la
-   **vitesse véhicule MESURÉE** (m/s, moyenne signée des 2 roues) :
-   - `|v| ≤ turn_full_ms` (défaut 0,5 m/s) → virage **±100 %** — le **pivot sur place**
-     (v ≈ 0) reste pleinement autorisé ;
-   - au-delà, décroissance **linéaire** jusqu'à **`turn_hi`** (défaut ±50 %) atteinte à
-     `speed_limit_ms`.
+1. **Limite vitesse→virage ISO-a_lat** (`ctl::turnLimit`, testée sur l'hôte) — la limite
+   suit la **vitesse véhicule MESURÉE** (m/s, moyenne signée des 2 roues) :
+   - `|v| ≤ turn_full_ms` (défaut 0,5 m/s) — et partout où la courbe 1/v dépasse 100 % —
+     virage **±100 %** : le **pivot sur place à pleine puissance** (`turn_gain` défaut 1,0)
+     reste autorisé ;
+   - au-delà, la limite décroît en **1/v** (même accélération latérale à toute vitesse)
+     jusqu'à **`turn_at_vmax`** (défaut ±20 %) à `speed_limit_ms`, puis **continue de se
+     resserrer** en cas d'emballement. Calibrée par simulation : l'ancienne rampe linéaire
+     renversait les chargements décalés dès `turn_gain = 1`.
    ⚠️ S'appuie sur la vitesse mesurée : avec `use_encoders = 0`, v = 0 → pas de bridage.
 2. **Brusquerie (limiteur de pente / slew-rate)** — la consigne de virage ne peut pas varier
    de plus de `turn_rate` unités/s : un coup de manche instantané est **lissé**. L'avance est

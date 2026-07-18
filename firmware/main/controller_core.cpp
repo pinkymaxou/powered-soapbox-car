@@ -270,9 +270,10 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         fwd = m_fwd_cmd;
         turn = m_turn_cmd;
 
-        // 2) Anti-renversement « rampe » : la limite de virage suit la vitesse MESURÉE.
-        //    |v| ≤ turn_full_ms → ±100 % (pivot sur place, v≈0) ; puis décroissance LINÉAIRE
-        //    jusqu'à turn_hi (±50 % défaut) atteinte à speed_limit_ms. Sans encodeurs, v=0 → pas de bridage.
+        // 2) Anti-renversement « iso-a_lat » : la limite de virage suit la vitesse MESURÉE
+        //    en 1/v (même accélération latérale à toute vitesse — voir turnLimit) ; ±100 %
+        //    sous turn_full_ms (pivot sur place à pleine puissance), turn_hi à speed_limit_ms,
+        //    et encore plus serré au-delà. Sans encodeurs, v=0 → pas de bridage.
         //    Désactivable (turn_limit_en=0) pour les essais au banc.
         if (m_cfg.turn_limit_en != 0.f)
         {
