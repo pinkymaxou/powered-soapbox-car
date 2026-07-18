@@ -162,17 +162,38 @@ identifier les boutons spécifiques d'une manette).
 | Fichier | Rôle |
 |---|---|
 | `pinout.hpp` | **Brochage matériel** (2 moteurs, 2 bus I²C, réserves joystick/futur) |
-| `config.hpp` / `.cpp` | **Table de paramètres** `PARAMS[]` + `KartConfig` (NVS) + télémétrie `KartStatus` |
+| `control_types.hpp` | **Types PURS partagés hôte/cible** : `KartConfig`, enums d'état/défaut, constantes `hw::`, `ParamDesc` |
+| `config_params.cpp` | **Table `PARAMS[]`** (défauts/bornes/aides) — PURE, compilée aussi par la simulation |
+| `config.hpp` / `.cpp` | Persistance **NVS** (delta + différée si armé) + télémétrie `KartStatus` + mutex |
 | `hardware.hpp` / `.cpp` | Matériel bas niveau (`board::` — Vbat via ADS1115, **2× PWM/DIR**, **2× AS5600** sur 2 bus I²C, boutons, LED, latch) |
 | `ads1115.hpp` / `.cpp` | **Driver ADS1115** (ADC externe 16 bits I²C, PGA) — modes continu / single-shot, par canal |
 | `input.hpp` / `.cpp` | **Entrée manette** (interface neutre) + **calibration obligatoire** (NVS) |
 | `input_bp32.c` | **Backend Bluepad32/BTstack** (plateforme custom + tâche boucle BT) |
-| `controller.hpp` / `.cpp` | **Boucle de contrôle** 500 Hz : mélange différentiel + anti-renversement + sécurités |
+| `controller_core.hpp` / `.cpp` | **CŒUR du contrôle (classe abstraite `ControllerBase`, PURE)** : mélange différentiel, anti-renversement, armement, défauts — E/S par callbacks virtuels `io*` |
+| `controller.hpp` / `.cpp` | `EspController` : branche les callbacks sur `board::`/`input::`, publie `g_status`, tâche 500 Hz |
 | `pid.hpp` | Régulateur **PID** réutilisable avec **anti-windup** |
 | `leds.hpp` / `.cpp` · `ws2812.*` | Tâche d'état (ruban WS2812B, pilote RMT) |
 | `webserver.hpp` / `.cpp` | SoftAP + serveur **HTTP/WebSocket** (commandes appairage/calibration) |
 | `assets/` | `index.html` + `style.css` + `chart.min.js` — **gzippés au build** et servis en `Content-Encoding: gzip` |
 | `main.cpp` | `app_main` : init des sous-systèmes + démarrage des tâches |
+
+### Simulation physique + visualisateur 3D
+
+La MÊME logique (`controller_core.cpp`) pilote un **modèle physique du véhicule**
+(`test_host/sim/vehicle.hpp` : dynamique différentielle, moteurs CC avec f.c.é.m., batterie
+avec résistance interne, capteurs simulés, pente, **critère de renversement du tricycle**) à
+travers des **scénarios extrêmes et réalistes** (`test_host/sim/scenarios.hpp`) : virage à fond
+à pleine vitesse (avec ET sans anti-renversement — la contre-épreuve bascule), slalom, conduite
+erratique, freinage au stick, perte de manette (heartbeat), pannes d'encodeur, LVC, descente…
+plus un **balayage de paramètres** (`turn_hi × turn_full_ms × speed_limit_ms`).
+
+- **Tests automatisés** : `test_host/run_tests.sh` (exécutés par le CI). Trace CSV :
+  `KART_SIM_TRACE=trace.csv ./sim`.
+- **Visualisateur 3D temps réel** : `python3 tools/sim_viewer.py` → http://localhost:8650/ —
+  mêmes scénarios, vue 3D (caméra de poursuite, traînée, roulis proportionnel à a_lat,
+  alerte RENVERSEMENT), jauge de marge et badges d'état en direct.
+- Les paramètres physiques ESTIMÉS (Ra, Iz, h_cg, x_cg, frottements) sont regroupés et
+  commentés dans `VehicleParams` — à recaler avec des mesures réelles.
 
 Tâches : **`control`** (cœur 1, 500 Hz, watchdog 5 s), **`leds`** (cœur 0, ~20 Hz) et la
 **boucle BTstack** (cœur 0). Partage de `g_cfg` (mutex) et `g_status` (atomics) ;

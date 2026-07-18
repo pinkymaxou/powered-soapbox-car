@@ -29,6 +29,10 @@ static inline float clampf(float v, float lo, float hi)
 
 namespace
 {
+// Résolution du timer LEDC (type esp_driver_ledc) — la valeur numérique correspondante
+// (PWM_MAX = 4095) vit dans control_types.hpp, seule utile à la logique.
+constexpr ledc_timer_bit_t PWM_RES = LEDC_TIMER_12_BIT;
+
 i2c_master_bus_handle_t   m_bus[2] = {nullptr, nullptr};   // bus 0 = roue G, bus 1 = roue D
 i2c_master_dev_handle_t   m_as[2]  = {nullptr, nullptr};   // AS5600 par bus
 int                       m_angle_last[2] = {-1, -1};      // dernier angle brut par capteur
@@ -103,7 +107,7 @@ void initMotors()
 {
     ledc_timer_config_t timer{};
     timer.speed_mode = LEDC_LOW_SPEED_MODE;
-    timer.duty_resolution = hw::PWM_RES;
+    timer.duty_resolution = PWM_RES;
     timer.timer_num = LEDC_TIMER_0;
     timer.freq_hz = hw::PWM_FREQ_HZ;
     timer.clk_cfg = LEDC_AUTO_CLK;

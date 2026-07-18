@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<title>Kart — simulation 3D</title>
+<!-- Outil de développement LOCAL (servi par sim_viewer.py) : Three.js chargé du CDN,
+     contrairement à la page embarquée du kart qui est 100 % autonome. -->
+<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+<script src="/chart.js"></script><!-- Chart.js vendorisé du projet (main/assets) -->
+<style>
+ body{margin:0;background:#0d1117;color:#e6edf3;font:14px system-ui,sans-serif;overflow:hidden}
+ #hud{position:fixed;top:0;left:0;right:0;display:flex;gap:10px;align-items:center;
+      padding:10px 14px;background:#161b22cc;backdrop-filter:blur(4px);flex-wrap:wrap;z-index:10}
+ select,button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:8px;
+      padding:6px 12px;font-size:14px}
+ button{cursor:pointer} button:hover{border-color:#58a6ff}
+ .badge{padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px;background:#30363d}
+ .badge.ok{background:#1f6f3f}.badge.warn{background:#9e6a03}.badge.bad{background:#b62324}
+ #stats{display:flex;gap:16px;font-variant-numeric:tabular-nums}
+ #stats b{color:#58a6ff}
+ #marginwrap{width:220px;height:14px;background:#21262d;border-radius:7px;overflow:hidden}
+ #marginbar{height:100%;width:100%;background:#2ea043;transition:width .1s,background .2s}
+ #tipflash{position:fixed;inset:0;background:#f001;display:none;z-index:5;pointer-events:none;
+      outline:8px solid #f00;outline-offset:-8px}
+ #tipmsg{position:fixed;top:40%;width:100%;text-align:center;font-size:42px;font-weight:900;
+      color:#ff5555;text-shadow:0 0 18px #000;display:none;z-index:6}
+ #desc{position:fixed;bottom:10px;left:14px;color:#8b949e;z-index:10}
+ #massinfo{position:fixed;bottom:34px;left:14px;z-index:10;background:#161b22cc;
+      border:1px solid #30363d;border-radius:10px;padding:8px 12px;font-size:13px;
+      font-variant-numeric:tabular-nums;line-height:1.5}
+ #massinfo b{color:#ff2ea6}
+ /* Panneau de graphiques (togglable) */
+ #charts{position:fixed;top:64px;right:0;bottom:0;width:400px;background:#161b22ee;
+      padding:10px;overflow-y:auto;z-index:9;display:none}
+ #charts h3{margin:8px 0 4px;font-size:13px;color:#8b949e;font-weight:600}
+ #charts canvas{background:#0d1117;border-radius:8px}
+ /* Fenêtre « Hypothèses » */
+ #hypo{position:fixed;inset:6% 12%;background:#161b22;border:1px solid #30363d;border-radius:14px;
+      padding:20px 26px;overflow-y:auto;z-index:20;display:none}
+ #hypo h2{margin-top:0} #hypo h3{color:#58a6ff;margin-bottom:6px}
+ #hypo table{border-collapse:collapse;font-variant-numeric:tabular-nums}
+ #hypo td{padding:3px 14px 3px 0;border-bottom:1px solid #21262d}
+ #hypo .close{position:absolute;top:14px;right:18px;font-size:20px;cursor:pointer;color:#8b949e}
+ #hypo li{margin:4px 0}
+</style></head><body>
+<div id="hud">
+ 🏎️ <b>Simulation kart</b>
+ <select id="scen"></select>
+ <button onclick="play()">▶ Rejouer</button>
+ <button onclick="toggleCharts()">📈 Graphiques</button>
+ <button onclick="document.getElementById('hypo').style.display='block'">ℹ️ Hypothèses</button>
+ <span class="badge" id="bstate">—</span>
+ <span class="badge" id="bbrake">—</span>
+ <span class="badge" id="bfault" style="display:none">—</span>
+ <div id="stats">
+  <span>t <b id="st">0.0</b> s</span>
+  <span>v <b id="sv">0.00</b> m/s</span>
+  <span>a_lat <b id="sa">0.00</b> m/s²</span>
+  <span>marge renversement</span>
+ </div>
+ <div id="marginwrap"><div id="marginbar"></div></div>
+</div>
+<div id="tipflash"></div><div id="tipmsg">⚠️ RENVERSEMENT</div>
+<div id="massinfo">masses / CG : —</div>
+<div id="desc"></div>
+<div id="charts">
+ <h3>Vitesse véhicule (m/s)</h3><canvas id="cv" height="110"></canvas>
+ <h3>Accélération latérale vs limite de bascule (m/s²)</h3><canvas id="ca" height="110"></canvas>
+ <h3>Sorties moteurs (PWM signé)</h3><canvas id="co" height="110"></canvas>
+ <h3>Encodeurs (tr/min capteur) — mesuré vs réel</h3><canvas id="ce" height="110"></canvas>
+ <h3>Manette — stick vs consigne effective (rampes + anti-renversement)</h3><canvas id="cp" height="110"></canvas>
+</div>
+<div id="hypo">
+ <span class="close" onclick="document.getElementById('hypo').style.display='none'">✕</span>
+ <h2>Hypothèses de la simulation</h2>
+ <h3>Modèle</h3>
+ <ul>
+  <li><b>Contrôleur</b> : la <b>vraie logique du firmware</b> (controller_core.cpp, identique au kart) à 500 Hz — mêmes défauts de config (PARAMS), mêmes seuils <code>hw::</code>.</li>
+  <li><b>Châssis</b> : corps rigide plan à 2 degrés de liberté (vitesse longitudinale + lacet). Les roues <b>ne glissent pas</b> latéralement (le ripage n'apparaît que comme amortissement de lacet).</li>
+  <li><b>Renversement</b> : critère <b>quasi-statique</b> — bascule autour de l'arête roue-avant↔roulette du triangle de sustentation. Demi-largeur effective au CG : w_eff = (voie/2)·(1 − x_cg/empattement) ; limite a_tip = g·w_eff/h_cg. Les transitoires de suspension/pneus sont ignorés.</li>
+  <li><b>Moteurs</b> : CC linéaires (k<sub>t</sub> = k<sub>e</sub>), courant i = (V − k<sub>e</sub>·ω)/R<sub>a</sub>. Freinage dynamique = court-circuit (V = 0, le moteur débite dans R<sub>a</sub>).</li>
+  <li><b>Batterie</b> : source idéale + résistance interne (V = V₀ − R·I). Pas de modèle de décharge.</li>
+  <li><b>Capteurs</b> : AS5600 quantifiés 12 bits ×1,28 (comme le vrai) ; manette parfaite (le script parle en consigne calibrée) ; pannes injectables (absent/inversé/figé/aberrant).</li>
+ </ul>
+ <h3>Masses et centre de gravité</h3>
+ <ul>
+  <li><b>Masse totale ≈ 98 kg</b> : kart ≈ 32 kg (châssis bois, moteurs, batterie au museau,
+      électronique) + <b>passagers ≈ 66 kg</b> — deux enfants d'environ 10 ans (~33 kg chacun),
+      assis côte à côte sur la banquette.</li>
+  <li><b>Centre de gravité supposé FIXE</b> : x_cg ≈ 0,40 m derrière l'essieu moteur (les
+      enfants sont assis vers l'arrière, la batterie dans le museau ramène le CG vers l'avant),
+      h_cg ≈ 0,38 m au-dessus du sol (assise basse ~20 cm, torse des enfants au-dessus).</li>
+  <li><b>Conséquence géométrique (tricycle)</b> : la demi-largeur de sustentation effective au
+      droit du CG vaut w_eff = (voie/2)·(1 − x_cg/empattement) ≈ 0,42 × (1 − 0,40/0,765)
+      ≈ <b>0,20 m</b> → limite de bascule a_tip = g·w_eff/h_cg ≈ <b>5,2 m/s²</b>.</li>
+  <li><b>Chargement asymétrique modélisé</b> (y_cg) : la bascule devient asymétrique — l'arête
+      du côté chargé perd sa marge. Les scénarios <code>enfant_seul_cote</code> et
+      <code>adulte_enfant</code> montrent qu'avec les réglages PAR DÉFAUT un CG décalé peut
+      basculer en manœuvre extrême ; <code>turn_hi = 0,35</code> protège aussi ces cas.</li>
+  <li><b>Limite du modèle</b> : des passagers qui se penchent déplacent le CG réel en dynamique
+      — c'est pourquoi les tests exigent une <b>marge</b> et pas seulement « ne bascule pas ».</li>
+ </ul>
+ <h3>Paramètres du scénario courant</h3>
+ <p style="color:#8b949e">Les valeurs <b>estimées</b> (R<sub>a</sub>, I<sub>z</sub>, h_cg, x_cg, frottements) sont à recaler avec des mesures réelles — voir <code>test_host/sim/vehicle.hpp</code>. Les autres (voie, empattement, réduction, roue) viennent du concept et de <code>hw::</code>.</p>
+ <table id="ptable"></table>
+</div>
+<script>
+'use strict';
+// ── Scène ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+scene.fog = new THREE.Fog(0x0d1117, 30, 90);
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 200);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x223311, 1.0));
+const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+sun.position.set(10, 20, 5);
+scene.add(sun);
+scene.add(new THREE.GridHelper(200, 200, 0x2f81f7, 0x21262d));
+
+// ── Kart (proportions du concept : voie 0,84, roues Ø0,254, museau, banquette) ──
+const kart = new THREE.Group();
+const mat = c => new THREE.MeshStandardMaterial({color:c});
+const floor = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.05, 0.62), mat(0xc9a066));
+floor.position.set(0.17, 0.15, 0);   // essieu à l'origine (repère LOCAL : museau vers −x)
+kart.add(floor);
+const nose = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.09, 0.09), mat(0x222222));
+nose.position.set(-0.2, 0.23, 0);    // batterie dans le museau
+kart.add(nose);
+const seat = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.8), mat(0xa0714f));
+seat.position.set(0.42, 0.24, 0);
+kart.add(seat);
+const back = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.36, 0.8), mat(0xa0714f));
+back.position.set(0.62, 0.42, 0);
+back.rotation.z = -0.14;
+kart.add(back);
+const estop = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 16), mat(0xdd2222));
+estop.position.set(0.66, 0.63, 0);
+kart.add(estop);
+const wheelGeo = new THREE.CylinderGeometry(0.127, 0.127, 0.07, 24);
+wheelGeo.rotateX(Math.PI/2);
+const wl = new THREE.Mesh(wheelGeo, mat(0x333333)); wl.position.set(0, 0.127, -0.42);
+const wr = new THREE.Mesh(wheelGeo, mat(0x333333)); wr.position.set(0, 0.127,  0.42);
+kart.add(wl, wr);
+const caster = new THREE.Mesh(new THREE.CylinderGeometry(0.127, 0.127, 0.05, 20).rotateX(Math.PI/2),
+                              mat(0x555555));
+caster.position.set(0.82, 0.127, 0);
+kart.add(caster);
+// Centre de masse : sphère + fil à plomb (position mise à jour depuis les paramètres du
+// scénario — repère LOCAL : l'arrière est vers +x avant le retournement du groupe).
+const cg = new THREE.Group();
+const cgBall = new THREE.Mesh(new THREE.SphereGeometry(0.055, 20, 14),
+  new THREE.MeshStandardMaterial({color:0xff2ea6, emissive:0x88185a}));
+cg.add(cgBall);
+const cgLineGeo = new THREE.BufferGeometry().setFromPoints(
+  [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -1, 0)]);
+cg.add(new THREE.Line(cgLineGeo, new THREE.LineDashedMaterial({color:0xff2ea6})));
+cg.position.set(0.40, 0.38, 0);   // défauts (écrasés par le méta-message du scénario)
+kart.add(cg);
+scene.add(kart);
+// Le groupe est construit museau vers −x ; on le retourne pour que l'AVANT du kart pointe
+// vers +x monde quand le cap h vaut 0 (repère de la simulation).
+kart.rotateY(Math.PI);
+
+// Traînée au sol
+const TRAIL_MAX = 4000;
+const trailPos = new Float32Array(TRAIL_MAX * 3);
+let trailN = 0;
+const trailGeo = new THREE.BufferGeometry();
+trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+trailGeo.setDrawRange(0, 0);
+scene.add(new THREE.Line(trailGeo, new THREE.LineBasicMaterial({color:0x58a6ff})));
+
+// ── État du flux ──
+const ST = ['IDLE','CALIBRATION','ARMÉ','DÉFAUT'];
+const FA = ['—','E-STOP','BATTERIE BASSE','NON CALIBRÉ','ENCODEUR BLOQUÉ','ENCODEUR INVERSÉ',
+            'ENCODEUR ABERRANT','ENCODEUR ABSENT'];
+const BRK = ['⚪ traction','🟠 frein dynamique','🟢 frein actif (PID)'];
+let atip = 5.0, vlim = 3.3, cur = null, es = null;
+
+// ── Graphiques (Chart.js vendorisé) ──
+function mkChart(id, series, ymin, ymax){
+  return new Chart(document.getElementById(id), {
+    type:'line',
+    data:{datasets:series.map(s=>({label:s.l, borderColor:s.c, borderDash:s.d||[],
+          data:[], pointRadius:0, borderWidth:1.6, tension:0}))},
+    options:{animation:false, responsive:true, parsing:false,
+      scales:{x:{type:'linear', ticks:{color:'#8b949e'}, grid:{color:'#21262d'}},
+              y:{min:ymin, max:ymax, ticks:{color:'#8b949e'}, grid:{color:'#21262d'}}},
+      plugins:{legend:{labels:{color:'#e6edf3', boxWidth:14}}}}});
+}
+let chV, chA, chO, chE, chP, lastChartUpd = 0;
+function initCharts(){
+  chV = mkChart('cv', [{l:'v', c:'#58a6ff'}, {l:'limite', c:'#8b949e', d:[5,4]}], -1, 4);
+  chA = mkChart('ca', [{l:'|a_lat|', c:'#d29922'}, {l:'a_tip (bascule)', c:'#f85149', d:[5,4]}], 0, 7);
+  chO = mkChart('co', [{l:'moteur G', c:'#3fb950'}, {l:'moteur D', c:'#ffa657'}], -1.1, 1.1);
+  chE = mkChart('ce', [{l:'G mesuré', c:'#3fb950'}, {l:'D mesuré', c:'#ffa657'},
+                       {l:'G réel', c:'#3fb950', d:[4,4]}, {l:'D réel', c:'#ffa657', d:[4,4]}], -150, 450);
+  chP = mkChart('cp', [{l:'virage stick', c:'#8cf', d:[4,4]}, {l:'virage effectif', c:'#58a6ff'},
+                       {l:'avance stick', c:'#f8c', d:[4,4]}, {l:'avance effective', c:'#ff2ea6'}], -1.15, 1.15);
+}
+function resetCharts(){
+  for (const ch of [chV, chA, chO, chE, chP]) ch.data.datasets.forEach(d => d.data = []);
+}
+function chartPush(m){
+  chV.data.datasets[0].data.push({x:m.t, y:m.v});
+  chV.data.datasets[1].data.push({x:m.t, y:vlim});
+  chA.data.datasets[0].data.push({x:m.t, y:Math.abs(m.alat)});
+  chA.data.datasets[1].data.push({x:m.t, y:atip});
+  chO.data.datasets[0].data.push({x:m.t, y:m.outl});
+  chO.data.datasets[1].data.push({x:m.t, y:m.outr});
+  chE.data.datasets[0].data.push({x:m.t, y:m.encl});
+  chE.data.datasets[1].data.push({x:m.t, y:m.encr});
+  chE.data.datasets[2].data.push({x:m.t, y:m.encl_vrai});
+  chE.data.datasets[3].data.push({x:m.t, y:m.encr_vrai});
+  chP.data.datasets[0].data.push({x:m.t, y:m.stickx});
+  chP.data.datasets[1].data.push({x:m.t, y:m.padx});
+  chP.data.datasets[2].data.push({x:m.t, y:m.sticky});
+  chP.data.datasets[3].data.push({x:m.t, y:m.pady});
+  const now = performance.now();
+  if (now - lastChartUpd > 250){
+    lastChartUpd = now;
+    for (const ch of [chV, chA, chO, chE, chP]) ch.update('none');
+  }
+}
+function toggleCharts(){
+  const el = document.getElementById('charts');
+  el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+}
+// Tableau des paramètres physiques (méta-message du simulateur : source de vérité).
+function fillParams(p){
+  const rows = Object.entries(p).map(([k, val]) => `<tr><td>${k}</td><td><b>${val}</b></td></tr>`);
+  rows.push(`<tr><td>a_tip (limite de bascule)</td><td><b>${atip.toFixed(2)} m/s²</b></td></tr>`);
+  document.getElementById('ptable').innerHTML = rows.join('');
+}
+
+function play(){
+  if (es) es.close();
+  trailN = 0; trailGeo.setDrawRange(0, 0); cur = null;
+  resetCharts();
+  document.getElementById('tipmsg').style.display = 'none';
+  document.getElementById('tipflash').style.display = 'none';
+  const name = document.getElementById('scen').value;
+  es = new EventSource('/stream?scenario=' + encodeURIComponent(name));
+  es.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.meta){
+      atip = m.atip;
+      vlim = m.vlim || 3.3;
+      document.getElementById('desc').textContent = m.desc;
+      if (m.params){
+        fillParams(m.params);
+        const p = m.params;
+        cg.position.set(p.xcg_m, p.hcg_m, -(p.ycg_m || 0));   // CG du scénario (y sim + = gauche)
+        cg.children[1].scale.y = p.hcg_m;                     // fil à plomb jusqu'au sol
+        document.getElementById('massinfo').innerHTML =
+          `⚖️ <b>${p.masse_totale_kg} kg</b> (kart ${p.masse_kart_kg} + passagers ${p.masse_passagers_kg})<br>` +
+          `<b>CG</b> x=${p.xcg_m.toFixed(2)} m derrière l'essieu · ` +
+          `y=${(p.ycg_m || 0).toFixed(2)} m ${p.ycg_m > 0.001 ? '(gauche)' : (p.ycg_m < -0.001 ? '(droite)' : '(centré)')} · ` +
+          `h=${p.hcg_m.toFixed(2)} m · bascule à ${m.atip.toFixed(1)} m/s²`;
+      }
+      chA.options.scales.y.max = Math.ceil(atip) + 2;
+      return;
+    }
+    cur = m;
+    chartPush(m);
+    if (trailN < TRAIL_MAX){
+      trailPos[trailN*3] = m.x; trailPos[trailN*3+1] = 0.02; trailPos[trailN*3+2] = m.y;
+      trailGeo.setDrawRange(0, ++trailN);
+      trailGeo.attributes.position.needsUpdate = true;
+    }
+  };
+  es.addEventListener('end', () => es.close());
+}
+
+// ── Rendu ──
+function animate(){
+  requestAnimationFrame(animate);
+  if (cur){
+    kart.position.set(cur.x, 0, cur.y);
+    kart.rotation.set(0, Math.PI - cur.h, 0);
+    // Roulis proportionnel à a_lat/a_tip ; au-delà de la limite → le kart se COUCHE.
+    const tipped = cur.margin <= 0;
+    const roll = tipped ? 0.5 * Math.sign(cur.alat || 1)
+                        : 0.16 * Math.max(-1, Math.min(1, cur.alat / atip));
+    kart.rotation.z = -Math.max(-0.6, Math.min(0.6, roll));
+    const spin = cur.v / 0.127;
+    wl.rotation.z -= spin / 60; wr.rotation.z -= spin / 60; caster.rotation.z -= spin / 60;
+
+    // Caméra de poursuite
+    const behind = new THREE.Vector3(-4.2 * Math.cos(cur.h), 2.4, -4.2 * Math.sin(cur.h));
+    camera.position.lerp(new THREE.Vector3(cur.x, 0, cur.y).add(behind), 0.06);
+    camera.lookAt(cur.x, 0.3, cur.y);
+
+    // HUD
+    document.getElementById('st').textContent = cur.t.toFixed(1);
+    document.getElementById('sv').textContent = cur.v.toFixed(2);
+    document.getElementById('sa').textContent = cur.alat.toFixed(2);
+    const pct = Math.max(0, Math.min(100, 100 * cur.margin / atip));
+    const bar = document.getElementById('marginbar');
+    bar.style.width = pct + '%';
+    bar.style.background = pct > 40 ? '#2ea043' : (pct > 15 ? '#d29922' : '#f85149');
+    const bs = document.getElementById('bstate');
+    bs.textContent = (ST[cur.state] || cur.state) + (cur.armed ? '' : ' · désarmé');
+    bs.className = 'badge ' + (cur.state === 2 ? 'ok' : (cur.state === 3 ? 'bad' : ''));
+    document.getElementById('bbrake').textContent = BRK[cur.brake] || cur.brake;
+    const bf = document.getElementById('bfault');
+    bf.style.display = cur.fault ? '' : 'none';
+    bf.textContent = FA[cur.fault] || ('défaut ' + cur.fault);
+    bf.className = 'badge bad';
+    document.getElementById('tipmsg').style.display = tipped ? 'block' : 'none';
+    document.getElementById('tipflash').style.display = tipped ? 'block' : 'none';
+  }
+  renderer.render(scene, camera);
+}
+
+initCharts();
+fetch('/scenarios').then(r => r.json()).then(list => {
+  const sel = document.getElementById('scen');
+  for (const s of list){
+    const o = document.createElement('option');
+    o.value = s.name;
+    o.textContent = s.name + ' — ' + s.desc;
+    sel.appendChild(o);
+  }
+  play();
+});
+animate();
+</script></body></html>
