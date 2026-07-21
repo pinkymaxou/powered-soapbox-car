@@ -1,6 +1,6 @@
-// ringbuffer.hpp — Buffer circulaire (header-only), réutilisable, type d'élément générique.
-// Conserve les CAP dernières valeurs ; copyTo() les linéarise (du plus ancien au plus
-// récent) — p. ex. pour l'encodage protobuf « bytes » de l'historique (T = uint8_t).
+// ringbuffer.hpp — Circular buffer (header-only), reusable, generic element type.
+// Keeps the last CAP values; copyTo() linearizes them (from oldest to most
+// recent) — e.g. for the protobuf "bytes" encoding of the history (T = uint8_t).
 #pragma once
 
 #include <cstdint>
@@ -22,8 +22,8 @@ public:
     int count() const { return m_count; }
     int capacity() const { return CAP; }
 
-    // Copie linéarisée (du plus ancien au plus récent) dans dst ; retourne le nb d'octets.
-    // Pour l'encodage protobuf « bytes » (1 octet/échantillon, zéro tas).
+    // Linearized copy (from oldest to most recent) into dst; returns the number of bytes.
+    // For the protobuf "bytes" encoding (1 byte/sample, zero heap).
     int copyTo(T* dst, int cap) const
     {
         const int n = (m_count < cap) ? m_count : cap;

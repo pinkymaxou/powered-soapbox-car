@@ -1,9 +1,9 @@
-// input.cpp — Backend d'entrée manette + calibration OBLIGATOIRE (persistée NVS).
-// Le backend Bluetooth (input_bp32.c, Bluepad32/BTstack) remplit l'état live via les hooks
-// inputbp_on_data()/inputbp_on_conn() ; l'appairage est piloté par inputbp_pair()/unpair().
+// input.cpp — Gamepad input backend + MANDATORY calibration (persisted to NVS).
+// The Bluetooth backend (input_bp32.c, Bluepad32/BTstack) fills the live state via the hooks
+// inputbp_on_data()/inputbp_on_conn(); pairing is driven by inputbp_pair()/unpair().
 //
-// Calibration : capture du centre (manche au repos) puis des extrêmes (sticks à fond) → échelle
-// par axe persistée. get() renvoie des axes calibrés [-1..1]. Un appairage EFFACE la calibration.
+// Calibration: capture of the center (stick at rest) then of the extremes (sticks fully deflected) → per-axis
+// scale persisted. get() returns calibrated axes [-1..1]. A pairing CLEARS the calibration.
 #include "input.hpp"
 
 #include <algorithm>
@@ -18,7 +18,7 @@
 
 static const char* TAG = "input";
 
-// Backend Bluetooth (input_bp32.c).
+// Bluetooth backend (input_bp32.c).
 extern "C" void inputbp_start(void);
 extern "C" void inputbp_pair(void);
 extern "C" void inputbp_unpair(void);
@@ -27,21 +27,21 @@ namespace
 {
 constexpr char NVS_NS[] = "pad";
 
-// État live (écrit par le backend BT, lu par la tâche de contrôle).
-std::atomic<int64_t> m_last_report_us{0};   // heartbeat : date du dernier rapport HID reçu
+// Live state (written by the BT backend, read by the control task).
+std::atomic<int64_t> m_last_report_us{0};   // heartbeat: timestamp of the last HID report received
 std::atomic<float> m_raw_x{0.f};
 std::atomic<float> m_raw_y{0.f};
 std::atomic<bool>  m_connected{false};
 std::atomic<bool>  m_estop{false};
-std::atomic<bool>  m_start{false};       // bouton START/Options manette (armement)
-std::atomic<uint32_t> m_buttons{0};      // masque boutons : boutons | (misc<<16) (affichage)
-std::atomic<float> m_zl{0.f};            // gâchette analogique gauche [0..1]
-std::atomic<float> m_zr{0.f};            // gâchette analogique droite [0..1]
-std::atomic<float> m_rx2{0.f};           // stick droit X [-1..1] (affichage)
-std::atomic<float> m_ry2{0.f};           // stick droit Y [-1..1] (affichage)
+std::atomic<bool>  m_start{false};       // gamepad START/Options button (arming)
+std::atomic<uint32_t> m_buttons{0};      // button mask: buttons | (misc<<16) (display)
+std::atomic<float> m_zl{0.f};            // left analog trigger [0..1]
+std::atomic<float> m_zr{0.f};            // right analog trigger [0..1]
+std::atomic<float> m_rx2{0.f};           // right stick X [-1..1] (display)
+std::atomic<float> m_ry2{0.f};           // right stick Y [-1..1] (display)
 std::atomic<bool>  m_pairing{false};
 
-// Requête de vibration (posée par n'importe quelle tâche, consommée par le thread BT).
+// Rumble request (posted by any task, consumed by the BT thread).
 std::atomic<bool>     m_rumble_pending{false};
 std::atomic<unsigned> m_rumble_strong{0};
 std::atomic<unsigned> m_rumble_weak{0};
@@ -49,16 +49,16 @@ std::atomic<unsigned> m_rumble_dur{0};
 std::atomic<int>   m_battery{-1};
 char               m_name[40] = "";
 
-// Calibration (centre + demi-amplitude par axe).
+// Calibration (center + half-amplitude per axis).
 std::atomic<bool>  m_calibrated{false};
 std::atomic<float> m_cx{0.f};
 std::atomic<float> m_cy{0.f};
 std::atomic<float> m_hx{1.f};
 std::atomic<float> m_hy{1.f};
 
-// Collecte des extrêmes pendant la calibration. Atomiques : écrits par la tâche BT
-// (inputbp_on_data) et lus/initialisés par la tâche web (calStart/calFinish).
-std::atomic<int>   m_cal_state{0};   // 0 = inactif, 1 = collecte
+// Collecting the extremes during calibration. Atomics: written by the BT task
+// (inputbp_on_data) and read/initialized by the web task (calStart/calFinish).
+std::atomic<int>   m_cal_state{0};   // 0 = idle, 1 = collecting
 std::atomic<float> m_min_x{0.f}, m_max_x{0.f}, m_min_y{0.f}, m_max_y{0.f};
 
 void calSave()
@@ -100,9 +100,9 @@ int64_t input::lastReportUs() { return m_last_report_us.load(); }
 
 namespace
 {
-// La calibration exige des DONNÉES fraîches de la manette (rapport HID < 250 ms, même
-// seuil que le heartbeat) : sans ça, calStart capturerait un centre à zéro (aucun rapport
-// jamais reçu) ou des valeurs périmées d'une connexion précédente.
+// Calibration requires FRESH DATA from the gamepad (HID report < 250 ms, same
+// threshold as the heartbeat): without it, calStart would capture a center at zero (no report
+// ever received) or stale values from a previous connection.
 bool padDataFresh()
 {
     return m_connected.load() &&
@@ -110,8 +110,8 @@ bool padDataFresh()
 }
 } // namespace
 
-// ── Hooks appelés par le backend BT (input_bp32.c) ──
-// Trame manette : axes normalisés ~[-1..1] + boutons (arrêt d'urgence, START, masque affichage).
+// ── Hooks called by the BT backend (input_bp32.c) ──
+// Gamepad frame: normalized axes ~[-1..1] + buttons (emergency stop, START, display mask).
 extern "C" void inputbp_on_data(float x, float y, int estop, int start, uint32_t buttons,
                                 float zl, float zr, float rx2, float ry2)
 {
@@ -125,7 +125,7 @@ extern "C" void inputbp_on_data(float x, float y, int estop, int start, uint32_t
     m_zr.store(zr);
     m_rx2.store(rx2);
     m_ry2.store(ry2);
-    if (1 == m_cal_state.load())   // collecte des extrêmes (seul écrivain ici)
+    if (1 == m_cal_state.load())   // collecting the extremes (sole writer here)
     {
         if (x < m_min_x.load()) m_min_x.store(x);
         if (x > m_max_x.load()) m_max_x.store(x);
@@ -134,21 +134,21 @@ extern "C" void inputbp_on_data(float x, float y, int estop, int start, uint32_t
     }
 }
 
-// État de connexion : appelé sur (dé)connexion et à chaque trame (batterie fraîche).
+// Connection state: called on (dis)connect and on every frame (fresh battery).
 extern "C" void inputbp_on_conn(int connected, const char* name, int batt)
 {
     if (0 == connected && 1 == m_cal_state.load())
     {
-        m_cal_state.store(0);   // manette perdue en pleine collecte → calibration annulée
-        ESP_LOGW(TAG, "Manette déconnectée pendant la calibration → annulée");
+        m_cal_state.store(0);   // gamepad lost mid-collection → calibration canceled
+        ESP_LOGW(TAG, "Gamepad disconnected during calibration → canceled");
     }
     m_connected.store(0 != connected);
     m_battery.store(batt);
     if (connected)
     {
-        m_pairing.store(false);   // appairage terminé une fois connecté
-        // Appelé à CHAQUE trame HID (batterie fraîche) : ne copier le nom que s'il change —
-        // évite 60 strncpy/s inutiles et la fenêtre de lecture d'un nom en cours d'écriture.
+        m_pairing.store(false);   // pairing done once connected
+        // Called on EVERY HID frame (fresh battery): only copy the name if it changes —
+        // avoids 60 useless strncpy/s and the window of reading a name being written.
         if (name && 0 != std::strcmp(m_name, name))
         {
             std::strncpy(m_name, name, sizeof(m_name) - 1);
@@ -166,10 +166,10 @@ void input::rumble(uint8_t strong, uint8_t weak, uint16_t dur_ms)
     m_rumble_strong.store(strong);
     m_rumble_weak.store(weak);
     m_rumble_dur.store(dur_ms);
-    m_rumble_pending.store(true);   // posé en dernier : le thread BT lira des champs cohérents
+    m_rumble_pending.store(true);   // posted last: the BT thread will read consistent fields
 }
 
-// Consommé par le thread BT (input_bp32.c) : renvoie 1 et les magnitudes si une vibration est en attente.
+// Consumed by the BT thread (input_bp32.c): returns 1 and the magnitudes if a rumble is pending.
 extern "C" int inputbp_take_rumble(uint8_t* strong, uint8_t* weak, uint16_t* dur)
 {
     if (!m_rumble_pending.exchange(false)) return 0;
@@ -182,9 +182,9 @@ extern "C" int inputbp_take_rumble(uint8_t* strong, uint8_t* weak, uint16_t* dur
 void input::init()
 {
     calLoad();
-    inputbp_start();   // démarre la tâche BTstack/Bluepad32 (cœur 0)
-    ESP_LOGI(TAG, "Entrée manette : backend Bluepad32 démarré. Calibré : %s",
-             m_calibrated.load() ? "oui" : "non");
+    inputbp_start();   // starts the BTstack/Bluepad32 task (core 0)
+    ESP_LOGI(TAG, "Gamepad input: Bluepad32 backend started. Calibrated: %s",
+             m_calibrated.load() ? "yes" : "no");
 }
 
 input::State input::get()
@@ -196,14 +196,14 @@ input::State input::get()
     s.buttons = m_buttons.load();
     s.zl = m_zl.load();
     s.zr = m_zr.load();
-    s.rx2 = std::clamp(m_rx2.load(), -1.f, 1.f);   // stick droit (affichage seulement)
+    s.rx2 = std::clamp(m_rx2.load(), -1.f, 1.f);   // right stick (display only)
     s.ry2 = std::clamp(m_ry2.load(), -1.f, 1.f);
-    // Stick BRUT (toujours fourni, même non calibré) pour l'affichage temps réel.
+    // RAW stick (always provided, even uncalibrated) for the real-time display.
     s.rx = std::clamp(m_raw_x.load(), -1.f, 1.f);
     s.ry = std::clamp(m_raw_y.load(), -1.f, 1.f);
     if (!m_calibrated.load())
     {
-        return s;   // axes CALIBRÉS à 0 tant que non calibré (le contrôleur refuse de rouler)
+        return s;   // CALIBRATED axes at 0 while not calibrated (the controller refuses to run)
     }
     const float hx = m_hx.load(), hy = m_hy.load();
     s.x = (hx > 0.05f) ? (m_raw_x.load() - m_cx.load()) / hx : 0.f;
@@ -211,8 +211,8 @@ input::State input::get()
     s.x = std::clamp(s.x, -1.f, 1.f);
     s.y = std::clamp(s.y, -1.f, 1.f);
 
-    // Compensation cercle→carré (voir control_math.hpp) : rend les coins du carré atteignables
-    // → avance ET virage à fond simultanément.
+    // Circle→square compensation (see control_math.hpp): makes the square's corners reachable
+    // → full forward AND full steering simultaneously.
     ctl::squareMap(s.x, s.y);
     return s;
 }
@@ -220,9 +220,9 @@ input::State input::get()
 void input::startPairing()
 {
     m_pairing.store(true);
-    calClear();        // une nouvelle manette = calibration à refaire
-    inputbp_pair();    // ouvre le scan/appairage BT
-    ESP_LOGI(TAG, "Appairage demandé → calibration effacée");
+    calClear();        // a new gamepad = calibration to redo
+    inputbp_pair();    // opens the BT scan/pairing
+    ESP_LOGI(TAG, "Pairing requested → calibration cleared");
 }
 
 void input::unpair()
@@ -232,23 +232,23 @@ void input::unpair()
     m_name[0] = '\0';
     m_battery.store(-1);
     calClear();
-    inputbp_unpair();   // déconnecte + efface les clés BT
-    ESP_LOGI(TAG, "Désappairage + calibration effacée");
+    inputbp_unpair();   // disconnects + clears the BT keys
+    ESP_LOGI(TAG, "Unpairing + calibration cleared");
 }
 
 void input::calStart()
 {
     if (!padDataFresh())
     {
-        ESP_LOGW(TAG, "Calibration refusée : aucune donnée récente de la manette");
-        return;   // calstate reste 0 → la page reste à l'état « repos »
+        ESP_LOGW(TAG, "Calibration refused: no recent data from the gamepad");
+        return;   // calstate stays 0 → the page stays in the "rest" state
     }
     const float x = m_raw_x.load(), y = m_raw_y.load();
     m_cx.store(x); m_cy.store(y);
     m_min_x = m_max_x = x;
     m_min_y = m_max_y = y;
     m_cal_state.store(1);
-    ESP_LOGI(TAG, "Calibration : centre capturé, bouger les sticks à fond");
+    ESP_LOGI(TAG, "Calibration: center captured, move the sticks fully");
 }
 
 void input::calFinish()
@@ -260,9 +260,9 @@ void input::calFinish()
     m_cal_state.store(0);
     if (!padDataFresh())
     {
-        ESP_LOGW(TAG, "Calibration rejetée : la manette a cessé d'émettre pendant la collecte");
+        ESP_LOGW(TAG, "Calibration rejected: the gamepad stopped emitting during collection");
     }
-    else if (hx > 0.2f && hy > 0.2f)   // amplitude suffisante
+    else if (hx > 0.2f && hy > 0.2f)   // sufficient amplitude
     {
         m_hx.store(hx); m_hy.store(hy);
         m_calibrated.store(true);
@@ -271,7 +271,7 @@ void input::calFinish()
     }
     else
     {
-        ESP_LOGW(TAG, "Calibration invalide (amplitude trop faible) → ignorée");
+        ESP_LOGW(TAG, "Invalid calibration (amplitude too small) → ignored");
     }
 }
 

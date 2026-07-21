@@ -1,6 +1,6 @@
-// pinout.hpp — Brochage matériel (fixe). Variante EXPÉRIMENTALE : tricycle à entraînement
-// différentiel — 2 roues AVANT motrices indépendantes + 1 roulette arrière folle.
-// Pilotage par manette Bluetooth (aucune entrée pédale). ESP-IDF 6.1 / C++.
+// pinout.hpp — Hardware pinout (fixed). EXPERIMENTAL variant: differential-drive
+// tricycle — 2 independent driven FRONT wheels + 1 free rear caster.
+// Driven by Bluetooth gamepad (no pedal input). ESP-IDF 6.1 / C++.
 #pragma once
 
 #include "driver/gpio.h"
@@ -8,63 +8,63 @@
 namespace pins
 {
 
-// Sorties moteur (driver double canal : PWM + DIR par canal) — un moteur par roue avant.
-constexpr gpio_num_t PWM_L = GPIO_NUM_25;   // roue avant GAUCHE
+// Motor outputs (dual-channel driver: PWM + DIR per channel) — one motor per front wheel.
+constexpr gpio_num_t PWM_L = GPIO_NUM_25;   // front LEFT wheel
 constexpr gpio_num_t DIR_L = GPIO_NUM_26;
-constexpr gpio_num_t PWM_R = GPIO_NUM_32;   // roue avant DROITE
+constexpr gpio_num_t PWM_R = GPIO_NUM_32;   // front RIGHT wheel
 constexpr gpio_num_t DIR_R = GPIO_NUM_33;
 
-// Bouton d'armement (momentané, pull-up interne, actif bas). Pilotage = manette (pas de pédale).
+// Arming button (momentary, internal pull-up, active low). Control = gamepad (no pedal).
 constexpr gpio_num_t START_BTN = GPIO_NUM_16;
 
-// Maintien d'alimentation (latch). Commande ACTIVE BASSE (voir doc : opto + MOSFET low-side).
-constexpr gpio_num_t POWER_HOLD = GPIO_NUM_13;  // BAS = système maintenu, HAUT = coupe
+// Power latch. ACTIVE LOW command (see doc: opto + low-side MOSFET).
+constexpr gpio_num_t POWER_HOLD = GPIO_NUM_13;  // LOW = system held, HIGH = cut
 
-// ───────────────────────── Bus I2C (deux bus indépendants) ─────────────────────────
-// Toutes les mesures analogiques passent par l'ADC externe ADS1115 (16 bits) au lieu de
-// l'ADC interne de l'ESP32 (plus précis, et l'ADC2 entrait en conflit avec le Wi-Fi).
-// Bus 0 partagé : AS5600 roue gauche (0x36) + ADS1115 (0x48) — adresses distinctes, OK.
-constexpr gpio_num_t I2C0_SDA = GPIO_NUM_18;   // bus 0 → AS5600 roue GAUCHE (0x36) + ADS1115 (0x48)
+// ───────────────────────── I2C buses (two independent buses) ─────────────────────────
+// All analog measurements go through the external ADS1115 ADC (16 bits) instead of
+// the ESP32's internal ADC (more precise, and ADC2 conflicted with Wi-Fi).
+// Shared bus 0: left-wheel AS5600 (0x36) + ADS1115 (0x48) — distinct addresses, OK.
+constexpr gpio_num_t I2C0_SDA = GPIO_NUM_18;   // bus 0 → LEFT wheel AS5600 (0x36) + ADS1115 (0x48)
 constexpr gpio_num_t I2C0_SCL = GPIO_NUM_19;
-constexpr gpio_num_t I2C1_SDA = GPIO_NUM_27;   // bus 1 → AS5600 roue DROITE (0x36)
+constexpr gpio_num_t I2C1_SDA = GPIO_NUM_27;   // bus 1 → RIGHT wheel AS5600 (0x36)
 constexpr gpio_num_t I2C1_SCL = GPIO_NUM_14;
-// 3,3 V natif (aucun level-shift) ; pull-ups 4,7 kΩ par paire SDA/SCL.
+// Native 3.3 V (no level-shift); 4.7 kΩ pull-ups per SDA/SCL pair.
 
-// ───────────────────── Entrées analogiques (canaux ADS1115, A0..A3) ─────────────────────
-// ADS1115 alimenté en 3,3 V (⇒ AIN_max = 3,3 V). Single-ended par rapport à GND.
+// ───────────────────── Analog inputs (ADS1115 channels, A0..A3) ─────────────────────
+// ADS1115 powered at 3.3 V (⇒ AIN_max = 3.3 V). Single-ended with respect to GND.
 namespace ads
 {
-constexpr uint8_t VBAT = 0;   // A0 : tension batterie via pont diviseur 100k/15k (suivi en continu)
-// ── Réserve : joystick physique analogique (FUTUR, non câblé/non utilisé) ──
-// Le pilotage actuel est 100 % manette Bluetooth ; on réserve 2 voies de l'ADS1115 pour
-// brancher plus tard un joystick X/Y derrière la même abstraction `input` (lecture single-shot).
-constexpr uint8_t JOY_X = 1;  // A1 — virage  (futur)
-constexpr uint8_t JOY_Y = 2;  // A2 — avance  (futur)
-// A3 : libre.
+constexpr uint8_t VBAT = 0;   // A0: battery voltage via 100k/15k voltage divider (tracked continuously)
+// ── Reserved: analog physical joystick (FUTURE, not wired/not used) ──
+// Current control is 100% Bluetooth gamepad; we reserve 2 ADS1115 channels to
+// later connect an X/Y joystick behind the same `input` abstraction (single-shot reading).
+constexpr uint8_t JOY_X = 1;  // A1 — steering (future)
+constexpr uint8_t JOY_Y = 2;  // A2 — forward  (future)
+// A3: free.
 } // namespace ads
 
-// Sorties d'état
-constexpr gpio_num_t LED    = GPIO_NUM_2;    // LED carte
-constexpr gpio_num_t WS2812 = GPIO_NUM_17;   // ruban d'état
+// Status outputs
+constexpr gpio_num_t LED    = GPIO_NUM_2;    // board LED
+constexpr gpio_num_t WS2812 = GPIO_NUM_17;   // status strip
 
-// Niveaux actifs
-constexpr int BTN_ACTIVE = 0;   // bouton pressé = niveau bas
+// Active levels
+constexpr int BTN_ACTIVE = 0;   // button pressed = low level
 
-// ───── Réserve : encodeurs incrémentaux en quadrature AMT103-V (FUTUR, non câblé) ─────
-// « Au cas où » : alternative/complément aux AS5600 (un encodeur par roue avant). Sorties
-// CMOS push-pull A/B (+ index X en option) ; décodage matériel via le périphérique PCNT.
-// ⚠️ Alimentation : VDD min ~3,6 V → sortie haute ≈ VDD−0,8 ≈ 2,8 V, lisible par l'ESP32
-//    SANS level-shift. À 5 V la sortie monte à ~4,2 V → diviseur/level-shift OBLIGATOIRE.
-// Broches INPUT-ONLY (34/35/36/39) : idéales en entrée (signaux pilotés, aucun pull-up requis).
+// ───── Reserved: AMT103-V incremental quadrature encoders (FUTURE, not wired) ─────
+// "Just in case": alternative/complement to the AS5600 (one encoder per front wheel). CMOS
+// push-pull A/B outputs (+ optional X index); hardware decoding via the PCNT peripheral.
+// ⚠️ Power: VDD min ~3.6 V → high output ≈ VDD−0.8 ≈ 2.8 V, readable by the ESP32
+//    WITHOUT level-shift. At 5 V the output rises to ~4.2 V → divider/level-shift MANDATORY.
+// INPUT-ONLY pins (34/35/36/39): ideal as inputs (driven signals, no pull-up required).
 namespace future
 {
-constexpr gpio_num_t ENC_L_A = GPIO_NUM_34;   // encodeur roue GAUCHE — canal A
-constexpr gpio_num_t ENC_L_B = GPIO_NUM_35;   // encodeur roue GAUCHE — canal B
-constexpr gpio_num_t ENC_R_A = GPIO_NUM_36;   // encodeur roue DROITE — canal A
-constexpr gpio_num_t ENC_R_B = GPIO_NUM_39;   // encodeur roue DROITE — canal B
-// Index (X, 1 impulsion/tour) optionnel : à câbler sur 22/23 si besoin plus tard.
+constexpr gpio_num_t ENC_L_A = GPIO_NUM_34;   // LEFT wheel encoder — channel A
+constexpr gpio_num_t ENC_L_B = GPIO_NUM_35;   // LEFT wheel encoder — channel B
+constexpr gpio_num_t ENC_R_A = GPIO_NUM_36;   // RIGHT wheel encoder — channel A
+constexpr gpio_num_t ENC_R_B = GPIO_NUM_39;   // RIGHT wheel encoder — channel B
+// Index (X, 1 pulse/turn) optional: wire to 22/23 if needed later.
 } // namespace future
 
-// Autres GPIO libres : 4, 21, 22, 23.
+// Other free GPIOs: 4, 21, 22, 23.
 
 } // namespace pins

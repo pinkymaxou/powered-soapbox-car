@@ -1,4 +1,4 @@
-// config.cpp — Table PARAMS (pointeur-vers-membre) + persistance NVS + accès thread-safe.
+// config.cpp — PARAMS table (pointer-to-member) + NVS persistence + thread-safe access.
 #include "config.hpp"
 
 #include <algorithm>
@@ -13,8 +13,8 @@ SemaphoreHandle_t g_cfg_mtx = nullptr;
 
 namespace
 {
-KartStatus        g_status;               // état partagé — accès UNIQUEMENT via les fonctions
-SemaphoreHandle_t g_status_mtx = nullptr; // créé par configInit()
+KartStatus        g_status;               // shared state — access ONLY via the functions
+SemaphoreHandle_t g_status_mtx = nullptr; // created by configInit()
 }
 
 KartStatus statusSnapshot()
@@ -58,8 +58,8 @@ bool readFloat(nvs_handle_t handle, const char* key, float& out)
     }
     return false;
 }
-// N'écrit la clé QUE si la valeur stockée diffère : chaque écriture flash suspend le cache
-// (donc la boucle de contrôle, qui s'exécute depuis la flash) et use la NVS pour rien.
+// Writes the key ONLY if the stored value differs: each flash write suspends the cache
+// (thus the control loop, which runs from flash) and wears the NVS for nothing.
 void writeFloat(nvs_handle_t handle, const char* key, float value)
 {
     float cur;
@@ -74,7 +74,7 @@ void configInit()
     g_status_mtx = xSemaphoreCreateMutex();
     if (!configLoad())
     {
-        ESP_LOGW(TAG, "Aucun réglage en NVS → valeurs par défaut");
+        ESP_LOGW(TAG, "No settings in NVS → default values");
         g_cfg.setDefaults();
         configSave();
     }
@@ -98,7 +98,7 @@ bool configLoad()
     nvs_close(handle);
     cfg.clampAll();
     g_cfg = cfg;
-    if (any) ESP_LOGI(TAG, "Réglages chargés depuis la NVS");
+    if (any) ESP_LOGI(TAG, "Settings loaded from NVS");
     return any;
 }
 
@@ -115,7 +115,7 @@ bool configSave()
     }
     const esp_err_t err = nvs_commit(handle);
     nvs_close(handle);
-    if (ESP_OK == err) ESP_LOGI(TAG, "Réglages sauvegardés");
+    if (ESP_OK == err) ESP_LOGI(TAG, "Settings saved");
     return ESP_OK == err;
 }
 
@@ -129,7 +129,7 @@ KartConfig configSnapshot()
 
 namespace
 {
-std::atomic<bool> m_save_pending{false};   // sauvegarde repoussée (kart armé au moment du set)
+std::atomic<bool> m_save_pending{false};   // deferred save (kart armed at the time of the set)
 }
 
 void configUpdate(const KartConfig& cfg, bool persist)
@@ -139,23 +139,23 @@ void configUpdate(const KartConfig& cfg, bool persist)
     g_cfg.clampAll();
     if (persist)
     {
-        // Kart ARMÉ → différer l'écriture NVS : les écritures flash suspendent le cache et
-        // gèlent la boucle de contrôle plusieurs dizaines de ms — pas pendant la conduite.
-        // Les valeurs sont déjà ACTIVES (g_cfg) ; la persistance suivra au désarmement.
+        // Kart ARMED → defer the NVS write: flash writes suspend the cache and
+        // freeze the control loop for several tens of ms — not while driving.
+        // The values are already ACTIVE (g_cfg); persistence will follow on disarm.
         if (statusSnapshot().m_arming) m_save_pending.store(true);
         else                          configSave();
     }
     xSemaphoreGive(g_cfg_mtx);
 }
 
-// Appelée par la boucle de contrôle au passage armé → désarmé.
+// Called by the control loop on the armed → disarmed transition.
 void configFlushPending()
 {
     if (!m_save_pending.exchange(false)) return;
     xSemaphoreTake(g_cfg_mtx, portMAX_DELAY);
     configSave();
     xSemaphoreGive(g_cfg_mtx);
-    ESP_LOGI(TAG, "Réglages différés persistés (kart désarmé)");
+    ESP_LOGI(TAG, "Deferred settings persisted (kart disarmed)");
 }
 
 bool configGetWifi(char* ssid, size_t ssid_size, char* pass, size_t pass_size, bool* enabled)
@@ -188,5 +188,5 @@ void configSetWifi(const char* ssid, const char* pass, bool enabled)
     nvs_set_u8(handle, "sta_en", enabled ? 1 : 0);
     nvs_commit(handle);
     nvs_close(handle);
-    ESP_LOGI(TAG, "Wi-Fi station %s (SSID=%s)", enabled ? "activé" : "désactivé", ssid ? ssid : "");
+    ESP_LOGI(TAG, "Wi-Fi station %s (SSID=%s)", enabled ? "enabled" : "disabled", ssid ? ssid : "");
 }

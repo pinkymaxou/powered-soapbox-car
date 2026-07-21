@@ -1,193 +1,193 @@
-# Réducteur 1:16 — identification du pignon moteur et conception du train
+# 1:16 gearbox — motor pinion identification and gear train design
 
-## Pignon moteur (mesuré)
+## Motor pinion (measured)
 
-| Paramètre | Valeur | Source |
+| Parameter | Value | Source |
 |---|---|---|
-| Nombre de dents `z` | **16** | compté |
-| Ø extérieur `dₐ` | **19 mm** | pied à coulisse (z pair → mesure directe fiable) |
-| Épaisseur de denture | **≈ 1/4″ (6,35 mm)** | mesuré — limite la largeur UTILE de l'étage 1 |
-| Module apparent | `m = dₐ/(z+2) = 19/18 ≈ 1,056` | calcul |
-| **Standard identifié** | **24 DP** (diametral pitch impérial) → `m = 25,4/24 = 1,058` ; `dₐ = 18/24″ = 0,750″ = 19,05 mm` ✅ | déduction |
-| Angle de pression | 20° (à confirmer à l'engrènement ; 14,5° possible sur vieilles dentures impériales) | hypothèse |
+| Number of teeth `z` | **16** | counted |
+| Outside Ø `dₐ` | **19 mm** | caliper (even z → reliable direct measurement) |
+| Tooth face width | **≈ 1/4″ (6.35 mm)** | measured — limits the USEFUL width of stage 1 |
+| Apparent module | `m = dₐ/(z+2) = 19/18 ≈ 1.056` | calculation |
+| **Identified standard** | **24 DP** (imperial diametral pitch) → `m = 25.4/24 = 1.058`; `dₐ = 18/24″ = 0.750″ = 19.05 mm` ✅ | deduction |
+| Pressure angle | 20° (to confirm at meshing; 14.5° possible on old imperial gear teeth) | assumption |
 
-**Variante à écarter/confirmer par test** : module 1 métrique avec déport `x = +0,5`
-(`dₐ = m·(z+2+2x) = 19 mm` aussi). Départage : pas apparent `p = π·m` →
-**24 DP : 3,33 mm** vs module 1 : 3,14 mm ; ou imprimer un pignon d'essai 16T/24 DP
-et vérifier l'engrènement dent-dans-dent avec le pignon moteur.
+**Variant to rule out/confirm by test**: metric module 1 with profile shift `x = +0.5`
+(`dₐ = m·(z+2+2x) = 19 mm` too). Tie-breaker: apparent pitch `p = π·m` →
+**24 DP: 3.33 mm** vs module 1: 3.14 mm; or print a 16T/24 DP test pinion
+and check the tooth-in-tooth meshing with the motor pinion.
 
-## ⭐ RÉVISION (retenue) : boîte 1:12,5 (16→80, 32→80) + poulies 25T→32T = **1:16,0 pile**
+## ⭐ REVISION (chosen): 1:12.5 gearbox (16→80, 32→80) + 25T→32T pulleys = **exactly 1:16.0**
 
-| Engrènement | Rapport | Entraxe | Pièces |
+| Mesh | Ratio | Center distance | Parts |
 |---|---|---|---|
-| **16T moteur → 80T** | 5:1 | `96/48` = 2,0000″ = **50,80 mm** | 80T : Øp 84,7, Ø ext. **86,8 mm** |
-| **32T → 80T (sortie)** | 2,5:1 | `112/48` = 2,3333″ = **59,27 mm** | 32T solidaire de la 1ʳᵉ 80T (pignon composé) |
-| **Poulies 25T → 32T** | 1,28:1 | — | 25 et 32 **premiers entre eux** (usure répartie) |
+| **16T motor → 80T** | 5:1 | `96/48` = 2.0000″ = **50.80 mm** | 80T: pitch Ø 84.7, outside Ø **86.8 mm** |
+| **32T → 80T (output)** | 2.5:1 | `112/48` = 2.3333″ = **59.27 mm** | 32T integral with the 1st 80T (compound gear) |
+| **25T → 32T pulleys** | 1.28:1 | — | 25 and 32 **coprime** (wear spread out) |
 
-- **Total : 12,5 × 1,28 = 16,000** — vitesse ~3,2 m/s @ PWM 50 % (roue 10″), inchangée.
-- ⚠️ **Efforts en hausse à l'étage 2** : couple intermédiaire ×5 (1,8 N·m) → **Ft ≈ 106 N** sur
-  la 32T. À 20 mm d'épaisseur → ~21 MPa (limite ASA) : **passer l'étage 2 à 25 mm** (~17 MPa).
-- Tension de courroie plus élevée qu'avec les grandes poulies (~190 N au couple max sur une
-  25T HTD 5M) — toujours confortable pour une courroie de 15 mm.
-- Firmware : `GEAR_RATIO = 1,28` (aimant en sortie de boîte). Alternatives calculées :
-  25→34 = 1:17,0 ; 30→42 = 1:17,5 ; 25→36 = 1:18,0.
+- **Total: 12.5 × 1.28 = 16.000** — speed ~3.2 m/s @ 50% PWM (10″ wheel), unchanged.
+- ⚠️ **Higher loads at stage 2**: intermediate torque ×5 (1.8 N·m) → **Ft ≈ 106 N** on
+  the 32T. At 20 mm thickness → ~21 MPa (ASA limit): **increase stage 2 to 25 mm** (~17 MPa).
+- Higher belt tension than with the large pulleys (~190 N at max torque on a
+  25T HTD 5M) — still comfortable for a 15 mm belt.
+- Firmware: `GEAR_RATIO = 1.28` (magnet at the gearbox output). Calculated alternatives:
+  25→34 = 1:17.0; 30→42 = 1:17.5; 25→36 = 1:18.0.
 
-![Schéma du réducteur](schematics/gearbox.png)
+![Gearbox schematic](schematics/gearbox.png)
 
-> Régénérable : `. .venv-schem/bin/activate && python doc/schematics/gearbox.py`
-> (vue en plan aux entraxes réels + coupe axiale de l'empilement).
+> Regenerable: `. .venv-schem/bin/activate && python doc/schematics/gearbox.py`
+> (plan view at the real center distances + axial section of the stack).
 
-**Modèle 3D paramétrique** : [`doc/cad/gearbox.scad`](cad/gearbox.scad) (OpenSCAD, autonome —
-générateur de denture en développante inclus, cotes de la révision en paramètres).
-Sélecteur `part` : `assembly` / `compound` (80T+32T) / `output` / `back` / `front` /
-`pinion_test` (pignon d'essai 16T pour valider le 24 DP) → export STL direct.
+**Parametric 3D model**: [`doc/cad/gearbox.scad`](cad/gearbox.scad) (OpenSCAD, standalone —
+involute gear-tooth generator included, revision dimensions as parameters).
+`part` selector: `assembly` / `compound` (80T+32T) / `output` / `back` / `front` /
+`pinion_test` (16T test pinion to validate the 24 DP) → direct STL export.
 
-![Rendu OpenSCAD](cad/gearbox_scad.png)
+![OpenSCAD render](cad/gearbox_scad.png)
 
 
 ---
 
-## Itération précédente (référence) : boîte 1:8 imprimée + courroie 1:2 vers la roue (= 1:16)
+## Previous iteration (reference): printed 1:8 gearbox + 1:2 belt to the wheel (= 1:16)
 
-Même réduction totale (~3,2 m/s en roue 10″), mais le **dernier étage — le plus chargé — devient la
-courroie** (encaisse les chocs, silencieuse, tolérante à l'alignement) : la boîte ne voit
-plus que ~2,9 N·m en sortie au lieu de ~5,8 N·m.
+Same total reduction (~3.2 m/s on a 10″ wheel), but the **last stage — the most loaded — becomes the
+belt** (absorbs shocks, quiet, tolerant of alignment): the gearbox now sees
+only ~2.9 N·m at the output instead of ~5.8 N·m.
 
-**Boîte 1:8 retenue — tout en 24 DP** (réutilise le dessin de la 64T) :
+**Chosen 1:8 gearbox — all in 24 DP** (reuses the 64T design):
 
-| Engrènement | Rapport | Entraxe | Pièces |
+| Mesh | Ratio | Center distance | Parts |
 |---|---|---|---|
-| **16T moteur → 64T** | 4:1 | `80/48` = 1,6667″ = **42,33 mm** | 64T imprimée (Ø ext. 69,9 mm), ép. 10 mm — largeur UTILE limitée au pignon moteur (6,35 mm) → ≈15 MPa, OK ; les 10 mm donnent ±1,8 mm de tolérance d'alignement axial |
-| **32T → 64T (sortie)** | 2:1 | `96/48` = 2,0000″ = **50,80 mm** | 32T **solidaire de la 1ʳᵉ 64T** (pignon composé) ; 64T de sortie identique à la 1ʳᵉ |
+| **16T motor → 64T** | 4:1 | `80/48` = 1.6667″ = **42.33 mm** | printed 64T (outside Ø 69.9 mm), 10 mm thick — USEFUL width limited by the motor pinion (6.35 mm) → ≈15 MPa, OK; the 10 mm give ±1.8 mm of axial alignment tolerance |
+| **32T → 64T (output)** | 2:1 | `96/48` = 2.0000″ = **50.80 mm** | 32T **integral with the 1st 64T** (compound gear); output 64T identical to the 1st |
 
-- La **32T** (Ø ext. 36,0 mm) est collée/fusionnée à la 64T de l'étage 1 → un seul pignon
-  composé sur l'arbre intermédiaire ; la sortie de boîte porte la 2ᵉ 64T + la poulie.
-- **Compatibilité tourillon Ø25** (roulements 25×37) : Ø de pied 32T = **31,2 mm** →
-  OK **uniquement en tourillon imprimé d'une pièce** (monolithique). ⚠️ Ne PAS aléser la 32T
-  à 25 pour un axe traversant (3 mm de paroi sous les dents, pas de place pour une clavette).
-  Côté sortie, aucun souci (pied 64T = 65,1 mm).
-- **Assemblage des flasques/tourillons : 3 vis sur cercle de perçage + pilote central**
-  (retenu) : les 3 vis précompriment les couches (anti-délaminage FDM) et transmettent le
-  couple (~30 N/vis au rayon ~15 mm — très large) ; le **perçage central sert de pilote
-  d'alignement** : ajustement serré (+0,05/+0,1) et **≥ 5 mm d'engagement** pour garantir
-  concentricité ET perpendicularité (un voilage = engrènement irrégulier 1×/tour). Têtes et
-  écrous en lamages/poches hex + rondelles, nylstop, resserrer après rodage (fluage) ; vérifier
-  que rien ne dépasse dans le plan de denture voisin (zone de chevauchement des deux 64T).
-- **Épaisseurs (calcul Lewis, τ moteur 0,36 N·m, driver limité 20 A, ASA admissible 15–20 MPa,
-  facteurs vitesse + à-coups du frein par plugging inclus)** :
-  | Engrenage | Épaisseur | Contrainte au pic |
+- The **32T** (outside Ø 36.0 mm) is glued/fused to the stage-1 64T → a single compound
+  gear on the intermediate shaft; the gearbox output carries the 2nd 64T + the pulley.
+- **Ø25 journal compatibility** (25×37 bearings): 32T root Ø = **31.2 mm** →
+  OK **only as a one-piece printed journal** (monolithic). ⚠️ Do NOT bore the 32T
+  to 25 for a through-axle (3 mm of wall under the teeth, no room for a key).
+  On the output side, no problem (64T root = 65.1 mm).
+- **Flange/journal assembly: 3 screws on a bolt circle + central pilot**
+  (chosen): the 3 screws precompress the layers (FDM anti-delamination) and transmit the
+  torque (~30 N/screw at ~15 mm radius — very generous); the **central bore acts as an alignment
+  pilot**: tight fit (+0.05/+0.1) and **≥ 5 mm of engagement** to guarantee
+  concentricity AND perpendicularity (any warp = irregular meshing once/rev). Heads and
+  nuts in counterbores/hex pockets + washers, nylock, retighten after break-in (creep); check
+  that nothing protrudes into the adjacent gear-tooth plane (the overlap zone of the two 64T).
+- **Thicknesses (Lewis calculation, motor τ 0.36 N·m, driver limited to 20 A, ASA allowable 15–20 MPa,
+  velocity factors + plugging-brake jolts included)**:
+  | Gear | Thickness | Peak stress |
   |---|---|---|
-  | 16T moteur (métal) | 6,35 mm (imposé) | — (fixe la largeur utile étage 1) |
-  | 64T étage 1 | **10 mm** (12 si marge d'alignement souhaitée) | ~18–20 MPa sur 6,35 utiles — l'épaissir ne change rien |
+  | 16T motor (metal) | 6.35 mm (imposed) | — (sets the useful width of stage 1) |
+  | 64T stage 1 | **10 mm** (12 if alignment margin desired) | ~18–20 MPa over the 6.35 useful — thickening it changes nothing |
   | 32T | **20 mm** | ~16 MPa (Ft ≈ 80 N) |
-  | 64T sortie | **20 mm minimum** (22 = marge d'alignement) | ~13 MPa ; ⚠️ largeur utile étage 2 = min(32T, 64T) — à 15 mm la 32T remonte à ~21 MPa |
-- Encombrement moteur→sortie : 42,33 + 50,80 ≈ **93 mm** (axes repliables en angle).
-- **Rodage & lubrification** : (1) rodage **à sec** 10–15 min à vide, basse vitesse — les
-  crêtes de couches se polissent, la poussière tombe (graisser trop tôt = pâte abrasive) ;
-  (2) **nettoyer** la poussière ; (3) **fine couche** de graisse **PTFE ou silicone** sur les
-  flancs de dents (pas de bain ; lithium toléré, **jamais** de dégrippant/solvant sur l'ASA) ;
-  (4) après quelques heures : resserrer les vis des flasques (fluage), contrôler l'usure.
-  Roulements 6805 graissés à vie ; **aucune graisse côté courroie**.
-- **Carter en 2 parties** : coque principale + **plaque dévissable** (insertion des engrenages
-  puis fermeture). Impératifs plaque : **2 pions de centrage** (les vis seules ont du jeu →
-  l'entraxe doit répéter à ~0,1 mm), logements de roulements **épaulés** (captifs plaque
-  vissée), épaisseur ≥ 6–8 mm ou nervurée, inserts filetés à chaud côté coque.
-- **Matériau : ASA** (retenu si l'impression le permet) — buse 240–260 °C, plateau 90–110 °C,
-  **caisson quasi indispensable**, ventiler (styrène), **retrait ~0,4–0,7 %** → gabarit d'essai
-  pour caler les cotes (logements Ø37, tourillons Ø24,9, dentures).
-- **Comparatif matériaux** (critère décisif : température — frottement + carter fermé + été) :
-  | | Tg | Admissible fatigue à chaud | Verdict engrenages |
+  | 64T output | **20 mm minimum** (22 = alignment margin) | ~13 MPa; ⚠️ useful width of stage 2 = min(32T, 64T) — at 15 mm the 32T rises back to ~21 MPa |
+- Motor→output footprint: 42.33 + 50.80 ≈ **93 mm** (axes foldable at an angle).
+- **Break-in & lubrication**: (1) **dry** break-in 10–15 min unloaded, low speed — the
+  layer ridges polish themselves, the dust falls off (greasing too early = abrasive paste);
+  (2) **clean** the dust; (3) **thin layer** of **PTFE or silicone** grease on the
+  tooth flanks (no bath; lithium tolerated, **never** any penetrating oil/solvent on the ASA);
+  (4) after a few hours: retighten the flange screws (creep), check for wear.
+  6805 bearings greased for life; **no grease on the belt side**.
+- **2-part housing**: main shell + **removable plate** (insert the gears
+  then close). Plate requirements: **2 centering dowels** (screws alone have play →
+  the center distance must repeat to ~0.1 mm), **shouldered** bearing seats (captive with the plate
+  screwed on), thickness ≥ 6–8 mm or ribbed, heat-set threaded inserts on the shell side.
+- **Material: ASA** (chosen if printing allows) — nozzle 240–260 °C, bed 90–110 °C,
+  **enclosure almost indispensable**, ventilate (styrene), **shrinkage ~0.4–0.7%** → a test jig
+  to calibrate the dimensions (Ø37 seats, Ø24.9 journals, gear teeth).
+- **Materials comparison** (decisive criterion: temperature — friction + closed housing + summer):
+  | | Tg | Hot fatigue allowable | Gear verdict |
   |---|---|---|---|
-  | **ASA** | ~100 °C | 15–20 MPa | ✅ **choix final** (UV + chaleur + fluage) ; inter-couches faible compensé par les 3 vis |
-  | **PETG** | ~80 °C | 12–15 MPa | 🟡 repli sans caisson : épaissir l'étage 2 à **22–25 mm**, resserrer les vis (fluage), usure un peu plus rapide |
-  | **PLA** | ~58 °C | 5–8 MPa à 50 °C | ❌ **prototypes seulement** (précis et rapide pour valider entraxes/engrènement) — ramollit l'été, flue à l'arrêt, dents qui s'ébrèchent |
+  | **ASA** | ~100 °C | 15–20 MPa | ✅ **final choice** (UV + heat + creep); weak inter-layer bonding offset by the 3 screws |
+  | **PETG** | ~80 °C | 12–15 MPa | 🟡 fallback without an enclosure: thicken stage 2 to **22–25 mm**, retighten the screws (creep), slightly faster wear |
+  | **PLA** | ~58 °C | 5–8 MPa at 50 °C | ❌ **prototypes only** (accurate and fast to validate center distances/meshing) — softens in summer, creeps at standstill, teeth that chip |
 
-*Alternatives étudiées : 1 étage 16T→128T (entraxe 76,20 mm, roue Ø137,6) ou 2ᵉ étage en
-module 2 (15T→30T, entraxe 45 mm) — écartées au profit de la réutilisation de la 64T.*
+*Alternatives studied: single stage 16T→128T (center distance 76.20 mm, Ø137.6 wheel) or a 2nd stage in
+module 2 (15T→30T, center distance 45 mm) — ruled out in favor of reusing the 64T.*
 
-**Courroie 1:2** : rapport de dents **exactement 2:1** (ex. synchrone HTD 5M : poulie boîte
-30T Ø47,7 → poulie roue 60T Ø95,5, vissée sur la jante 12″). Tension utile ≈ 100 N au couple
-max — très confortable pour une courroie de 15 mm.
+**1:2 belt**: tooth ratio **exactly 2:1** (e.g. HTD 5M synchronous: gearbox pulley
+30T Ø47.7 → wheel pulley 60T Ø95.5, screwed onto the 12″ rim). Useful tension ≈ 100 N at max
+torque — very comfortable for a 15 mm belt.
 
-> ✅ **Firmware aligné (révision 1:12,5 + poulies 1,28)** : `hw::GEAR_RATIO = 1,28` (aimant
-> AS5600 sur la **sortie de boîte**) et `WHEEL_DIAM_M = 0,254` (roue **10″**) appliqués dans
-> config.hpp ; vitesse véhicule en **m/s** (moyenne signée des 2 roues — pivot → 0).
-> Si l'aimant est déplacé **sur la roue**, repasser `GEAR_RATIO` à 1.
+> ✅ **Firmware aligned (1:12.5 revision + 1.28 pulleys)**: `hw::GEAR_RATIO = 1.28` (AS5600
+> magnet on the **gearbox output**) and `WHEEL_DIAM_M = 0.254` (**10″** wheel) applied in
+> config.hpp; vehicle speed in **m/s** (signed average of the 2 wheels — pivot → 0).
+> If the magnet is moved **onto the wheel**, set `GEAR_RATIO` back to 1.
 
 ---
 
-## Train initial (référence) : 2 étages de 4:1 (= 1:16), courroie 1:1
+## Initial train (reference): 2 stages of 4:1 (= 1:16), 1:1 belt
 
 ```
-Moteur ──[16T métal, 24 DP]──╮
-                              ├─ Étage 1 (4:1) ─→ arbre intermédiaire ──[15T]──╮
-                   [64T imprimé]                                                ├─ Étage 2 (4:1) ─→ roue
-                                                                     [60T imprimé]
+Motor ──[16T metal, 24 DP]──╮
+                            ├─ Stage 1 (4:1) ─→ intermediate shaft ──[15T]──╮
+                 [64T printed]                                              ├─ Stage 2 (4:1) ─→ wheel
+                                                                 [60T printed]
 ```
 
-Le 64T (étage 1) et le 15T (étage 2) sont **solidaires** (pignon composé, imprimé d'une pièce).
-Seul l'étage 1 doit matcher le pignon moteur ; l'étage 2 est libre → **module 2** (couple 4× plus
-élevé = dents plus grosses).
+The 64T (stage 1) and the 15T (stage 2) are **integral** (compound gear, printed as one piece).
+Only stage 1 must match the motor pinion; stage 2 is free → **module 2** (4× higher
+torque = larger teeth).
 
-### Étage 1 — 16T (métal) → 64T (imprimé)
+### Stage 1 — 16T (metal) → 64T (printed)
 
-| Paramètre | Valeur (24 DP) | Variante module 1 + déport |
+| Parameter | Value (24 DP) | Module 1 + profile shift variant |
 |---|---|---|
-| Module / angle | 1,058 mm (24 DP), 20° | m = 1, roue générée avec x = −0,5 |
-| **Entraxe** | **42,33 mm** | **40,00 mm** |
-| Ø ext. roue 64T | ≈ 69,9 mm | ≈ 67 mm |
-| Largeur de denture | 10–12 mm (≥ pignon moteur) | idem |
-| Forme | droite (imposée par le pignon métal) | idem |
+| Module / angle | 1.058 mm (24 DP), 20° | m = 1, wheel generated with x = −0.5 |
+| **Center distance** | **42.33 mm** | **40.00 mm** |
+| 64T wheel outside Ø | ≈ 69.9 mm | ≈ 67 mm |
+| Tooth face width | 10–12 mm (≥ motor pinion) | same |
+| Form | spur (imposed by the metal pinion) | same |
 
-### Paramètres CAO saisis — roue 64T de l'étage 1 (générateur d'engrenage droit)
+### CAD parameters entered — stage-1 64T wheel (spur gear generator)
 
-| Champ | Valeur saisie | Équivalent métrique |
+| Field | Entered value | Metric equivalent |
 |---|---|---|
 | Standard | **English** | — |
 | Pressure Angle | **20 deg** | 20° |
-| Diametral Pitch | **24** | module 1,058 mm |
+| Diametral Pitch | **24** | module 1.058 mm |
 | Number of Teeth | **64** | — |
-| Backlash | **0.1 mm** | jeu d'impression |
-| Root Fillet Radius | 0.000 in | ⚠️ voir note |
-| Gear Thickness | 0.394 in | **10,0 mm** |
-| Hole Diameter | 0.394 in | **10,0 mm** (alésage) |
-| Pitch Diameter (calculé) | 2.7 in (= 64/24 = 2,667″) | **67,7 mm** primitif → Ø ext. 69,85 mm |
+| Backlash | **0.1 mm** | print clearance |
+| Root Fillet Radius | 0.000 in | ⚠️ see note |
+| Gear Thickness | 0.394 in | **10.0 mm** |
+| Hole Diameter | 0.394 in | **10.0 mm** (bore) |
+| Pitch Diameter (computed) | 2.7 in (= 64/24 = 2.667″) | **67.7 mm** pitch → outside Ø 69.85 mm |
 
-> ⚠️ **Root Fillet Radius = 0** : congé de pied de dent nul = concentration de contrainte au
-> pied (là où une dent imprimée casse). Mettre une petite valeur (ex. **0.012 in ≈ 0,3 mm**)
-> si le générateur l'accepte — gratuit en impression 3D et nettement plus résistant.
+> ⚠️ **Root Fillet Radius = 0**: zero tooth-root fillet = stress concentration at the
+> root (where a printed tooth breaks). Set a small value (e.g. **0.012 in ≈ 0.3 mm**)
+> if the generator accepts it — free in 3D printing and much stronger.
 
-### Étage 2 — 15T → 60T (imprimés, module 2)
+### Stage 2 — 15T → 60T (printed, module 2)
 
-| Paramètre | Valeur |
+| Parameter | Value |
 |---|---|
 | Module / angle | 2 mm, 20° |
-| **Entraxe** | **75,00 mm** |
-| Ø ext. 15T / 60T | 34 mm / 124 mm |
-| Largeur de denture | 15 mm |
-| Forme | **chevrons (herringbone)** conseillés — imprimable, silencieux, auto-centrant |
+| **Center distance** | **75.00 mm** |
+| 15T / 60T outside Ø | 34 mm / 124 mm |
+| Tooth face width | 15 mm |
+| Form | **herringbone (chevrons)** recommended — printable, quiet, self-centering |
 
-### Dimensionnement (ordres de grandeur)
+### Sizing (orders of magnitude)
 
-- Couple moteur ≈ 0,36 N·m (172 W @ 4615 tr/min) → intermédiaire ≈ 1,4 N·m → **~95 N**
-  tangentiels sur le 15T → ≈ 13 MPa en pied de dent (Lewis, m2 × 15 mm) → marge ≈ ×3 en
-  **PETG** (nylon encore mieux pour le 15T). Le driver limite à 20 A → pas de couple de
-  blocage démesuré.
-- Sortie : 4615/16 ≈ 288 tr/min à 12 V ; **~240 tr/min à PWM 50 % → ~3,2 m/s (11,5 km/h)** en roue 10″.
+- Motor torque ≈ 0.36 N·m (172 W @ 4615 rpm) → intermediate ≈ 1.4 N·m → **~95 N**
+  tangential on the 15T → ≈ 13 MPa at the tooth root (Lewis, m2 × 15 mm) → margin ≈ ×3 in
+  **PETG** (nylon even better for the 15T). The driver limits to 20 A → no excessive stall
+  torque.
+- Output: 4615/16 ≈ 288 rpm at 12 V; **~240 rpm at 50% PWM → ~3.2 m/s (11.5 km/h)** on a 10″ wheel.
 
-### Impression / montage
+### Printing / assembly
 
-- **Backlash +0,10–0,15 mm** dans le générateur pour toutes les pièces imprimées.
-- 100 % de remplissage ou ≥ 6 périmètres.
-- **Roulements retenus : 6805 — 25×37×7 mm (épaisseur confirmée)** → logements carter
-  profondeur **7 mm**, épaulés.
-  Montage : roulements **logés dans les parois du carter** ; le pignon composé 64T+15T est
-  imprimé avec des **tourillons Ø25 intégrés** de chaque côté qui tournent dedans.
-  - ⚠️ Impossible de loger le roulement **dans** le 15T (Ø pied ≈ 25 mm < Ø ext. 37 mm du
-    roulement) → c'est bien l'axe qui tourne, pas le roulement dans l'engrenage.
-  - Logement carter : Ø **37,1–37,2 mm** (ajustement imprimé), épaulé, profondeur = épaisseur
-    du roulement ; tourillon Ø **24,9 mm** (léger serrage dans la bague intérieure).
-  - L'alésage 10 mm saisi dans la CAO du 64T devient inutile avec les tourillons intégrés
-    (ou sert de passage central si on préfère un axe traversant).
-- Encombrement moteur→sortie : 42,33 + 75 ≈ **117 mm** d'entraxe total.
-- Ordre de validation : pignon d'essai 16T/24 DP → étage 1 seul → train complet.
+- **Backlash +0.10–0.15 mm** in the generator for all printed parts.
+- 100% infill or ≥ 6 perimeters.
+- **Chosen bearings: 6805 — 25×37×7 mm (thickness confirmed)** → housing seats
+  **7 mm** deep, shouldered.
+  Assembly: bearings **seated in the housing walls**; the 64T+15T compound gear is
+  printed with **integrated Ø25 journals** on each side that turn inside them.
+  - ⚠️ Impossible to seat the bearing **inside** the 15T (root Ø ≈ 25 mm < the bearing's
+    37 mm outside Ø) → it is indeed the axle that turns, not the bearing inside the gear.
+  - Housing seat: Ø **37.1–37.2 mm** (printed fit), shouldered, depth = bearing
+    thickness; journal Ø **24.9 mm** (slight interference in the inner race).
+  - The 10 mm bore entered in the 64T CAD becomes useless with the integrated journals
+    (or serves as a central passage if you prefer a through-axle).
+- Motor→output footprint: 42.33 + 75 ≈ **117 mm** total center distance.
+- Validation order: 16T/24 DP test pinion → stage 1 alone → complete train.

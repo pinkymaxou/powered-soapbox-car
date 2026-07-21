@@ -1,9 +1,9 @@
-// sim_controller.hpp — Hôte SIMULÉ du contrôleur : même câblage qu'EspController, mais les
-// callbacks du KartController lisent le modèle physique (vehicle.hpp) et lui appliquent la
-// commande moteur ; la manette est SCRIPTÉE (fonction du temps). Les décisions d'hôte
-// (rumble, coupure) passent par les MÊMES conseillers que l'ESP (advisors.hpp). Horloge
-// virtuelle : un tick = hw::CTRL_DT_S exactement. C'est le « mockup » des tests et du
-// visualisateur.
+// sim_controller.hpp — SIMULATED host for the controller: same wiring as EspController, but the
+// KartController callbacks read the physics model (vehicle.hpp) and apply the motor
+// command to it; the gamepad is SCRIPTED (function of time). Host decisions
+// (rumble, cutoff) go through the SAME advisors as the ESP (advisors.hpp). Virtual
+// clock: one tick = hw::CTRL_DT_S exactly. This is the "mockup" for the tests and the
+// viewer.
 #pragma once
 
 #include <cstdint>
@@ -16,21 +16,21 @@
 namespace sim
 {
 
-// Commande de la manette scriptée à l'instant t (secondes de simulation).
+// Command of the scripted gamepad at time t (simulation seconds).
 struct PadCmd
 {
-    float x = 0.f;            // virage [-1..1] (déjà « calibré » : le script parle en consigne)
-    float y = 0.f;            // avance [-1..1]
-    bool  start = false;      // bouton START/Options tenu
-    bool  estop = false;      // bouton B
+    float x = 0.f;            // turn [-1..1] (already "calibrated": the script speaks in command)
+    float y = 0.f;            // forward [-1..1]
+    bool  start = false;      // START/Options button held
+    bool  estop = false;      // B button
     bool  connected = true;
-    bool  reports = true;     // false = lien « connecté » mais plus AUCUN rapport (heartbeat)
-    bool  sys_power = true;   // false = CHAMPIGNON : alimentation coupée (ESP32 éteint,
-                              // MOSFET ouverts → roue libre) — le contrôleur ne tourne plus
+    bool  reports = true;     // false = link "connected" but NO more reports at all (heartbeat)
+    bool  sys_power = true;   // false = KILL SWITCH: power cut off (ESP32 off,
+                              // MOSFETs open → coasting) — the controller no longer runs
 };
 using PadScript = std::function<PadCmd(float t)>;
 
-// Maintien de START pendant [t0, t0+dur] — l'armement standard des scénarios.
+// Holding START during [t0, t0+dur] — the standard arming of the scenarios.
 inline bool held(float t, float t0, float dur) { return t >= t0 && t <= t0 + dur; }
 
 class SimController
@@ -43,15 +43,15 @@ public:
                             [this](const CtrlOutputs& out) { applyOutputs(out); });
     }
 
-    // Un pas complet de simulation : manette → contrôleur → décisions d'hôte → physique.
+    // One full simulation step: gamepad → controller → host decisions → physics.
     void stepOnce(const KartConfig& cfg)
     {
         m_now_us += static_cast<int64_t>(hw::CTRL_DT_S * 1e6f);
         m_cmd = m_script(m_veh.t());
         if (!m_cmd.sys_power)
         {
-            // Alimentation coupée : le contrôleur NE TOURNE PLUS (pas de tick), les ponts
-            // sont ouverts — le véhicule continue sa vie en roue libre.
+            // Power cut off: the controller NO LONGER RUNS (no tick), the bridges
+            // are open — the vehicle continues on its own, coasting.
             m_veh.step(DriveMode::Float, 0.f, 0.f, 0, hw::CTRL_DT_S);
             return;
         }
@@ -60,7 +60,7 @@ public:
         PadInputs pad;
         pad.x = m_cmd.x;
         pad.y = m_cmd.y;
-        pad.rx = m_cmd.x;   // le script parle en consigne : brut = calibré
+        pad.rx = m_cmd.x;   // the script speaks in command: raw = calibrated
         pad.ry = m_cmd.y;
         pad.connected = m_cmd.connected;
         pad.calibrated = calibrated;
@@ -68,12 +68,12 @@ public:
         pad.start = m_cmd.start;
         pad.last_report_us = m_last_report_us;
 
-        m_vdiv = cfg.vbat_div_ratio;   // conversion volts broche → volts batterie (readSensors)
+        m_vdiv = cfg.vbat_div_ratio;   // pin volts → battery volts conversion (readSensors)
         m_ctrl.setPad(pad);
-        m_ctrl.setConfig(cfg);         // les scénarios/le mode conduite changent cfg au vol
+        m_ctrl.setConfig(cfg);         // scenarios / driving mode change cfg on the fly
         m_ctrl.tick(m_now_us);
 
-        // Décisions d'HÔTE — mêmes conseillers que l'ESP : rumble compté, coupure mémorisée.
+        // HOST decisions — same advisors as the ESP: rumble counted, cutoff remembered.
         const CtrlTelemetry t = m_ctrl.telemetry();
         if (m_rumble.update(t, pad, m_now_us).active) ++rumbles;
         powered_off |= m_poweroff.update(t, m_now_us);
@@ -86,22 +86,22 @@ public:
 
     bool powered() const { return m_cmd.sys_power; }
 
-    bool calibrated = true;    // la calibration est un préalable, pas l'objet de la physique
-    int  rumbles = 0;          // nb de vibrations émises (RumbleAdvisor)
-    bool powered_off = false;  // coupure demandée (PowerOffAdvisor : LVC prolongée)
+    bool calibrated = true;    // calibration is a prerequisite, not the subject of the physics
+    int  rumbles = 0;          // number of vibrations emitted (RumbleAdvisor)
+    bool powered_off = false;  // cutoff requested (PowerOffAdvisor: prolonged LVC)
 
-    // Entrée manette BRUTE du script (avant deadzone/rampes/anti-renversement)
+    // RAW gamepad input from the script (before deadzone/ramps/rollover protection)
     float padX() const { return m_cmd.x; }
     float padY() const { return m_cmd.y; }
 
-    // Dernière commande moteur envoyée au « matériel » (inspectable par les tests)
+    // Last motor command sent to the "hardware" (inspectable by the tests)
     float lastOutL() const { return m_out_l; }
     float lastOutR() const { return m_out_r; }
     bool  lastBrake() const { return m_brake_out; }
 
 private:
-    // Callback capteurs — miroir d'EspController::readSensors, le modèle physique à la
-    // place du bus I2C : les pannes (absent/inversé/figé/fou) viennent des EncMode du véhicule.
+    // Sensors callback — mirror of EspController::readSensors, the physics model in
+    // place of the I2C bus: the failures (absent/reversed/stuck/crazy) come from the vehicle's EncMode.
     SensorReadings readSensors()
     {
         SensorReadings s;
@@ -115,7 +115,7 @@ private:
         return s;
     }
 
-    // Callback sorties : mémorise la commande moteur (appliquée au véhicule par stepOnce).
+    // Outputs callback: stores the motor command (applied to the vehicle by stepOnce).
     void applyOutputs(const CtrlOutputs& out)
     {
         m_brake_out = out.dyn_brake;

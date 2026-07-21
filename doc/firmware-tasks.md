@@ -1,39 +1,39 @@
-# Tâches FreeRTOS — priorités & cœur (ESP32, firmware kart)
+# FreeRTOS tasks — priorities & core (ESP32, kart firmware)
 
-ESP32 = **2 cœurs** : **cœur 0 = PRO_CPU** (réseau/système), **cœur 1 = APP_CPU** (applicatif).
-FreeRTOS à **1000 Hz** ; priorités **0 (idle) → 24 (max)**, un nombre **plus élevé = plus prioritaire**.
+ESP32 = **2 cores**: **core 0 = PRO_CPU** (network/system), **core 1 = APP_CPU** (application).
+FreeRTOS at **1000 Hz**; priorities **0 (idle) → 24 (max)**, a **higher number = higher priority**.
 
-## Tâches applicatives (créées par le firmware)
+## Application tasks (created by the firmware)
 
-| Tâche | Priorité | Cœur | Pile (o) | Période | Rôle | Source |
+| Task | Priority | Core | Stack (B) | Period | Role | Source |
 |---|:--:|:--:|:--:|---|---|---|
-| **`control`** | **6** | **1** (APP) | 6144 | **500 Hz** | Boucle d'asservissement : **mélange différentiel** (manette→2 PWM), **anti-renversement**, frein PID + limiteur **par roue**, LVC, machine à états ; **abonnée au watchdog 5 s** | `controller.cpp` (`kartStart`) |
-| **`leds`** | **3** | **0** (PRO) | 3072 | ~20 Hz | Affichage d'état sur le ruban WS2812B (RMT) | `leds.cpp` (`ledsStart`) |
-| **`bt`** | **5** | **0** (PRO) | 8192 | (boucle) | **Boucle BTstack / Bluepad32** : pile Bluetooth, appairage et trames manette | `input_bp32.c` (`inputbp_start`) |
+| **`control`** | **6** | **1** (APP) | 6144 | **500 Hz** | Control loop: **differential mixing** (gamepad→2 PWM), **rollover protection**, active (PID) braking + limiter **per wheel**, LVC, state machine; **subscribed to the 5 s watchdog** | `controller.cpp` (`kartStart`) |
+| **`leds`** | **3** | **0** (PRO) | 3072 | ~20 Hz | Status display on the WS2812B strip (RMT) | `leds.cpp` (`ledsStart`) |
+| **`bt`** | **5** | **0** (PRO) | 8192 | (loop) | **BTstack / Bluepad32 loop**: Bluetooth stack, pairing and gamepad frames | `input_bp32.c` (`inputbp_start`) |
 
-> `control` et `leds` sont créées par `xTaskCreatePinnedToCore(...)`. Le **contrôle est isolé sur le cœur 1** pour ne pas être perturbé par les piles Wi-Fi/réseau **et Bluetooth** (cœur 0) → cadence 500 Hz régulière.
-> La tâche `bt` exécute `btstack_run_loop_execute()` (bloquante) ; la pile BT crée en plus ses propres tâches système (contrôleur BT, BTC/BTU) sur le cœur 0.
+> `control` and `leds` are created by `xTaskCreatePinnedToCore(...)`. **Control is isolated on core 1** so it is not disturbed by the Wi-Fi/network **and Bluetooth** stacks (core 0) → a steady 500 Hz rate.
+> The `bt` task runs `btstack_run_loop_execute()` (blocking); the BT stack additionally creates its own system tasks (BT controller, BTC/BTU) on core 0.
 
-## Tâches du framework ESP-IDF (créées automatiquement, dépendances)
+## ESP-IDF framework tasks (created automatically, dependencies)
 
-Valeurs = **défauts IDF** (réglables en sdkconfig) ; listées pour situer les priorités relatives.
+Values = **IDF defaults** (configurable in sdkconfig); listed to situate the relative priorities.
 
-| Tâche | Priorité | Cœur | Pile (o) | Rôle |
+| Task | Priority | Core | Stack (B) | Role |
 |---|:--:|:--:|:--:|---|
-| `esp_timer` | 22 | 0 | 3584 | Callbacks de minuterie haute résolution — exécute notre **reconnexion STA** (`sta_retry`) |
-| `wifi` | 23 | 0 | ~3584 | Pile Wi-Fi (MAC) |
-| `tiT` (lwIP / tcpip) | 18 | 0 | 3072 | Pile TCP/IP |
-| `sys_evt` | 20 | 0 | 2304 | Boucle d'événements par défaut (`esp_event`) — reçoit WIFI_EVENT / IP_EVENT |
-| `httpd` | 5 | sans affinité | 4096 | Serveur HTTP/WebSocket (config web + page Système) |
-| `main` | 1 | 0 | 3584 | `app_main` : init des sous-systèmes puis se termine |
-| `ipc0` / `ipc1` | 24 | 0 / 1 | 1024 | IPC inter-cœurs (système) |
-| `IDLE0` / `IDLE1` | 0 | 0 / 1 | 1536 | Tâches idle — **surveillées par le watchdog** (sdkconfig) |
+| `esp_timer` | 22 | 0 | 3584 | High-resolution timer callbacks — runs our **STA reconnection** (`sta_retry`) |
+| `wifi` | 23 | 0 | ~3584 | Wi-Fi stack (MAC) |
+| `tiT` (lwIP / tcpip) | 18 | 0 | 3072 | TCP/IP stack |
+| `sys_evt` | 20 | 0 | 2304 | Default event loop (`esp_event`) — receives WIFI_EVENT / IP_EVENT |
+| `httpd` | 5 | no affinity | 4096 | HTTP/WebSocket server (web config + System page) |
+| `main` | 1 | 0 | 3584 | `app_main`: subsystem init then exits |
+| `ipc0` / `ipc1` | 24 | 0 / 1 | 1024 | Inter-core IPC (system) |
+| `IDLE0` / `IDLE1` | 0 | 0 / 1 | 1536 | Idle tasks — **watched by the watchdog** (sdkconfig) |
 
 ## Notes
 
-- **`control` (6) > `leds` (3)** : si le cœur 1 était partagé, le contrôle primerait l'affichage ; ici ils sont sur des cœurs différents de toute façon.
-- Le **réseau (Wi-Fi 23, tcpip 18, httpd 5)** vit sur le **cœur 0**, à l'écart de la boucle de contrôle (cœur 1). Une requête web ne peut donc pas retarder l'asservissement.
-- La **reconnexion Wi-Fi STA** (toutes les 5 s) s'exécute dans le contexte de la tâche `esp_timer` (pas une tâche dédiée).
-- **Watchdog (TWDT, 5 s)** : la tâche `control` le réarme à chaque tour ; les tâches idle sont aussi surveillées → un blocage > 5 s déclenche un reboot.
+- **`control` (6) > `leds` (3)**: if core 1 were shared, control would take precedence over the display; here they are on different cores anyway.
+- The **network (Wi-Fi 23, tcpip 18, httpd 5)** lives on **core 0**, away from the control loop (core 1). A web request therefore cannot delay the control loop.
+- The **Wi-Fi STA reconnection** (every 5 s) runs in the context of the `esp_timer` task (not a dedicated task).
+- **Watchdog (TWDT, 5 s)**: the `control` task re-arms it every cycle; the idle tasks are also watched → a block > 5 s triggers a reboot.
 
-> **Source de vérité des tâches applicatives : [`firmware/main/rtos.hpp`](../firmware/main/rtos.hpp)** (priorité, cœur, pile en constantes `constexpr`, référencées par `controller.cpp` et `leds.cpp`). Tenir ce tableau aligné sur ce fichier.
+> **Source of truth for the application tasks: [`firmware/main/rtos.hpp`](../firmware/main/rtos.hpp)** (priority, core, stack as `constexpr` constants, referenced by `controller.cpp` and `leds.cpp`). Keep this table aligned with that file.

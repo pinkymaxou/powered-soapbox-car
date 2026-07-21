@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""sim_viewer.py — Visualisateur 3D TEMPS RÉEL de la simulation du kart.
+"""sim_viewer.py — REAL-TIME 3D viewer of the kart simulation.
 
-Compile (si besoin) le binaire de simulation, sert la page 3D (sim_viewer.html) et relaie
-le flux JSON du scénario choisi en Server-Sent Events — même logique de contrôle et même
-physique que les tests automatisés, mais cadencées au temps réel et visibles à l'écran.
+Builds (if needed) the simulation binary, serves the 3D page (sim_viewer.html) and relays
+the JSON stream of the chosen scenario over Server-Sent Events — same control logic and same
+physics as the automated tests, but paced in real time and visible on screen.
 
-    python3 tools/sim_viewer.py                     # écoute sur TOUTES les interfaces (0.0.0.0)
-    python3 tools/sim_viewer.py --port 9000         # port personnalisé
-    python3 tools/sim_viewer.py --host 127.0.0.1    # restreindre à la machine locale
+    python3 tools/sim_viewer.py                     # listen on ALL interfaces (0.0.0.0)
+    python3 tools/sim_viewer.py --port 9000         # custom port
+    python3 tools/sim_viewer.py --host 127.0.0.1    # restrict to the local machine
 """
 import json
 import pathlib
@@ -22,8 +22,8 @@ SIM_BIN = pathlib.Path("/tmp/kart_sim_viewer_bin")
 
 
 def sim_stale() -> bool:
-    """Binaire absent ou plus vieux qu'une des sources → recompiler (évite de conduire
-    une physique périmée sur un décor à jour…)."""
+    """Binary missing or older than one of the sources → rebuild (avoids driving
+    stale physics on an up-to-date scene…)."""
     if not SIM_BIN.exists():
         return True
     bin_mtime = SIM_BIN.stat().st_mtime
@@ -36,7 +36,7 @@ def sim_stale() -> bool:
 
 
 def build_sim() -> None:
-    """(Re)compile le binaire de simulation depuis les MÊMES sources que les tests."""
+    """(Re)builds the simulation binary from the SAME sources as the tests."""
     cmd = [
         "g++", "-std=c++17", "-O2", "-I", str(FW / "main"), "-I", str(FW / "test_host/sim"),
         str(FW / "test_host/sim_main.cpp"),
@@ -44,7 +44,7 @@ def build_sim() -> None:
         str(FW / "main/config_params.cpp"),
         "-o", str(SIM_BIN),
     ]
-    print("compilation :", " ".join(cmd))
+    print("compiling:", " ".join(cmd))
     subprocess.run(cmd, check=True)
 
 
@@ -57,15 +57,15 @@ def scenario_list():
     return scen
 
 
-DRIVE = {"proc": None}   # processus de conduite manuelle en cours (un seul à la fois)
+DRIVE = {"proc": None}   # manual driving process currently running (only one at a time)
 
 
 class Handler(BaseHTTPRequestHandler):
-    def log_message(self, *a):   # silencieux
+    def log_message(self, *a):   # silent
         pass
 
     def do_POST(self):
-        # Entrées clavier du navigateur → stdin du simulateur en mode conduite.
+        # Browser keyboard inputs → simulator stdin in driving mode.
         if urlparse(self.path).path != "/input":
             self.send_error(404)
             return
@@ -118,8 +118,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def stream(self, name: str):
-        """SSE : relaie chaque ligne JSON du simulateur vers le navigateur.
-        Le pseudo-scénario __drive__ = conduite MANUELLE : stdin ouvert pour le clavier."""
+        """SSE: relays each JSON line from the simulator to the browser.
+        The pseudo-scenario __drive__ = MANUAL driving: stdin open for the keyboard."""
         if name == "__drive__":
             proc = subprocess.Popen([str(SIM_BIN), "--drive"],
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -142,29 +142,29 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(b"event: end\ndata: {}\n\n")
             self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
-            pass   # le navigateur a changé de scénario / fermé l'onglet
+            pass   # the browser switched scenario / closed the tab
         finally:
             proc.kill()
 
 
 def main():
     import argparse
-    ap = argparse.ArgumentParser(description="Visualisateur 3D de la simulation du kart")
-    ap.add_argument("--host", default="0.0.0.0", help="interface d'écoute (défaut : toutes)")
+    ap = argparse.ArgumentParser(description="3D viewer of the kart simulation")
+    ap.add_argument("--host", default="0.0.0.0", help="listening interface (default: all)")
     ap.add_argument("--port", type=int, default=8650)
-    ap.add_argument("--rebuild", action="store_true", help="recompiler le binaire de simulation")
+    ap.add_argument("--rebuild", action="store_true", help="rebuild the simulation binary")
     args = ap.parse_args()
 
     if args.rebuild or sim_stale():
         build_sim()
 
-    print(f"Visualisateur en écoute sur {args.host}:{args.port} — ouvrables :")
+    print(f"Viewer listening on {args.host}:{args.port} — open at:")
     print(f"  http://localhost:{args.port}/")
     if args.host == "0.0.0.0":
         ips = subprocess.run(["hostname", "-I"], capture_output=True, text=True).stdout.split()
         for ip in ips:
             print(f"  http://{ip}:{args.port}/")
-    print("(Ctrl-C pour quitter)")
+    print("(Ctrl-C to quit)")
     ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
 
 

@@ -1,12 +1,12 @@
-// kart.proto — Protocole WebSocket binaire du kart (Protocol Buffers).
-// Serveur : nanopb (callbacks → zéro allocation, encode/décode par flux).
-// Client : protobuf.js (runtime « light », descripteur JSON généré depuis ce fichier).
-// Régénérer côté C : voir main/proto/generate.sh
-// IMPORTANT : les noms de champs sont EXACTEMENT ceux qu'attend le JS (index.html).
+// kart.proto — Binary WebSocket protocol of the kart (Protocol Buffers).
+// Server: nanopb (callbacks → zero allocation, streaming encode/decode).
+// Client: protobuf.js ("light" runtime, JSON descriptor generated from this file).
+// Regenerate on the C side: see main/proto/generate.sh
+// IMPORTANT: field names are EXACTLY those expected by the JS (index.html).
 syntax = "proto3";
 
-// ── Requête (client → kart) ──
-// `type` garde les mêmes verbes que l'ancien protocole JSON : status, get, vals, sysdyn,
+// ── Request (client → kart) ──
+// `type` keeps the same verbs as the old JSON protocol: status, get, vals, sysdyn,
 // sysinfo, hist, wifiget, padinfo, reboot, padpair, padunpair, calstart, calfinish,
 // calcancel, wifiset, set.
 message Req {
@@ -14,7 +14,7 @@ message Req {
   string ssid = 2;              // wifiset
   string pass = 3;              // wifiset
   bool   enabled = 4;           // wifiset
-  repeated ParamVal set = 5;    // set : paires nom/valeur
+  repeated ParamVal set = 5;    // set: name/value pairs
 }
 
 message ParamVal {
@@ -22,23 +22,23 @@ message ParamVal {
   float  val = 2;
 }
 
-// ── Réponses (kart → client) ──
+// ── Responses (kart → client) ──
 message Status {
   int32  state = 1;
   int32  fault = 2;
-  uint32 faults = 3;            // masque des conditions actives (bits fb::)
+  uint32 faults = 3;            // mask of active conditions (fb:: bits)
   float  vbat = 4;
-  int32  batt_type = 5;         // 0 en détection, 12 ou 24
-  float  batt_lo = 6;           // échelle de jauge décidée côté firmware
+  int32  batt_type = 5;         // 0 while detecting, 12 or 24
+  float  batt_lo = 6;           // gauge scale decided on the firmware side
   float  batt_hi = 7;
-  float  speed_ms = 8;          // vitesse VÉHICULE (m/s, signée — 0 en pivot)
-  float  rpm_l = 9;             // vitesse roue GAUCHE en tr/min (signée)
-  float  rpm_r = 10;            // vitesse roue DROITE en tr/min (signée)
+  float  speed_ms = 8;          // VEHICLE speed (m/s, signed — 0 while pivoting)
+  float  rpm_l = 9;             // LEFT wheel speed in rpm (signed)
+  float  rpm_r = 10;            // RIGHT wheel speed in rpm (signed)
   float  fwd = 11;
   float  turn = 12;
   float  out_l = 13;
   float  out_r = 14;
-  int32  brake_mode = 15;       // 0 traction, 1 dynamique, 2 actif (PID)
+  int32  brake_mode = 15;       // 0 traction, 1 dynamic, 2 active (PID)
   bool   arming = 16;
   bool   btn_start = 17;
   bool   pad_conn = 18;
@@ -52,7 +52,7 @@ message Status {
   float  pad_rx2 = 26;
   float  pad_ry2 = 27;
   uint32 pad_btns = 28;
-  int32  pad_age_ms = 29;       // heartbeat manette (âge du dernier rapport HID)
+  int32  pad_age_ms = 29;       // gamepad heartbeat (age of the last HID report)
 }
 
 message ParamMeta {
@@ -69,9 +69,9 @@ message ParamMeta {
 message Config { repeated ParamMeta params = 1; }
 message Vals   { repeated ParamVal  params = 1; }
 
-// Historique : chaque série = octets BRUTS (1 octet/échantillon, plus ancien → plus récent).
+// History: each series = RAW bytes (1 byte/sample, oldest → newest).
 message Hist {
-  uint32 dt_fast = 1;           // s entre échantillons (accel/pwm/rpm)
+  uint32 dt_fast = 1;           // s between samples (accel/pwm/rpm)
   uint32 dt_spd = 2;
   uint32 dt_batt = 3;
   bytes  accel = 4;
@@ -133,12 +133,12 @@ message SysDyn {
   int64  uptime_s = 1;
   uint32 heap_free = 2;
   uint32 heap_min = 3;
-  uint32 ledc_fix = 4;          // sentinelle horloge LEDC
+  uint32 ledc_fix = 4;          // LEDC clock sentinel
 }
 
 message Ok {}
 
-// Enveloppe : un seul type de trame sur le WebSocket (binaire), le oneof fait le dispatch.
+// Envelope: a single frame type on the WebSocket (binary), the oneof does the dispatch.
 message Msg {
   oneof body {
     Status  status = 1;

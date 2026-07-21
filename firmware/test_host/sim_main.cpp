@@ -1,11 +1,11 @@
-// sim_main.cpp — Simulation du kart : la VRAIE logique de contrôle (controller_core.cpp)
-// pilote un modèle physique (sim/vehicle.hpp) à travers des scénarios extrêmes et réalistes.
+// sim_main.cpp — Kart simulation: the REAL control logic (controller_core.cpp)
+// drives a physics model (sim/vehicle.hpp) through extreme and realistic scenarios.
 //
-//   ./sim                       → tous les scénarios en accéléré + balayage de paramètres (CI)
-//   ./sim --list                → liste des scénarios (nom + description)
-//   ./sim --stream NOM          → un scénario, une ligne JSON par frame (60 Hz) sur stdout
-//   ./sim --stream NOM --realtime  → idem, cadencé au temps réel (pour le visualisateur 3D)
-//   KART_SIM_TRACE=f.csv ./sim  → trace CSV de chaque scénario des tests (inspection)
+//   ./sim                       → all scenarios fast-forwarded + parameter sweep (CI)
+//   ./sim --list                → list of scenarios (name + description)
+//   ./sim --stream NAME         → one scenario, one JSON line per frame (60 Hz) on stdout
+//   ./sim --stream NAME --realtime  → same, paced in real time (for the 3D viewer)
+//   KART_SIM_TRACE=f.csv ./sim  → CSV trace of each test scenario (inspection)
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -23,7 +23,7 @@ static int g_failures = 0;
 #define CHECK(cond)                                                        \
     do {                                                                   \
         if (!(cond)) {                                                     \
-            std::printf("ÉCHEC  %s:%d  %s\n", __FILE__, __LINE__, #cond);  \
+            std::printf("FAIL  %s:%d  %s\n", __FILE__, __LINE__, #cond);  \
             ++g_failures;                                                  \
         }                                                                  \
     } while (0)
@@ -33,12 +33,12 @@ using namespace sim;
 namespace
 {
 
-// Trace CSV optionnelle (KART_SIM_TRACE) : une section par scénario, régénérable.
+// Optional CSV trace (KART_SIM_TRACE): one section per scenario, regenerable.
 FILE* g_trace = nullptr;
 void traceHook(const char* scen, const Vehicle& v, const SimController& c, const CtrlTelemetry& t)
 {
     static int decim = 0;
-    if (0 != (decim++ % 8)) return;   // ~60 Hz suffit à l'inspection
+    if (0 != (decim++ % 8)) return;   // ~60 Hz is enough for inspection
     std::fprintf(g_trace, "%s,%.3f,%.3f,%.3f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%u\n",
                  scen, v.t(), v.v(), v.yawRate(), v.aLat(), v.tipMargin(),
                  c.lastOutL(), c.lastOutR(), t.fwd, t.turn,
@@ -60,34 +60,34 @@ void testScenarios()
     const auto all = allScenarios();
     auto get = [&](const char* n) -> const Scenario& {
         const Scenario* s = findScenario(all, n);
-        if (!s) { std::printf("scénario introuvable : %s\n", n); std::exit(2); }
+        if (!s) { std::printf("scenario not found: %s\n", n); std::exit(2); }
         return *s;
     };
 
-    // LE test du projet : l'anti-renversement tient à pleine vitesse, virage à fond.
+    // THE project test: rollover protection holds at full speed, hard turn.
     {
         const RunResult r = run(get("virage_pleine_vitesse"));
-        std::printf("  virage_pleine_vitesse : vmax=%.2f m/s  a_lat max=%.2f  marge min=%.2f m/s²\n",
+        std::printf("  virage_pleine_vitesse : vmax=%.2f m/s  a_lat max=%.2f  min margin=%.2f m/s²\n",
                     r.max_v, r.max_alat, r.min_tip_margin);
         CHECK(r.ever_armed);
-        CHECK(r.max_v > 2.0f);              // on a vraiment roulé vite
-        CHECK(r.min_tip_margin > 0.5f);     // marge de sécurité jamais entamée
+        CHECK(r.max_v > 2.0f);              // we really did go fast
+        CHECK(r.min_tip_margin > 0.5f);     // safety margin never eaten into
         CHECK(!r.ever_fault);
-        CHECK(!r.wheel_lifted && !r.tipped);   // les 3 roues restent au sol
+        CHECK(!r.wheel_lifted && !r.tipped);   // all 3 wheels stay on the ground
     }
 
-    // Contre-épreuve : sans la protection, la MÊME manœuvre bascule → la mesure est sensible.
+    // Counter-test: without the protection, the SAME maneuver tips → the measurement is sensitive.
     {
         const RunResult r = run(get("virage_sans_protection"));
-        std::printf("  virage_sans_protection : marge min=%.2f m/s² — %s\n",
+        std::printf("  virage_sans_protection : min margin=%.2f m/s² — %s\n",
                     r.min_tip_margin,
-                    r.tipped ? "RENVERSÉ (physique)" : (r.wheel_lifted ? "roue levée" : "?"));
+                    r.tipped ? "TIPPED (physics)" : (r.wheel_lifted ? "wheel lifted" : "?"));
         CHECK(r.min_tip_margin < 0.f);
-        CHECK(r.wheel_lifted);              // la roue intérieure quitte physiquement le sol
-        CHECK(r.tipped);                    // …et le CG franchit l'arête : renversement réel
+        CHECK(r.wheel_lifted);              // the inner wheel physically leaves the ground
+        CHECK(r.tipped);                    // …and the CG crosses the edge: real rollover
     }
 
-    // Pivot sur place : légal et stable (vitesse quasi nulle → a_lat quasi nulle).
+    // Pivot in place: legal and stable (near-zero speed → near-zero a_lat).
     {
         const RunResult r = run(get("pivot_surplace"));
         CHECK(r.ever_armed);
@@ -96,7 +96,7 @@ void testScenarios()
         CHECK(!r.ever_fault);
     }
 
-    // Réalistes : slalom et conduite erratique — jamais de bascule, jamais de défaut.
+    // Realistic: slalom and erratic driving — never a tip, never a fault.
     {
         const RunResult r = run(get("slalom"));
         CHECK(r.ever_armed && !r.ever_fault);
@@ -109,41 +109,41 @@ void testScenarios()
         CHECK(r.min_tip_margin > 0.5f);
     }
 
-    // Freinage au stick (plugging) : PAS de fausse « inversion d'encodeur ».
+    // Stick braking (plugging): NO false "encoder reversal".
     {
         const RunResult r = run(get("freinage_stick"));
         CHECK(r.ever_armed);
-        CHECK(!r.ever_fault);               // notamment pas d'EncoderDir
+        CHECK(!r.ever_fault);               // in particular no EncoderDir
         CHECK(r.max_v > 2.0f);
     }
 
-    // Marche arrière : plus de bride PWM — la limite de vitesse TOTALE tient dans les 2 sens.
+    // Reverse: no more PWM cap — the TOTAL speed limit holds in both directions.
     {
         const RunResult r = run(get("marche_arriere"));
         CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(std::fabs(r.final_v) > 1.7f);          // roule bel et bien en arrière (pas rebridé)
-        CHECK(std::fabs(r.final_v) < 2.f * 1.05f);   // CONVERGÉ sur la limite totale (±5 %)
-        CHECK(r.max_v < 2.f * 1.25f);                // dépassement transitoire du PID borné
-        std::printf("  marche_arriere : v finale=%.2f m/s, pointe %.2f (limite 2,0)\n",
+        CHECK(std::fabs(r.final_v) > 1.7f);          // genuinely rolling in reverse (not re-capped)
+        CHECK(std::fabs(r.final_v) < 2.f * 1.05f);   // CONVERGED on the total limit (±5%)
+        CHECK(r.max_v < 2.f * 1.25f);                // bounded PID transient overshoot
+        std::printf("  marche_arriere : final v=%.2f m/s, peak %.2f (limit 2.0)\n",
                     r.final_v, r.max_v);
     }
 
-    // Frein PID : arrêt actif après relâche, sans repartir en sens inverse.
+    // Active (PID) braking: active stop after release, without setting off in the opposite direction.
     {
         const RunResult r = run(get("frein_pid_arret"));
         CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(std::fabs(r.final_v) < 0.2f);   // arrêté à la fin du scénario
+        CHECK(std::fabs(r.final_v) < 0.2f);   // stopped by the end of the scenario
     }
 
-    // Heartbeat : perte des rapports à pleine vitesse → désarmé vite, kart s'arrête.
+    // Heartbeat: loss of reports at full speed → disarmed quickly, kart stops.
     {
         const RunResult r = run(get("heartbeat_perte"));
         CHECK(r.ever_armed);
-        CHECK(r.t_disarmed_after >= 5.f && r.t_disarmed_after < 5.35f);   // ≤ 250 ms + marge
-        CHECK(std::fabs(r.final_v) < 0.3f);                               // freiné (dynamique)
+        CHECK(r.t_disarmed_after >= 5.f && r.t_disarmed_after < 5.35f);   // ≤ 250 ms + margin
+        CHECK(std::fabs(r.final_v) < 0.3f);                               // braked (dynamic)
     }
 
-    // Pannes d'encodeur → le BON défaut, et arrêt.
+    // Encoder failures → the RIGHT fault, and a stop.
     {
         const RunResult r = run(get("encodeur_inverse"));
         CHECK(Fault::EncoderDir == r.final_fault);
@@ -152,7 +152,7 @@ void testScenarios()
     {
         const RunResult r = run(get("encodeur_absent"));
         CHECK(Fault::EncoderAbsent == r.final_fault);
-        CHECK(!r.ever_armed);               // défaut présent dès le boot → armement refusé
+        CHECK(!r.ever_armed);               // fault present from boot → arming refused
     }
     {
         const RunResult r = run(get("encodeur_fou"));
@@ -163,43 +163,43 @@ void testScenarios()
         CHECK(Fault::Encoder == r.final_fault);
     }
 
-    // LVC : type détecté 12 V puis coupure sous charge (pas avant l'anti-rebond).
+    // LVC: type detected 12 V then cutoff under load (not before debounce).
     {
         const RunResult r = run(get("lvc_batterie_faible"));
         CHECK(12 == r.batt_type);
         CHECK(Fault::Lvc == r.final_fault);
-        CHECK(r.t_first_fault > 5.4f);      // charge à 5 s + anti-rebond 500 ms
+        CHECK(r.t_first_fault > 5.4f);      // load at 5 s + 500 ms debounce
     }
 
-    // Détection 24 V.
+    // 24 V detection.
     {
         const RunResult r = run(get("detection_24v"));
         CHECK(24 == r.batt_type);
         CHECK(!r.ever_fault);
     }
 
-    // CHARGEMENT ASYMÉTRIQUE — c'est CE résultat qui a fait abaisser le défaut de turn_hi
-    // (défauts : gain 1,0 + iso-a_lat 0,2) ; à l'ancienne rampe linéaire un CG décalé basculait.
-    // Le DÉFAUT protège désormais ces cas ; l'ancien réglage reste testé comme preuve.
+    // ASYMMETRIC LOAD — it is THIS result that lowered the turn_hi default
+    // (defaults: gain 1.0 + iso-a_lat 0.2); with the old linear ramp an offset CG would tip.
+    // The DEFAULT now protects these cases; the old setting stays tested as proof.
     {
         const RunResult r = run(get("enfant_seul_cote"));
-        std::printf("  enfant_seul_cote (défauts) : marge min=%.2f m/s²\n", r.min_tip_margin);
-        CHECK(r.min_tip_margin > 0.3f);   // le défaut SÛR protège le chargement décalé
+        std::printf("  enfant_seul_cote (defaults) : min margin=%.2f m/s²\n", r.min_tip_margin);
+        CHECK(r.min_tip_margin > 0.3f);   // the SAFE default protects the offset load
         CHECK(!r.ever_fault);
         CHECK(!r.wheel_lifted && !r.tipped);
     }
     {
-        Scenario sc = get("enfant_seul_cote");   // copie (l'original sert au visualisateur)
+        Scenario sc = get("enfant_seul_cote");   // copy (the original is used by the viewer)
         sc.cfg = [](KartConfig& c) { c.turn_hi = 0.5f; };
         const RunResult r = runScenario(sc);
-        std::printf("  enfant_seul_cote (ancien 0,50) : marge min=%.2f m/s² — %s\n",
-                    r.min_tip_margin, r.wheel_lifted ? "ROUE LEVÉE" : "?");
-        CHECK(r.min_tip_margin < 0.f);    // preuve : l'ancien défaut basculait
-        CHECK(r.wheel_lifted);            // …physiquement : la roue intérieure décolle
+        std::printf("  enfant_seul_cote (old 0.50) : min margin=%.2f m/s² — %s\n",
+                    r.min_tip_margin, r.wheel_lifted ? "WHEEL LIFTED" : "?");
+        CHECK(r.min_tip_margin < 0.f);    // proof: the old default would tip
+        CHECK(r.wheel_lifted);            // …physically: the inner wheel lifts off
     }
     {
         const RunResult r = run(get("adulte_enfant"));
-        std::printf("  adulte_enfant (défauts) : marge min=%.2f m/s²\n", r.min_tip_margin);
+        std::printf("  adulte_enfant (defaults) : min margin=%.2f m/s²\n", r.min_tip_margin);
         CHECK(r.min_tip_margin > 0.25f);
         CHECK(!r.ever_fault);
     }
@@ -210,64 +210,64 @@ void testScenarios()
         CHECK(r.min_tip_margin < 0.f);
     }
 
-    // Descente 8 % : le frein actif retient le kart (77 N de gravité < ~134 N de capacité).
+    // Downhill 8%: active braking holds the kart (77 N of gravity < ~134 N of capacity).
     {
         const RunResult r = run(get("descente_frein"));
         CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(std::fabs(r.final_v) < 0.5f);   // retenu — dans la capacité des moteurs
+        CHECK(std::fabs(r.final_v) < 0.5f);   // held — within the motor capacity
     }
 
-    // CHAMPIGNON EN PENTE (alimentation coupée → roue libre) : la démonstration chiffrée de
-    // l'avertissement du README — sans alimentation il n'y a PLUS AUCUN frein électrique, et
-    // le kart S'EMBALLE dans la pente. Remède matériel documenté : relais NF sur les moteurs.
+    // KILL SWITCH ON A SLOPE (power cutoff → coasting): the quantified demonstration of
+    // the README warning — with no power there is NO electric braking left AT ALL, and
+    // the kart RUNS AWAY down the slope. Documented hardware fix: NC relay across the motors.
     {
         const RunResult r = run(get("coupure_pente8"));
-        std::printf("  coupure_pente8 : v(+8 s après champignon)=%.1f m/s — EMBALLEMENT\n",
+        std::printf("  coupure_pente8 : v(+8 s after kill switch)=%.1f m/s — RUNAWAY\n",
                     std::fabs(r.final_v));
-        CHECK(std::fabs(r.final_v) > 3.f);    // roue libre : ~4 m/s après 8 s sur 8 %
+        CHECK(std::fabs(r.final_v) > 3.f);    // coasting: ~4 m/s after 8 s on 8%
     }
     {
         const RunResult r = run(get("coupure_pente16"));
-        std::printf("  coupure_pente16 : v(+8 s après champignon)=%.1f m/s — EMBALLEMENT\n",
+        std::printf("  coupure_pente16 : v(+8 s after kill switch)=%.1f m/s — RUNAWAY\n",
                     std::fabs(r.final_v));
-        CHECK(std::fabs(r.final_v) > 8.f);    // ~10 m/s (36 km/h) après 8 s sur 16 %
+        CHECK(std::fabs(r.final_v) > 8.f);    // ~10 m/s (36 km/h) after 8 s on 16%
     }
 
-    // Pente 16 % : AU-DELÀ DE LA CAPACITÉ DES MOTEURS (19,6 A → ~52 N/roue, soit ~134 N de
-    // retenue totale avec le roulement, contre 152 N de gravité). Frein ACTIF comme frein
-    // DYNAMIQUE convergent vers le même glissement : au-dessus de ~0,9 m/s les deux modes
-    // sont écrêtés au courant max — le kart descend, lentement mais inexorablement.
-    // Enseignement : pente max retenable ≈ 11 % à pleine charge ; 16 % exige un frein
-    // MÉCANIQUE (ou éviter la pente).
+    // Slope 16%: BEYOND THE MOTORS' CAPACITY (19.6 A → ~52 N/wheel, i.e. ~134 N of
+    // total holding force with rolling resistance, against 152 N of gravity). Active (PID) braking as
+    // dynamic braking converge toward the same slip: above ~0.9 m/s both modes
+    // are clamped at max current — the kart descends, slowly but inexorably.
+    // Lesson: max holdable slope ≈ 11% at full load; 16% demands a MECHANICAL
+    // brake (or avoiding the slope).
     {
         const RunResult r = run(get("descente16_frein_actif"));
-        std::printf("  descente16 frein ACTIF : v finale=%.2f m/s — capacité moteur DÉPASSÉE\n",
+        std::printf("  descente16 active (PID) brake : final v=%.2f m/s — motor capacity EXCEEDED\n",
                     std::fabs(r.final_v));
         CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(std::fabs(r.final_v) > 3.f);    // ne tient PAS : documente la limite
+        CHECK(std::fabs(r.final_v) > 3.f);    // does NOT hold: documents the limit
     }
     {
         const RunResult r = run(get("descente16_frein_dynamique"));
-        std::printf("  descente16 frein DYNAMIQUE : v finale=%.2f m/s — idem (écrêté)\n",
+        std::printf("  descente16 dynamic brake : final v=%.2f m/s — same (clamped)\n",
                     std::fabs(r.final_v));
         CHECK(r.ever_armed && !r.ever_fault);
         CHECK(std::fabs(r.final_v) > 3.f);
     }
 
-    // Pente 8 %, frein DYNAMIQUE seul : ne peut pas s'arrêter (force ∝ v) mais doit
-    // PLAFONNER la descente à une vitesse terminale rampante — pas d'emballement.
+    // Slope 8%, dynamic braking only: cannot stop (force ∝ v) but must
+    // CAP the descent at a crawling terminal speed — no runaway.
     {
         const RunResult r = run(get("descente_frein_dynamique"));
-        std::printf("  descente_frein_dynamique (8 %%, court-circuit seul) : v finale=%.2f m/s\n",
+        std::printf("  descente_frein_dynamique (8 %%, short-circuit only) : final v=%.2f m/s\n",
                     std::fabs(r.final_v));
         CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(std::fabs(r.final_v) < 0.7f);   // vitesse terminale rampante (« il tient »)
-        CHECK(std::fabs(r.final_v) > 0.05f);  // …mais ne S'ARRÊTE pas : limite documentée
+        CHECK(std::fabs(r.final_v) < 0.7f);   // crawling terminal speed ("it holds")
+        CHECK(std::fabs(r.final_v) > 0.05f);  // …but does NOT STOP: documented limit
     }
 }
 
-// Balayage de paramètres : toute la plage UTILE des réglages web doit rester sans bascule.
-// (C'est la demande d'origine : « tester un ensemble de paramètres ».)
+// Parameter sweep: the entire USEFUL range of web settings must remain tip-free.
+// (This is the original request: "test a set of parameters".)
 void testParamSweep()
 {
     int runs = 0;
@@ -293,12 +293,12 @@ void testParamSweep()
                 CHECK(r.min_tip_margin > 0.f);
                 CHECK(!r.ever_fault);
             }
-    std::printf("  balayage : %d combinaisons, pire marge %.2f m/s² (turn_hi=%.1f "
+    std::printf("  sweep : %d combinations, worst margin %.2f m/s² (turn_hi=%.1f "
                 "turn_full=%.1f vlim=%.1f)\n", runs, worst, worst_hi, worst_full, worst_lim);
 }
 
-// ─────────────────────────── Flux JSON (visualisateur) ───────────────────────────
-// Une frame du flux (partagée entre scénarios scriptés et conduite manuelle).
+// ─────────────────────────── JSON stream (viewer) ───────────────────────────
+// One frame of the stream (shared between scripted scenarios and manual driving).
 void printFrame(const Vehicle& v, const SimController& c, const CtrlTelemetry& t)
 {
     const float mps2rpm = 60.f * hw::GEAR_RATIO / (PI_F * hw::WHEEL_DIAM_M);
@@ -330,12 +330,12 @@ int streamScenario(const std::string& name, bool realtime)
     const Scenario* sc = findScenario(all, name);
     if (!sc)
     {
-        std::fprintf(stderr, "scénario inconnu : %s (voir --list)\n", name.c_str());
+        std::fprintf(stderr, "unknown scenario: %s (see --list)\n", name.c_str());
         return 2;
     }
-    // Le véhicule du scénario (mêmes mutations que dans runScenario) → ses paramètres réels
-    // partent dans le méta-message : le bouton « Hypothèses » du visualisateur les affiche
-    // depuis LA source de vérité, pas depuis une copie.
+    // The scenario's vehicle (same mutations as in runScenario) → its real parameters
+    // go into the meta message: the viewer's "Assumptions" button displays them
+    // from THE source of truth, not from a copy.
     Vehicle vmeta;
     if (sc->veh) sc->veh(vmeta);
     const VehicleParams& p = vmeta.params();
@@ -358,7 +358,7 @@ int streamScenario(const std::string& name, bool realtime)
     const auto t0 = std::chrono::steady_clock::now();
     int frame = 0;
     runScenario(*sc, [&](const Vehicle& v, const SimController& c, const CtrlTelemetry& t) {
-        if (0 != (frame++ % 8)) return;   // 500 Hz → ~60 Hz d'affichage
+        if (0 != (frame++ % 8)) return;   // 500 Hz → ~60 Hz display
         printFrame(v, c, t);
         if (realtime)
         {
@@ -370,10 +370,10 @@ int streamScenario(const std::string& name, bool realtime)
 }
 } // namespace
 
-// ─────────────────────────── Conduite MANUELLE (clavier via le visualisateur) ───────────────────────────
-// Lit les commandes (lignes JSON {"x":..,"y":..,"start":..,"estop":..}) sur stdin, fait rouler
-// le kart en temps réel sur le TERRAIN VALLONNÉ (terrain.hpp) : la pente sous le kart alimente
-// la physique à chaque pas. Se termine quand stdin ferme (le navigateur est parti).
+// ─────────────────────────── MANUAL driving (keyboard via the viewer) ───────────────────────────
+// Reads commands (JSON lines {"x":..,"y":..,"start":..,"estop":..}) on stdin, drives
+// the kart in real time on the HILLY TERRAIN (terrain.hpp): the slope under the kart feeds
+// the physics at each step. Ends when stdin closes (the browser is gone).
 void parseCmd(const std::string& line, PadCmd& cmd)
 {
     auto num = [&](const char* key, float def) {
@@ -392,13 +392,13 @@ int driveInteractive()
     KartConfig cfg;
     cfg.setDefaults();
     Vehicle veh;
-    veh.ground_fn = [](float x, float y) { return terrainH(x, y); };   // sauts possibles !
+    veh.ground_fn = [](float x, float y) { return terrainH(x, y); };   // jumps possible!
     PadCmd cmd;
     SimController ctrl(veh, [&cmd](float) { return cmd; });
 
     const VehicleParams& p = veh.params();
     std::printf("{\"meta\":true,\"name\":\"conduite_manuelle\","
-                "\"desc\":\"Conduite au clavier sur terrain vallonné (pentes jusqu'à ~13 %%)\","
+                "\"desc\":\"Keyboard driving on hilly terrain (slopes up to ~13 %%)\","
                 "\"duration\":0,\"terrain\":true,\"atip\":%.3f,\"vlim\":%.2f,\"params\":{"
                 "\"masse_totale_kg\":%.0f,\"masse_kart_kg\":%.0f,\"masse_passagers_kg\":%.0f,"
                 "\"voie_m\":%.2f,\"empattement_m\":%.3f,\"iz_kgm2\":%.1f,"
@@ -420,14 +420,14 @@ int driveInteractive()
     {
         ssize_t n;
         while ((n = read(0, buf, sizeof(buf))) > 0) acc.append(buf, static_cast<size_t>(n));
-        if (0 == n) break;   // EOF : le relais a fermé (onglet parti / scénario changé)
+        if (0 == n) break;   // EOF: the relay closed (tab gone / scenario changed)
         size_t nl;
         while ((nl = acc.find('\n')) != std::string::npos)
         {
             const std::string line = acc.substr(0, nl);
             parseCmd(line, cmd);
-            // Interrupteur d'anti-renversement (case à cocher du visualisateur) : même
-            // paramètre que sur le vrai kart (turn_limit_en), appliqué au vol.
+            // Rollover protection switch (viewer checkbox): same
+            // parameter as on the real kart (turn_limit_en), applied on the fly.
             const size_t p = line.find("\"tl\":");
             if (p != std::string::npos)
             {
@@ -436,7 +436,7 @@ int driveInteractive()
             acc.erase(0, nl + 1);
         }
 
-        // La pente RÉELLE sous le kart pilote la physique (montée freine, descente emballe).
+        // The REAL slope under the kart drives the physics (uphill brakes, downhill runs away).
         veh.params().slope_rad = terrainSlopeAlong(veh.x(), veh.y(), veh.heading());
         ctrl.stepOnce(cfg);
 
@@ -472,16 +472,16 @@ int main(int argc, char** argv)
             std::fprintf(g_trace, "scenario,t,v,w,alat,margin,outl,outr,fwd,turn,state,fault,brake,faults\n");
     }
 
-    std::printf("Simulation physique (contrôleur réel + modèle du véhicule) :\n");
+    std::printf("Physics simulation (real controller + vehicle model):\n");
     testScenarios();
     testParamSweep();
     if (g_trace) std::fclose(g_trace);
 
     if (0 == g_failures)
     {
-        std::printf("Tous les scénarios de simulation PASSENT ✔\n");
+        std::printf("All simulation scenarios PASS ✔\n");
         return 0;
     }
-    std::printf("%d échec(s)\n", g_failures);
+    std::printf("%d failure(s)\n", g_failures);
     return 1;
 }

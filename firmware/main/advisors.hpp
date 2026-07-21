@@ -1,8 +1,8 @@
-// advisors.hpp — Décisions d'HÔTE dérivées de la télémétrie du cœur (KartController).
-// VOLONTAIREMENT hors du cœur : le contrôleur de base calcule une sortie MOTEUR en
-// fonction des entrées, rien d'autre. Vibrer la manette (présentation) et couper
-// l'alimentation (politique système) appartiennent à l'hôte — ces deux conseillers PURS
-// (compilables hôte) sont partagés par l'ESP (EspController) et la simulation (SimController).
+// advisors.hpp — HOST decisions derived from the core's telemetry (KartController).
+// DELIBERATELY outside the core: the base controller computes a MOTOR output based
+// on the inputs, nothing else. Vibrating the gamepad (presentation) and cutting
+// the power (system policy) belong to the host — these two PURE advisors
+// (host-compilable) are shared by the ESP (EspController) and the simulation (SimController).
 #pragma once
 
 #include <cmath>
@@ -10,7 +10,7 @@
 
 #include "controller_core.hpp"
 
-// Commande de vibration à transmettre à la manette (input::rumble côté ESP).
+// Vibration command to send to the gamepad (input::rumble on the ESP side).
 struct RumbleCmd
 {
     bool     active = false;
@@ -19,8 +19,8 @@ struct RumbleCmd
     uint16_t duration_ms = 0;
 };
 
-// Retours haptiques sur les FRONTS de la télémétrie : armement (doux), défaut dur ou
-// e-stop (fort), « pousse le manche mais bloqué » (fort, répété avec anti-spam).
+// Haptic feedback on the EDGES of the telemetry: arming (soft), hard fault or
+// e-stop (strong), "pushes the stick but blocked" (strong, repeated with anti-spam).
 class RumbleAdvisor
 {
 public:
@@ -33,18 +33,18 @@ public:
             cmd.weak = wk;
             cmd.duration_ms = ms;
         };
-        // Défaut « dur » : LVC ou n'importe quel défaut encodeur — tous forcent l'arrêt
-        // et méritent un retour haptique appuyé.
+        // "hard" fault: LVC or any encoder fault — all force the stop
+        // and deserve an emphatic haptic feedback.
         const bool hard_fault = (0 != (t.faults & fb::HARD));
-        if (t.armed && !m_armed_prev)                                        // vient d'être armé → doux
+        if (t.armed && !m_armed_prev)                                        // just armed → soft
             set(90, 160, 220);
-        if ((hard_fault && !m_hard_prev) || (pad.estop && !m_estop_prev))    // erreur soudaine / e-stop → fort
+        if ((hard_fault && !m_hard_prev) || (pad.estop && !m_estop_prev))    // sudden error / e-stop → strong
             set(255, 255, 450);
         const bool pushing = (std::fabs(pad.rx) > hw::PUSH_MIN) || (std::fabs(pad.ry) > hw::PUSH_MIN);
-        const bool can_drive = (State::Run == t.state);   // Run ⟺ armé et aucune condition bloquante
+        const bool can_drive = (State::Run == t.state);   // Run ⟺ armed and no blocking condition
         if (pushing && !can_drive && (now_us - m_block_us) > hw::RUMBLE_BLOCK_INTERVAL_US)
         {
-            set(220, 220, 250);   // bouge le manche mais bloqué → fort (répété)
+            set(220, 220, 250);   // moving the stick but blocked → strong (repeated)
             m_block_us = now_us;
         }
         m_armed_prev = t.armed;
@@ -60,8 +60,8 @@ private:
     int64_t m_block_us = 0;
 };
 
-// Coupure d'alimentation : LVC active sans interruption pendant hw::LVC_POWEROFF_MS →
-// true (l'hôte coupe : board::powerOff côté ESP). Le cœur signale fb::LVC, c'est tout.
+// Power cutoff: LVC active without interruption for hw::LVC_POWEROFF_MS →
+// true (the host cuts: board::powerOff on the ESP side). The core signals fb::LVC, that's all.
 class PowerOffAdvisor
 {
 public:
@@ -77,5 +77,5 @@ public:
     }
 
 private:
-    int64_t m_since_us = 0;   // début de la période LVC ininterrompue
+    int64_t m_since_us = 0;   // start of the uninterrupted LVC period
 };

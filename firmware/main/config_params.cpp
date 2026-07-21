@@ -1,100 +1,100 @@
-// config_params.cpp — Table des paramètres + défauts/bornes. PUR (compilé aussi sur
-// l'hôte pour la simulation) : la source unique de vérité des réglages, sans NVS ni ESP.
+// config_params.cpp — Parameter table + defaults/bounds. PURE (also compiled on
+// the host for simulation): the single source of truth for the settings, without NVS or ESP.
 #include "control_types.hpp"
 
 #include <algorithm>
 
-// Source unique de vérité : nom (clé NVS/JSON), libellé, catégorie (regroupement visuel),
-// aide (infobulle au survol — SANS guillemets doubles, injectée telle quelle dans le JSON),
-// type, min/défaut/max, champ visé. L'ordre du tableau = l'ordre d'affichage : garder les
-// entrées d'une même catégorie CONSÉCUTIVES (la page web groupe les cat identiques qui se suivent).
-// NB : les seuils LVC ne sont PAS ici — batterie 12 V ou 24 V détectée au démarrage,
-// seuils codés en dur par type (hw::VBAT12_*/VBAT24_*).
+// Single source of truth: name (NVS/JSON key), label, category (visual grouping),
+// help (hover tooltip — WITHOUT double quotes, injected as-is into the JSON),
+// type, min/default/max, target field. The array order = the display order: keep the
+// entries of a same category CONSECUTIVE (the web page groups identical cats that follow each other).
+// NB: the LVC thresholds are NOT here — 12 V or 24 V battery detected at startup,
+// thresholds hard-coded per type (hw::VBAT12_*/VBAT24_*).
 const ParamDesc PARAMS[] =
 {
-    {"speed_limit_ms",  "Limite vitesse (m/s)",   "Vitesse et puissance",
-     "Vitesse maximale en MARCHE AVANT (m/s). Au-dela, le limiteur PID retient le kart (encodeurs requis). C'est aussi la vitesse ou le virage est le plus bride par l'anti-renversement.",
+    {"speed_limit_ms",  "Speed limit (m/s)",   "Speed & power",
+     "Maximum speed in FORWARD (m/s). Beyond it, the PID limiter holds the kart back (encoders required). It is also the speed at which the turn is most limited by the rollover protection.",
      PType::Float, 0.3f,  3.3f,   7.f,    &KartConfig::speed_limit_ms},
-    {"rev_speed_ms",    "Limite recul (m/s)",     "Vitesse et puissance",
-     "Vitesse maximale en MARCHE ARRIERE (m/s) — meme limiteur PID, cible choisie selon le sens MESURE. La roulette ne guide pas en recul : rester lent.",
+    {"rev_speed_ms",    "Reverse limit (m/s)",     "Speed & power",
+     "Maximum speed in REVERSE (m/s) — same PID limiter, target chosen according to the MEASURED direction. The caster wheel does not steer in reverse: stay slow.",
      PType::Float, 0.3f,  1.0f,   3.f,    &KartConfig::rev_speed_ms},
-    // Plafond PWM MANUEL (le plus restrictif gagne) — le plafond AUTOMATIQUE 12 V/Vbat
-    // mesurée (ctl::dutyCapVolts) s'applique EN PLUS. Défaut 1,0 = laisser faire l'auto.
-    {"duty_cap",        "Plafond PWM manuel (0-1)", "Vitesse et puissance",
-     "Plafond PWM fixe, en plus du plafond automatique 12 V / tension batterie mesuree (le plus restrictif gagne). Laisser 1,0 en usage normal ; a baisser a la main si on roule sans capteur de tension sur plus de 12 V.",
+    // MANUAL PWM cap (the most restrictive wins) — the AUTOMATIC 12 V/Vbat
+    // measured cap (ctl::dutyCapVolts) applies IN ADDITION. Default 1.0 = let the auto handle it.
+    {"duty_cap",        "Manual PWM cap (0-1)", "Speed & power",
+     "Fixed PWM cap, in addition to the automatic cap 12 V / measured battery voltage (the most restrictive wins). Leave at 1.0 in normal use; lower it by hand if driving without a voltage sensor above 12 V.",
      PType::Float, 0.05f, 1.0f,   1.f,    &KartConfig::duty_cap_frac},
-    {"thr_deadzone",    "Zone morte manche",       "Manette",
-     "Rayon autour du centre du stick ou la position est ignoree (0-0,3). Compense un stick qui ne revient pas exactement au centre.",
+    {"thr_deadzone",    "Stick deadzone",       "Gamepad",
+     "Radius around the stick center where the position is ignored (0-0.3). Compensates for a stick that does not return exactly to center.",
      PType::Float, 0.f,   0.06f,  0.30f,  &KartConfig::thr_deadzone},
-    {"thr_ramp_per_s",  "Douceur avance (D/s)",    "Manette",
-     "Pente maximale de la consigne d'avance (pleine echelle par seconde). Plus petit = departs et arrets plus doux.",
+    {"thr_ramp_per_s",  "Forward smoothness (D/s)",    "Gamepad",
+     "Maximum slope of the forward command (full scale per second). Smaller = gentler starts and stops.",
      PType::Float, 0.2f,  2.f,    20.f,   &KartConfig::thr_ramp_per_s},
-    {"turn_gain",       "Gain de virage (0-1)",    "Manette",
-     "Part du differentiel gauche/droite a fond de stick. 1 = pivot sur place a pleine puissance.",
+    {"turn_gain",       "Turn gain (0-1)",    "Gamepad",
+     "Share of the left/right differential at full stick. 1 = pivot in place at full power.",
      PType::Float, 0.f,   1.f,    1.f,    &KartConfig::turn_gain},
-    {"turn_rate",       "Douceur virage (D/s)",    "Manette",
-     "Pente maximale de la consigne de virage (pleine echelle par seconde). Adoucit les coups de stick brusques.",
+    {"turn_rate",       "Turn smoothness (D/s)",    "Gamepad",
+     "Maximum slope of the turn command (full scale per second). Smooths abrupt stick moves.",
      PType::Float, 0.3f,  3.0f,   20.f,   &KartConfig::turn_rate},
-    // Anti-renversement « iso-a_lat » : virage ±100 % sous turn_full_ms (et partout où
-    // 1/v le permet), puis limite ∝ 1/v jusqu'à turn_hi à speed_limit_ms (vitesse MESURÉE),
-    // et continue de se resserrer au-delà (emballement).
-    {"turn_limit_en",   "Anti-renversement (0/1)", "Anti-renversement",
-     "1 = la limite de virage suit la vitesse mesuree (rampe anti-renversement). 0 = desactive — pour les essais au banc uniquement, virage a 100 % a toute vitesse.",
+    // "iso-a_lat" rollover protection: turn ±100% below turn_full_ms (and everywhere
+    // 1/v allows it), then limit ∝ 1/v up to turn_hi at speed_limit_ms (MEASURED speed),
+    // and it keeps tightening beyond (runaway).
+    {"turn_limit_en",   "Rollover protection (0/1)", "Rollover protection",
+     "1 = the turn limit follows the measured speed (rollover protection ramp). 0 = disabled — for bench testing only, turn at 100% at all speeds.",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::turn_limit_en},
-    {"turn_full_ms",    "Virage 100% sous (m/s)",  "Anti-renversement",
-     "Sous cette vitesse vehicule (m/s), le virage est autorise a 100 % (pivot sur place permis). Au-dela, la limite descend lineairement jusqu'a la limite Vmax.",
+    {"turn_full_ms",    "Turn 100% below (m/s)",  "Rollover protection",
+     "Below this vehicle speed (m/s), the turn is allowed at 100% (pivot in place permitted). Beyond it, the limit decreases linearly down to the Vmax limit.",
      PType::Float, 0.1f,  0.5f,   0.8f,   &KartConfig::turn_full_ms},
-    // Défaut 0,2 + courbe 1/v (gain de virage 1,0) : la simulation physique montre qu'un
-    // CHARGEMENT DÉCALÉ (enfant seul d'un côté, adulte+enfant) renverse avec l'ancienne
-    // rampe linéaire dès gain=1 — l'iso-a_lat à 0,2 redonne des marges saines (≥ +0,8 m/s²).
-    {"turn_alat_vmax",  "Virage max a Vmax (0-1)", "Anti-renversement",
-     "Limite de virage a la vitesse maximale ; entre les deux la limite suit 1/v (meme acceleration laterale a toute vitesse). 0,2 = seule valeur verifiee sure par simulation pour les chargements decales (enfant seul d'un cote, adulte+enfant) avec gain de virage 1.",
+    // Default 0.2 + 1/v curve (turn gain 1.0): the physical simulation shows that an
+    // OFFSET LOAD (child alone on one side, adult+child) tips over with the old
+    // linear ramp as soon as gain=1 — the iso-a_lat at 0.2 restores healthy margins (≥ +0.8 m/s²).
+    {"turn_alat_vmax",  "Max turn at Vmax (0-1)", "Rollover protection",
+     "Turn limit at maximum speed; in between, the limit follows 1/v (same lateral acceleration at all speeds). 0.2 = the only value verified safe by simulation for offset loads (child alone on one side, adult+child) with turn gain 1.",
      PType::Float, 0.1f,  0.2f,   0.4f,   &KartConfig::turn_hi},
-    {"vbat_div_ratio",  "Ratio diviseur Vbat",     "Batterie",
-     "Rapport du pont diviseur de mesure de tension : Vbat = tension lue par l'ADS1115 x ce ratio. A calibrer au multimetre. Le type de batterie (12 ou 24 V) et les seuils de coupure sont detectes automatiquement au demarrage.",
+    {"vbat_div_ratio",  "Vbat divider ratio",     "Battery",
+     "Ratio of the voltage-measurement divider bridge: Vbat = voltage read by the ADS1115 x this ratio. To calibrate with a multimeter. The battery type (12 or 24 V) and the cutoff thresholds are detected automatically at startup.",
      PType::Float, 1.f,   7.667f, 20.f,   &KartConfig::vbat_div_ratio},
-    // PID en m/s (l'erreur est en m/s depuis le passage km/h→m/s).
-    {"brk_kp",          "Frein PID Kp (m/s)",      "Asservissement (PID)",
-     "Gain proportionnel du frein electrique actif (consigne vitesse 0). Encodeurs requis.",
+    // PID in m/s (the error is in m/s since the km/h→m/s switch).
+    {"brk_kp",          "PID brake Kp (m/s)",      "Control loops (PID)",
+     "Proportional gain of the active electric brake (speed command 0). Encoders required.",
      PType::Float, 0.f,   0.43f,  5.f,    &KartConfig::brk_kp},
-    {"brk_ki",          "Frein PID Ki (m/s)",      "Asservissement (PID)",
-     "Gain integral du frein electrique actif : rattrape une pente qui fait glisser le kart a l'arret.",
+    {"brk_ki",          "PID brake Ki (m/s)",      "Control loops (PID)",
+     "Integral gain of the active electric brake: catches up a slope that makes the kart slide when stopped.",
      PType::Float, 0.f,   0.29f,  10.f,   &KartConfig::brk_ki},
-    {"brk_kd",          "Frein PID Kd (m/s)",      "Asservissement (PID)",
-     "Gain derive du frein electrique actif : amortit les oscillations de freinage.",
+    {"brk_kd",          "PID brake Kd (m/s)",      "Control loops (PID)",
+     "Derivative gain of the active electric brake: damps braking oscillations.",
      PType::Float, 0.f,   0.011f, 2.f,    &KartConfig::brk_kd},
-    {"vlim_enable",     "Limiteur vitesse (0/1)",  "Asservissement (PID)",
-     "1 = le PID limiteur retient le kart a la limite de vitesse (encodeurs requis). 0 = desactive — seul le plafond PWM borne la vitesse.",
+    {"vlim_enable",     "Speed limiter (0/1)",  "Control loops (PID)",
+     "1 = the limiter PID holds the kart back at the speed limit (encoders required). 0 = disabled — only the PWM cap bounds the speed.",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::vlim_enable},
-    {"vlim_kp",         "Limiteur PID Kp (m/s)",   "Asservissement (PID)",
-     "Gain proportionnel du limiteur de vitesse (retient le kart a la limite de vitesse).",
+    {"vlim_kp",         "PID limiter Kp (m/s)",   "Control loops (PID)",
+     "Proportional gain of the speed limiter (holds the kart back at the speed limit).",
      PType::Float, 0.f,   0.54f,  5.f,    &KartConfig::vlim_kp},
-    {"vlim_ki",         "Limiteur PID Ki (m/s)",   "Asservissement (PID)",
-     "Gain integral du limiteur de vitesse : tient la limite en descente.",
+    {"vlim_ki",         "PID limiter Ki (m/s)",   "Control loops (PID)",
+     "Integral gain of the speed limiter: holds the limit downhill.",
      PType::Float, 0.f,   0.50f,  10.f,   &KartConfig::vlim_ki},
-    {"vlim_kd",         "Limiteur PID Kd (m/s)",   "Asservissement (PID)",
-     "Gain derive du limiteur de vitesse : amortit les oscillations autour de la limite.",
+    {"vlim_kd",         "PID limiter Kd (m/s)",   "Control loops (PID)",
+     "Derivative gain of the speed limiter: damps the oscillations around the limit.",
      PType::Float, 0.f,   0.f,    2.f,    &KartConfig::vlim_kd},
-    {"brk_pid_enable",  "Frein PID (0/1)",         "Asservissement (PID)",
-     "1 = frein electrique actif (PID, consigne vitesse 0) quand le stick est relache (encodeurs requis). 0 = freinage dynamique seul (court-circuit moteur).",
+    {"brk_pid_enable",  "PID brake (0/1)",         "Control loops (PID)",
+     "1 = active electric brake (PID, speed command 0) when the stick is released (encoders required). 0 = dynamic braking only (motor short-circuit).",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::brk_pid_enable},
-    {"use_encoders",    "Utiliser encodeurs (0/1)", "Comportement",
-     "1 = les capteurs AS5600 servent au limiteur de vitesse, au frein PID, a l'anti-renversement et au defaut capteur bloque. 0 = banc d'essai sans encodeurs cables.",
+    {"use_encoders",    "Use encoders (0/1)", "Behavior",
+     "1 = the AS5600 sensors are used for the speed limiter, PID braking, rollover protection and the blocking sensor fault. 0 = test bench without wired encoders.",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::use_encoders},
-    {"allow_reverse",   "Marche arriere (0/1)",    "Comportement",
-     "Autoriser la marche arriere (tenue par sa propre limite de vitesse, rev_speed_ms).",
+    {"allow_reverse",   "Reverse (0/1)",    "Behavior",
+     "Allow reverse (held by its own speed limit, rev_speed_ms).",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::allow_reverse},
-    {"arm_hold_ms",     "Appui armement (ms)",     "Comportement",
-     "Duree d'appui maintenu sur START (physique ou manette) pour armer, stick centre exige.",
+    {"arm_hold_ms",     "Arming hold (ms)",     "Behavior",
+     "Held press duration on START (physical or gamepad) to arm, centered stick required.",
      PType::Int,   200.f, 1000.f, 5000.f, &KartConfig::arm_hold_ms},
-    {"disarm_s",        "Desarmement auto (s)",    "Comportement",
-     "Desarmement automatique apres ce delai sans toucher au stick.",
+    {"disarm_s",        "Auto disarm (s)",    "Behavior",
+     "Automatic disarm after this delay without touching the stick.",
      PType::Int,   5.f,   30.f,   600.f,  &KartConfig::disarm_s},
-    {"led_count",       "Nb LEDs ruban",           "LEDs",
-     "Nombre de LEDs WS2812 sur le ruban d'etat.",
+    {"led_count",       "Strip LED count",           "LEDs",
+     "Number of WS2812 LEDs on the status strip.",
      PType::Int,   1.f,   10.f,   60.f,   &KartConfig::led_count},
-    {"led_brightness",  "Luminosite LEDs",         "LEDs",
-     "Luminosite du ruban (1-255).",
+    {"led_brightness",  "LED brightness",         "LEDs",
+     "Strip brightness (1-255).",
      PType::Int,   1.f,   64.f,   255.f,  &KartConfig::led_brightness},
 };
 const int PARAM_COUNT = sizeof(PARAMS) / sizeof(PARAMS[0]);
@@ -105,7 +105,7 @@ void KartConfig::setDefaults()
     {
         this->*(PARAMS[i].field) = PARAMS[i].def;
     }
-    // Ratios encodeur (hors PARAMS — voir control_types.hpp) : roue 10" via AS5600 + réducteur.
+    // Encoder ratios (outside PARAMS — see control_types.hpp): 10" wheel via AS5600 + reduction gear.
     enc_mps_per_cps = 3.14159265f * hw::WHEEL_DIAM_M / (hw::AS5600_CPR * hw::GEAR_RATIO);
     enc_rpm_per_cps = 60.f / (hw::AS5600_CPR * hw::GEAR_RATIO);
 }
@@ -117,6 +117,6 @@ void KartConfig::clampAll()
         float& f = this->*(PARAMS[i].field);
         f = std::clamp(f, PARAMS[i].min, PARAMS[i].max);
     }
-    // (Les seuils LVC ne sont plus des paramètres : codés en dur selon la batterie
-    // 12/24 V détectée au démarrage — hw::VBAT12_*/VBAT24_*, cohérence garantie.)
+    // (The LVC thresholds are no longer parameters: hard-coded according to the battery
+    // 12/24 V detected at startup — hw::VBAT12_*/VBAT24_*, consistency guaranteed.)
 }

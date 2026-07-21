@@ -1,62 +1,62 @@
 <!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kart - Configuration</title>
 <link rel="stylesheet" href="/style.css">
 <script src="/chart.js"></script>
 <script src="/pb.js"></script>
 </head><body>
-<header>🛞 Kart électrique<span class="pill brakemode" id="i_brakemode">—</span><span class="hdr-state" id="hdrstate">…</span></header>
+<header>🛞 Electric kart<span class="pill brakemode" id="i_brakemode">—</span><span class="hdr-state" id="hdrstate">…</span></header>
 <nav class="tabs">
- <button class="tab active" data-tab="dash">Tableau de bord</button>
+ <button class="tab active" data-tab="dash">Dashboard</button>
  <button class="tab" data-tab="cfg">Configuration</button>
- <button class="tab" data-tab="pad">Manette</button>
- <button class="tab" data-tab="faults" id="faultstab">Défauts</button>
+ <button class="tab" data-tab="pad">Gamepad</button>
+ <button class="tab" data-tab="faults" id="faultstab">Faults</button>
  <button class="tab" data-tab="wifi">Wi-Fi</button>
- <button class="tab" data-tab="pins">Brochage</button>
- <button class="tab" data-tab="sys">Système</button>
+ <button class="tab" data-tab="pins">Pinout</button>
+ <button class="tab" data-tab="sys">System</button>
 </nav>
 <div class="wrap">
 
  <section id="dash" class="panel">
   <div id="why" class="why" hidden></div>
-  <div class="chart-title">Avance · PWM (%) · RPM roues — 10 min</div>
+  <div class="chart-title">Forward · PWM (%) · Wheel RPM — 10 min</div>
   <canvas id="chart" width="520" height="180"></canvas>
-  <div class="chart-title">🏎️ Vitesse véhicule (m/s, 0 en pivot) — 1 min</div>
+  <div class="chart-title">🏎️ Vehicle speed (m/s, 0 while pivoting) — 1 min</div>
   <canvas id="spdchart" width="520" height="90"></canvas>
-  <div class="chart-title" id="batttitle">🔋 Batterie — 30 min</div>
+  <div class="chart-title" id="batttitle">🔋 Battery — 30 min</div>
   <canvas id="battchart" width="520" height="90"></canvas>
   <div id="bars"></div>
   <div id="ind"></div>
-  <div class="status" id="status">Connexion…</div>
+  <div class="status" id="status">Connecting…</div>
   <div class="row">
-   <button class="danger" onclick="reboot()">⟳ Redémarrer</button>
+   <button class="danger" onclick="reboot()">⟳ Reboot</button>
   </div>
  </section>
 
  <section id="cfg" class="panel" hidden>
-  <button class="alt" onclick="reload()">Recharger</button>
+  <button class="alt" onclick="reload()">Reload</button>
   <form id="f"></form>
-  <button type="button" onclick="save()">💾 Enregistrer</button>
+  <button type="button" onclick="save()">💾 Save</button>
  </section>
 
  <section id="faults" class="panel" hidden>
-  <div class="chart-title">🚨 Défauts présentement actifs</div>
+  <div class="chart-title">🚨 Currently active faults</div>
   <div id="faultlist" class="faultlist"></div>
-  <p class="note">Un défaut <b>désarme</b> le kart et enclenche le freinage dynamique. Les défauts
-  d'encodeur (bloqué / inversé / aberrant) restent <b>verrouillés jusqu'au redémarrage</b> ; les
-  autres disparaissent quand leur cause est résolue (il faut ensuite réarmer avec START).</p>
+  <p class="note">A fault <b>disarms</b> the kart and engages dynamic braking. Encoder
+  faults (stuck / reversed / erratic) stay <b>locked until reboot</b>; the
+  others clear once their cause is resolved (you must then rearm with START).</p>
  </section>
 
  <section id="pad" class="panel" hidden>
-  <div class="status" id="padinfo">Manette : …</div>
+  <div class="status" id="padinfo">Gamepad: …</div>
   <div class="padlive">
-   <div><div class="chart-title">🕹️ Stick gauche</div><canvas id="padview" width="150" height="150"></canvas>
-    <div class="padlegend"><span style="color:#3cf">●</span> physique · <span style="color:#fa0">●</span> compensé</div></div>
-   <div><div class="chart-title">🕹️ Stick droit</div><canvas id="padview2" width="150" height="150"></canvas>
-    <div class="padlegend">affichage seulement</div></div>
-   <div><div class="chart-title">✛ Croix (D-pad)</div><canvas id="dpadview" width="96" height="96"></canvas></div>
-   <div><div class="chart-title">Boutons</div><div id="padbtns" class="padbtns"></div>
+   <div><div class="chart-title">🕹️ Left stick</div><canvas id="padview" width="150" height="150"></canvas>
+    <div class="padlegend"><span style="color:#3cf">●</span> physical · <span style="color:#fa0">●</span> compensated</div></div>
+   <div><div class="chart-title">🕹️ Right stick</div><canvas id="padview2" width="150" height="150"></canvas>
+    <div class="padlegend">display only</div></div>
+   <div><div class="chart-title">✛ D-pad (cross)</div><canvas id="dpadview" width="96" height="96"></canvas></div>
+   <div><div class="chart-title">Buttons</div><div id="padbtns" class="padbtns"></div>
     <div class="padtrig">
      <div class="trig"><span>ZL</span><div class="track"><div class="fill" id="zlf"></div></div></div>
      <div class="trig"><span>ZR</span><div class="track"><div class="fill" id="zrf"></div></div></div>
@@ -64,70 +64,70 @@
     <div class="padraw" id="padraw">btns —</div></div>
   </div>
   <div class="row">
-   <button onclick="padPair()">🔗 Appairer une manette</button>
-   <button class="danger" onclick="padUnpair()">✖ Désappairer</button>
+   <button onclick="padPair()">🔗 Pair a gamepad</button>
+   <button class="danger" onclick="padUnpair()">✖ Unpair</button>
   </div>
-  <p class="note">⚠️ L'appairage <b>efface la calibration</b> : il faudra recalibrer. La manette doit être en mode appairage (souvent maintenir le bouton de synchro).</p>
+  <p class="note">⚠️ Pairing <b>erases the calibration</b>: you will have to recalibrate. The gamepad must be in pairing mode (often hold the sync button).</p>
   <hr>
-  <p class="note"><b>Calibration manette — OBLIGATOIRE pour rouler.</b><br>
-  1) Manche au repos → « Démarrer ». 2) Bouger les 2 sticks <b>à fond dans tous les sens</b>. 3) « Terminer ».</p>
+  <p class="note"><b>Gamepad calibration — MANDATORY to drive.</b><br>
+  1) Stick at rest → "Start". 2) Move both sticks <b>fully in all directions</b>. 3) "Finish".</p>
   <div class="row">
-   <button class="warn" id="calstartbtn" onclick="calStart()">▶ Démarrer la calibration</button>
-   <button id="calfinishbtn" onclick="calFinish()" disabled>✓ Terminer</button>
-   <button class="alt" id="calcancelbtn" onclick="calCancel()" disabled>Annuler</button>
+   <button class="warn" id="calstartbtn" onclick="calStart()">▶ Start calibration</button>
+   <button id="calfinishbtn" onclick="calFinish()" disabled>✓ Finish</button>
+   <button class="alt" id="calcancelbtn" onclick="calCancel()" disabled>Cancel</button>
   </div>
-  <div class="status" id="calstatus">Calibration : —</div>
+  <div class="status" id="calstatus">Calibration: —</div>
  </section>
 
  <section id="wifi" class="panel" hidden>
   <div class="status" id="wifistatus">…</div>
   <form id="wf">
-   <label>Activer le mode station<input name="enabled" type="checkbox"></label>
-   <label>SSID du réseau<input name="ssid" type="text"></label>
-   <label>Mot de passe<input name="pass" type="password"></label>
+   <label>Enable station mode<input name="enabled" type="checkbox"></label>
+   <label>Network SSID<input name="ssid" type="text"></label>
+   <label>Password<input name="pass" type="password"></label>
   </form>
-  <button type="button" onclick="saveWifi()">💾 Enregistrer &amp; redémarrer</button>
-  <p class="note">Le kart se connecte au réseau choisi <b>après redémarrage</b>, tout en gardant le point d'accès « Kart-Config » actif. Reconnexion automatique toutes les 5 s si la liaison tombe.</p>
+  <button type="button" onclick="saveWifi()">💾 Save &amp; reboot</button>
+  <p class="note">The kart connects to the chosen network <b>after reboot</b>, while keeping the "Kart-Config" access point active. Automatic reconnection every 5 s if the link drops.</p>
  </section>
 
  <section id="pins" class="panel" hidden>
   <table class="pins">
-   <tr><th>GPIO</th><th>Fonction</th><th>Sens</th></tr>
-   <tr><td>25 / 26</td><td>PWM / DIR moteur AVANT gauche</td><td>sortie</td></tr>
-   <tr><td>32 / 33</td><td>PWM / DIR moteur AVANT droite</td><td>sortie</td></tr>
-   <tr><td>18 / 19</td><td>I²C bus 0 (SDA/SCL) — AS5600 roue G (0x36) + ADS1115 (0x48)</td><td>E/S</td></tr>
-   <tr><td>27 / 14</td><td>I²C bus 1 (SDA/SCL) — AS5600 roue D (0x36)</td><td>E/S</td></tr>
-   <tr><td>16</td><td>Bouton armement (START)</td><td>entrée (pull-up)</td></tr>
-   <tr><td>13</td><td>POWER_HOLD (maintien d'alim, actif bas)</td><td>sortie</td></tr>
-   <tr><td>17</td><td>Ruban LED WS2812B (data)</td><td>sortie</td></tr>
-   <tr><td>2</td><td>LED d'état (onboard)</td><td>sortie</td></tr>
-   <tr><th colspan="3">ADC externe ADS1115 (I²C bus 0, 3,3 V)</th></tr>
-   <tr><td>A0</td><td>Tension batterie (pont 100k/15k) — continu</td><td>entrée ADC</td></tr>
-   <tr><td>A1 / A2</td><td>Joystick X / Y — FUTUR (non câblé)</td><td>entrées ADC</td></tr>
-   <tr><th colspan="3">Réserve : encodeurs quadrature AMT103-V FUTUR (non câblé)</th></tr>
-   <tr><td>34 / 35</td><td>Encodeur roue G — A / B</td><td>entrées (input-only)</td></tr>
-   <tr><td>36 / 39</td><td>Encodeur roue D — A / B</td><td>entrées (input-only)</td></tr>
+   <tr><th>GPIO</th><th>Function</th><th>Direction</th></tr>
+   <tr><td>25 / 26</td><td>PWM / DIR front-left motor</td><td>output</td></tr>
+   <tr><td>32 / 33</td><td>PWM / DIR front-right motor</td><td>output</td></tr>
+   <tr><td>18 / 19</td><td>I²C bus 0 (SDA/SCL) — AS5600 left wheel (0x36) + ADS1115 (0x48)</td><td>I/O</td></tr>
+   <tr><td>27 / 14</td><td>I²C bus 1 (SDA/SCL) — AS5600 right wheel (0x36)</td><td>I/O</td></tr>
+   <tr><td>16</td><td>Arming button (START)</td><td>input (pull-up)</td></tr>
+   <tr><td>13</td><td>POWER_HOLD (power latch, active low)</td><td>output</td></tr>
+   <tr><td>17</td><td>WS2812B LED strip (data)</td><td>output</td></tr>
+   <tr><td>2</td><td>Status LED (onboard)</td><td>output</td></tr>
+   <tr><th colspan="3">External ADS1115 ADC (I²C bus 0, 3.3 V)</th></tr>
+   <tr><td>A0</td><td>Battery voltage (100k/15k divider) — continuous</td><td>ADC input</td></tr>
+   <tr><td>A1 / A2</td><td>Joystick X / Y — FUTURE (not wired)</td><td>ADC inputs</td></tr>
+   <tr><th colspan="3">Reserved: AMT103-V quadrature encoders FUTURE (not wired)</th></tr>
+   <tr><td>34 / 35</td><td>Left wheel encoder — A / B</td><td>inputs (input-only)</td></tr>
+   <tr><td>36 / 39</td><td>Right wheel encoder — A / B</td><td>inputs (input-only)</td></tr>
   </table>
-  <p class="note">Pilotage = <b>manette Bluetooth</b> (onglet Manette). Tricycle : 2 roues avant motrices + roulette arrière.<br>
-  Manette déconnectée ou non calibrée → <b>freinage / refus de rouler</b>. Arrêt d'urgence = coupe-courant matériel.</p>
+  <p class="note">Control = <b>Bluetooth gamepad</b> (Gamepad tab). Tricycle: 2 driven front wheels + rear caster wheel.<br>
+  Disconnected or uncalibrated gamepad → <b>braking / refuses to drive</b>. Emergency stop = hardware kill switch.</p>
  </section>
 
  <section id="sys" class="panel" hidden>
-  <button class="alt" onclick="loadSys()">↻ Rafraîchir</button>
-  <table class="pins" id="systbl"><tr><td>Chargement…</td></tr></table>
+  <button class="alt" onclick="loadSys()">↻ Refresh</button>
+  <table class="pins" id="systbl"><tr><td>Loading…</td></tr></table>
  </section>
 
 </div>
 <script>
-// Reflètent les enums C++ State / Fault (config.hpp) — index = valeur.
+// Mirror the C++ State / Fault enums (config.hpp) — index = value.
 const STATE={LOCKOUT:0,CALIBRATE:1,RUN:2,FAULT:3};
 const FAULT={NONE:0,ESTOP:1,LVC:2,NOT_CALIBRATED:3,ENCODER:4,ENCODER_DIR:5,ENCODER_MAD:6,ENCODER_ABSENT:7};
-const ST=["IDLE","CALIBRATION","ARMÉ","DÉFAUT"];                       // libellés par STATE
-const FA=["—","E-STOP","BATTERIE BASSE","NON CALIBRÉ","ENCODEUR BLOQUÉ","ENCODEUR INVERSÉ","ENCODEUR ABERRANT","ENCODEUR ABSENT"];  // libellés par FAULT
-// ── Protocole BINAIRE (Protocol Buffers) ──
-// Descripteur = miroir exact de firmware/main/proto/kart.proto (mêmes noms, mêmes numéros).
-// Décodé par le runtime protobuf.js (/pb.js, embarqué). Les trames sont ~3× plus petites
-// que le JSON et l'ESP32 les encode sans aucune allocation (nanopb + callbacks).
+const ST=["IDLE","CALIBRATION","ARMED","FAULT"];                       // labels per STATE
+const FA=["—","E-STOP","LOW BATTERY","NOT CALIBRATED","ENCODER STUCK","ENCODER REVERSED","ENCODER ERRATIC","ENCODER ABSENT"];  // labels per FAULT
+// ── BINARY protocol (Protocol Buffers) ──
+// Descriptor = exact mirror of firmware/main/proto/kart.proto (same names, same numbers).
+// Decoded by the protobuf.js runtime (/pb.js, embedded). The frames are ~3× smaller
+// than JSON and the ESP32 encodes them without any allocation (nanopb + callbacks).
 const PB_ROOT=protobuf.Root.fromJSON({nested:{
  ParamVal:{fields:{name:{type:"string",id:1},val:{type:"float",id:2}}},
  Req:{fields:{type:{type:"string",id:1},ssid:{type:"string",id:2},pass:{type:"string",id:3},
@@ -173,8 +173,8 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
 }});
 const PB_REQ=PB_ROOT.lookupType("Req"), PB_MSG=PB_ROOT.lookupType("Msg");
 function sendReq(o){if(ws&&ws.readyState===1)ws.send(PB_REQ.encode(PB_REQ.create(o)).finish());}
-// Décode l'enveloppe et redonne la forme « JSON historique » (m.type + champs à plat,
-// bytes → tableaux) pour que le reste de la page reste inchangé.
+// Decodes the envelope and restores the "legacy JSON" shape (m.type + flat fields,
+// bytes → arrays) so the rest of the page stays unchanged.
 function pbDecode(buf){
  const env=PB_MSG.decode(new Uint8Array(buf));
  const which=env.body; if(!which)return null;
@@ -186,10 +186,10 @@ function pbDecode(buf){
  return m;
 }
 let ws,timer,histTimer,built=false;
-let speedScale=3.3;  // m/s ≙ 100 % (barres de vitesse), réglé depuis la config
-let battLow=0, battFull=1, battType=-1;   // échelle reçue du FIRMWARE (batt_lo/batt_hi du statut)
+let speedScale=3.3;  // m/s ≙ 100 % (speed bars), set from the config
+let battLow=0, battFull=1, battType=-1;   // scale received from the FIRMWARE (batt_lo/batt_hi of the status)
 
-// Onglets
+// Tabs
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
  t.classList.add('active');
@@ -199,8 +199,8 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  if(t.dataset.tab==='pad') loadPad();
 });
 
-// ── Graphiques (Chart.js, embarqué/servi par l'ESP32 ; données conservées en RAM) ──
-// Principal : accél + PWM en % sur 10 min. Vitesse véhicule : m/s (0–5) sur 1 min. Batterie : V sur 30 min.
+// ── Charts (Chart.js, embedded/served by the ESP32; data kept in RAM) ──
+// Main: accel + PWM in % over 10 min. Vehicle speed: m/s (0–5) over 1 min. Battery: V over 30 min.
 let chMain, chSpd, chBatt;
 const dset=(label,color,yID)=>({label,borderColor:color,backgroundColor:color,data:[],borderWidth:1.5,fill:false,tension:.15,yAxisID:yID||'y'});
 function mkChart(id,datasets,ymin,ymax,unit,dec,aspect,legend,y2){
@@ -219,10 +219,10 @@ function mkChart(id,datasets,ymin,ymax,unit,dec,aspect,legend,y2){
  });
 }
 function initCharts(){
- chMain=mkChart('chart',[dset('Avance %','#3cf'),dset('PWM G','#2a2'),dset('PWM D','#fa0'),
-   dset('RPM G','#9e9','y2'),dset('RPM D','#fc6','y2')],0,100,'%',0,2.9,true,{max:250,unit:' tr'});
- chSpd =mkChart('spdchart',[dset('Vitesse','#f6f')],0,5,' m/s',1,5.8,false);
- chBatt=mkChart('battchart',[dset('Batterie','#3d9')],battLow,battFull,' V',1,5.8,false);
+ chMain=mkChart('chart',[dset('Forward %','#3cf'),dset('PWM L','#2a2'),dset('PWM R','#fa0'),
+   dset('RPM L','#9e9','y2'),dset('RPM R','#fc6','y2')],0,100,'%',0,2.9,true,{max:250,unit:' rpm'});
+ chSpd =mkChart('spdchart',[dset('Speed','#f6f')],0,5,' m/s',1,5.8,false);
+ chBatt=mkChart('battchart',[dset('Battery','#3d9')],battLow,battFull,' V',1,5.8,false);
 }
 function setSeries(ch,idx,arr){
  ch.data.datasets[idx].data=arr.map((y,i)=>({x:i,y}));
@@ -233,42 +233,42 @@ function applyHist(m){
  if(Array.isArray(m.accel))setSeries(chMain,0,m.accel);   // %
  if(Array.isArray(m.pwml)) setSeries(chMain,1,m.pwml);
  if(Array.isArray(m.pwmr)) setSeries(chMain,2,m.pwmr);
- if(Array.isArray(m.rpml)) setSeries(chMain,3,m.rpml);   // tr/min roue G (axe droit)
- if(Array.isArray(m.rpmr)) setSeries(chMain,4,m.rpmr);   // tr/min roue D (axe droit)
+ if(Array.isArray(m.rpml)) setSeries(chMain,3,m.rpml);   // rpm left wheel (right axis)
+ if(Array.isArray(m.rpmr)) setSeries(chMain,4,m.rpmr);   // rpm right wheel (right axis)
  chMain.update('none');
  if(Array.isArray(m.spd)){ setSeries(chSpd,0,m.spd.map(v=>v/10)); chSpd.update('none'); }   // ×10 → m/s
  if(Array.isArray(m.batt)){ setSeries(chBatt,0,m.batt.map(v=>v/10)); chBatt.update('none'); } // ×10 → V
 }
 
-const OUI=v=>v?'OUI':'non';
+const OUI=v=>v?'YES':'no';
 const clamp01=v=>Math.max(0,Math.min(100,v));
-const dirTxt=v=>v>0.001?'▲ avant':(v<-0.001?'▼ arrière':'– arrêt');
-const battPct=v=>clamp01((v-battLow)/(battFull-battLow)*100);   // selon nb de cellules
+const dirTxt=v=>v>0.001?'▲ forward':(v<-0.001?'▼ reverse':'– stop');
+const battPct=v=>clamp01((v-battLow)/(battFull-battLow)*100);   // depending on the number of cells
 
-// Barres : id, libellé, couleur, valeur 0–100, texte affiché
-// bip = barre bipolaire (centre = 0, droite = +, gauche = −) ; sv = valeur signée -100..100.
+// Bars: id, label, color, value 0–100, displayed text
+// bip = bipolar bar (center = 0, right = +, left = −); sv = signed value -100..100.
 const BARS=[
- {id:'fwd',  label:'Avance',        color:'#3cf', bip:1, sv:s=>s.fwd*100,        t:s=>(s.fwd*100).toFixed(0)+'% '+dirTxt(s.fwd)},
- {id:'turn', label:'Virage',        color:'#8cf', bip:1, sv:s=>s.turn*100,       t:s=>(s.turn*100).toFixed(0)+'% '+(s.turn>.001?'▶ droite':(s.turn<-.001?'◀ gauche':'–'))},
- {id:'pwml', label:'PWM moteur G',  color:'#6f6', bip:1, sv:s=>s.out_l*100,      t:s=>(s.out_l*100).toFixed(0)+'% '+dirTxt(s.out_l)},
- {id:'pwmr', label:'PWM moteur D',  color:'#fa0', bip:1, sv:s=>s.out_r*100,      t:s=>(s.out_r*100).toFixed(0)+'% '+dirTxt(s.out_r)},
- {id:'spdv', label:'Vitesse véhicule', color:'#f6f', bip:1, sv:s=>s.speed_ms/5*100, t:s=>s.speed_ms.toFixed(2)+' m/s '+dirTxt(s.speed_ms)},
- {id:'spdl', label:'Roue G (tr/min)', color:'#9e9', bip:1, sv:s=>s.rpm_l/250*100, t:s=>s.rpm_l.toFixed(0)+' tr/min '+dirTxt(s.rpm_l)},
- {id:'spdr', label:'Roue D (tr/min)', color:'#fc6', bip:1, sv:s=>s.rpm_r/250*100, t:s=>s.rpm_r.toFixed(0)+' tr/min '+dirTxt(s.rpm_r)},
- {id:'batt', label:'Batterie',      color:'#3d9',        v:s=>battPct(s.vbat),    t:s=>s.vbat.toFixed(2)+' V'},
+ {id:'fwd',  label:'Forward',       color:'#3cf', bip:1, sv:s=>s.fwd*100,        t:s=>(s.fwd*100).toFixed(0)+'% '+dirTxt(s.fwd)},
+ {id:'turn', label:'Turn',          color:'#8cf', bip:1, sv:s=>s.turn*100,       t:s=>(s.turn*100).toFixed(0)+'% '+(s.turn>.001?'▶ right':(s.turn<-.001?'◀ left':'–'))},
+ {id:'pwml', label:'PWM motor L',   color:'#6f6', bip:1, sv:s=>s.out_l*100,      t:s=>(s.out_l*100).toFixed(0)+'% '+dirTxt(s.out_l)},
+ {id:'pwmr', label:'PWM motor R',   color:'#fa0', bip:1, sv:s=>s.out_r*100,      t:s=>(s.out_r*100).toFixed(0)+'% '+dirTxt(s.out_r)},
+ {id:'spdv', label:'Vehicle speed', color:'#f6f', bip:1, sv:s=>s.speed_ms/5*100, t:s=>s.speed_ms.toFixed(2)+' m/s '+dirTxt(s.speed_ms)},
+ {id:'spdl', label:'Left wheel (rpm)', color:'#9e9', bip:1, sv:s=>s.rpm_l/250*100, t:s=>s.rpm_l.toFixed(0)+' rpm '+dirTxt(s.rpm_l)},
+ {id:'spdr', label:'Right wheel (rpm)', color:'#fc6', bip:1, sv:s=>s.rpm_r/250*100, t:s=>s.rpm_r.toFixed(0)+' rpm '+dirTxt(s.rpm_r)},
+ {id:'batt', label:'Battery',       color:'#3d9',        v:s=>battPct(s.vbat),    t:s=>s.vbat.toFixed(2)+' V'},
 ];
 function buildBars(){
  document.getElementById('bars').innerHTML=BARS.map(b=>
   `<div class="bar"><div class="lbl"><span>${b.label}</span><span id="${b.id}t">—</span></div>`+
   `<div class="track${b.bip?' bip':''}"><div class="fill" id="${b.id}f" style="background:${b.color}"></div></div></div>`).join('');
 }
-// Indicateurs (pastilles) : boutons + sorties booléennes
+// Indicators (pills): buttons + boolean outputs
 const INDS=[
- {k:'pad_conn',l:'MANETTE'},{k:'arming',l:'ARMÉ'},{k:'btn_start',l:'START'}
+ {k:'pad_conn',l:'GAMEPAD'},{k:'arming',l:'ARMED'},{k:'btn_start',l:'START'}
 ];
-// Mode de freinage EFFECTIF — affiché EN PERMANENCE (source : firmware, brake_mode) :
-// 2 = ACTIF (PID + encodeurs) · 1 = DYNAMIQUE (court-circuit des phases) · 0 = traction.
-const BRAKE_MODES=['⚪ TRACTION','🟠 FREIN DYNAMIQUE (court-circuit)','🟢 FREIN ACTIF (PID)'];
+// EFFECTIVE braking mode — displayed AT ALL TIMES (source: firmware, brake_mode):
+// 2 = ACTIVE (PID + encoders) · 1 = DYNAMIC (phase short-circuit) · 0 = traction.
+const BRAKE_MODES=['⚪ TRACTION','🟠 DYNAMIC BRAKING (short-circuit)','🟢 ACTIVE BRAKING (PID)'];
 function buildInds(){
  document.getElementById('ind').innerHTML=
   INDS.map(i=>`<span class="pill" id="i_${i.k}">${i.l}</span>`).join('');
@@ -284,7 +284,7 @@ function updateBars(s){
    const f=document.getElementById(b.id+'f');
    if(b.bip){
      const v=Math.max(-100,Math.min(100,b.sv(s)));
-     const half=Math.abs(v)/2;                       // 0..50 % de la piste (chaque moitié)
+     const half=Math.abs(v)/2;                       // 0..50 % of the track (each half)
      f.style.left=(v>=0?50:50-half)+'%';
      f.style.width=half+'%';
    }else{
@@ -294,9 +294,9 @@ function updateBars(s){
    document.getElementById(b.id+'t').textContent=b.t(s);
  });
 }
-// ── Manette : pavé joystick (position du stick) + état des boutons (en direct, via status) ──
-// Bits = uni_gamepad buttons (0-9) | misc<<16. Labels « Switch » ; T/O/M1/M2 = boutons
-// spécifiques à ta manette → presse-les et regarde quel témoin / quel bit (hex brut) s'allume.
+// ── Gamepad: joystick pad (stick position) + button state (live, via status) ──
+// Bits = uni_gamepad buttons (0-9) | misc<<16. "Switch" labels; T/O/M1/M2 = buttons
+// specific to your gamepad → press them and watch which indicator / which bit (raw hex) lights up.
 const PADBTNS=[['A',0x01],['B',0x02],['X',0x04],['Y',0x08],['L',0x10],['R',0x20],
  ['ZL',0x40],['ZR',0x80],['L3',0x100],['R3',0x200],
  ['⌂',0x10000],['−',0x20000],['+',0x40000],['⦿',0x80000]];
@@ -313,23 +313,23 @@ function drawPad(s){
  const g=c.getContext('2d'), w=c.width, h=c.height, cx=w/2, cy=h/2, r=w/2-12;
  g.clearRect(0,0,w,h);
  g.lineWidth=1;
- g.strokeStyle='#555'; g.strokeRect(cx-r,cy-r,2*r,2*r);             // carré = cible compensée
- g.strokeStyle='#333'; g.beginPath(); g.arc(cx,cy,r,0,7); g.stroke(); // cercle = limite physique
+ g.strokeStyle='#555'; g.strokeRect(cx-r,cy-r,2*r,2*r);             // square = compensated target
+ g.strokeStyle='#333'; g.beginPath(); g.arc(cx,cy,r,0,7); g.stroke(); // circle = physical limit
  g.strokeStyle='#2a2a2a'; g.beginPath(); g.moveTo(cx,cy-r);g.lineTo(cx,cy+r); g.moveTo(cx-r,cy);g.lineTo(cx+r,cy); g.stroke();
- // ZONE MORTE (thr_deadzone, appliquée PAR AXE sur la consigne compensée) : croix translucide —
- // bande verticale = pas de virage, bande horizontale = pas d'avance (le centre cumule les deux).
+ // DEADZONE (thr_deadzone, applied PER AXIS on the compensated command): translucent cross —
+ // vertical band = no turn, horizontal band = no forward (the center combines both).
  const dz=dzVal*r;
  g.fillStyle='rgba(255,255,255,0.07)';
  g.fillRect(cx-dz,cy-r,2*dz,2*r);
  g.fillRect(cx-r,cy-dz,2*r,2*dz);
- const X=v=>cx+(v||0)*r, Y=v=>cy-(v||0)*r;   // y vers le haut = avance
- // trait physique → compensé
+ const X=v=>cx+(v||0)*r, Y=v=>cy-(v||0)*r;   // y upward = forward
+ // physical → compensated line
  g.strokeStyle='#777'; g.beginPath(); g.moveTo(X(s.pad_x),Y(s.pad_y)); g.lineTo(X(s.pad_cx),Y(s.pad_cy)); g.stroke();
  const dot=(x,y,col,rad)=>{g.beginPath(); g.arc(X(x),Y(y),rad,0,7); g.fillStyle=col; g.fill();};
- dot(s.pad_cx,s.pad_cy,'#fa0',6);   // consigne compensée (carré)
- dot(s.pad_x,s.pad_y,(s.faults&1)?'#f55':(s.pad_conn?'#3cf':'#666'),5);   // physique ; rouge si e-stop (bit 0)
+ dot(s.pad_cx,s.pad_cy,'#fa0',6);   // compensated command (square)
+ dot(s.pad_x,s.pad_y,(s.faults&1)?'#f55':(s.pad_conn?'#3cf':'#666'),5);   // physical; red if e-stop (bit 0)
 }
-// Stick droit : affichage simple (1 point, cercle, sans compensation ni calibration).
+// Right stick: simple display (1 dot, circle, no compensation or calibration).
 function drawStick2(s){
  const c=document.getElementById('padview2'); if(!c)return;
  const g=c.getContext('2d'), w=c.width,h=c.height, cx=w/2,cy=h/2, r=w/2-10;
@@ -340,25 +340,25 @@ function drawStick2(s){
  g.strokeStyle='#777'; g.lineWidth=2; g.beginPath(); g.moveTo(cx,cy); g.lineTo(px,py); g.stroke();
  g.beginPath(); g.arc(px,py,7,0,7); g.fillStyle=s.pad_conn?'#6cf':'#666'; g.fill();
 }
-// Croix directionnelle : bits dpad = (pad_btns>>24) : UP=1, DOWN=2, RIGHT=4, LEFT=8.
+// Directional pad: dpad bits = (pad_btns>>24): UP=1, DOWN=2, RIGHT=4, LEFT=8.
 function drawDpad(s){
  const c=document.getElementById('dpadview'); if(!c)return;
  const g=c.getContext('2d'), w=c.width,h=c.height, cx=w/2,cy=h/2, a=24, off=24;
  g.clearRect(0,0,w,h);
  const dp=(s.pad_btns||0)>>>24;
  const seg=(on,x,y)=>{g.fillStyle=on?'#6cf':'#333'; g.fillRect(x-a/2,y-a/2,a,a);};
- seg(0,cx,cy);             // centre
- seg(dp&1,cx,cy-off);      // haut
- seg(dp&2,cx,cy+off);      // bas
- seg(dp&4,cx+off,cy);      // droite
- seg(dp&8,cx-off,cy);      // gauche
+ seg(0,cx,cy);             // center
+ seg(dp&1,cx,cy-off);      // up
+ seg(dp&2,cx,cy+off);      // down
+ seg(dp&4,cx+off,cy);      // right
+ seg(dp&8,cx-off,cy);      // left
 }
-// Pourquoi le véhicule ne peut pas bouger (peut cumuler plusieurs raisons).
+// Why the vehicle cannot move (may combine several reasons).
 function whyBlocked(s){
- // Une seule source de vérité : les défauts graves actifs du masque (FAULTS_DESC),
- // plus le cas « rien ne bloque sauf l'armement ».
+ // A single source of truth: the active serious faults from the mask (FAULTS_DESC),
+ // plus the "nothing blocks except arming" case.
  const b=FAULTS_DESC.filter(f=>f.grave&&(s.faults>>>f.b&1)).map(f=>f.t);
- if(!b.length && !s.arming) b.push("Non armé : maintenir START ~1 s (manche au centre)");
+ if(!b.length && !s.arming) b.push("Not armed: hold START ~1 s (stick centered)");
  return b;
 }
 function showStatus(s){
@@ -374,60 +374,60 @@ function showStatus(s){
  const zr=document.getElementById('zrf'); if(zr) zr.style.width=((s.pad_zr||0)*100).toFixed(0)+'%';
  const pr=document.getElementById('padraw'); if(pr) pr.textContent='btns 0x'+((s.pad_btns||0)>>>0).toString(16).padStart(5,'0');
  const why=document.getElementById('why');
- if(s.state===STATE.RUN){ why.hidden=true; }   // ARMÉ/Run = peut rouler
+ if(s.state===STATE.RUN){ why.hidden=true; }   // ARMED/Run = can drive
  else{
    const b=whyBlocked(s);
    why.hidden=false;
-   why.innerHTML="🚫 <b>Le véhicule ne peut pas bouger</b>"+
-     (b.length?(" :<ul><li>"+b.join("</li><li>")+"</li></ul>"):" (état : "+st+")");
+   why.innerHTML="🚫 <b>The vehicle cannot move</b>"+
+     (b.length?(":<ul><li>"+b.join("</li><li>")+"</li></ul>"):" (state: "+st+")");
  }
  setBattType(s.batt_type||0,s.batt_lo||0,s.batt_hi||0);
  showFaults(s.faults>>>0);
  document.getElementById('status').textContent=
-  `État : ${st}${s.fault?('  ·  défaut : '+(FA[s.fault]||s.fault)):''}\n`+
-  `Manette : ${s.pad_conn?'connectée':'déconnectée'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}\n`+
-  `Batterie : ${s.batt_type?s.batt_type+' V (détectée)':'détection du type…'}`;
+  `State: ${st}${s.fault?('  ·  fault: '+(FA[s.fault]||s.fault)):''}\n`+
+  `Gamepad: ${s.pad_conn?'connected':'disconnected'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}\n`+
+  `Battery: ${s.batt_type?s.batt_type+' V (detected)':'detecting type…'}`;
 }
 
-// ── Formulaire de configuration (auto-généré depuis le schéma) ──
-let dzVal=0.06;   // zone morte du manche (thr_deadzone), pour l'affichage du pavé
+// ── Configuration form (auto-generated from the schema) ──
+let dzVal=0.06;   // stick deadzone (thr_deadzone), for the pad display
 function deriveFromCfg(p){
  if(p.name==='speed_limit_ms') speedScale=Math.max(0.3,p.val);
  if(p.name==='thr_deadzone') dzVal=p.val;
 }
-// Échelle de la jauge batterie : ENTIÈREMENT décidée par le firmware (type détecté, seuils
-// codés en dur côté micro) — le client ne fait qu'appliquer batt_lo/batt_hi reçus du statut.
+// Battery gauge scale: ENTIRELY decided by the firmware (detected type, thresholds
+// hard-coded on the micro side) — the client only applies batt_lo/batt_hi received from the status.
 function setBattType(bt,lo,hi){
  if(bt===battType)return; battType=bt;
  if(hi>lo){battLow=lo;battFull=hi;}
  const t=document.getElementById('batttitle');
- t.textContent=bt?`🔋 Batterie ${bt} V (${battLow}–${battFull} V) — 30 min`
-               :'🔋 Batterie (détection du type…) — 30 min';
+ t.textContent=bt?`🔋 Battery ${bt} V (${battLow}–${battFull} V) — 30 min`
+               :'🔋 Battery (detecting type…) — 30 min';
  if(chBatt&&hi>lo){const y=chBatt.options.scales.y;y.min=battLow;y.max=battFull;y.ticks.stepSize=(battFull-battLow)/4;chBatt.update('none');}
 }
-// Bits du masque « faults » (voir controller.cpp) : toutes les conditions ACTIVES en même temps.
+// Bits of the "faults" mask (see controller.cpp): all conditions ACTIVE at the same time.
 const FAULTS_DESC=[
- {b:0, t:'Arrêt d\u2019urgence manette (bouton B)', d:'Le bouton B est/était enfoncé. Relâcher, puis réarmer avec START.', grave:true},
- {b:1, t:'Batterie basse (LVC)',                  d:'Tension sous le seuil de coupure du type de batterie détecté (12/24 V). Recharger la batterie ; coupure d\u2019alimentation automatique si la condition persiste.', grave:true},
- {b:2, t:'Manette non calibrée',                  d:'Lancer la calibration du stick (onglet Manette).', grave:true},
- {b:3, t:'Encodeur : roue bloquée',               d:'PWM appliqué mais aucune rotation mesurée. Roue coincée, courroie cassée ou capteur AS5600 débranché. Verrouillé jusqu\u2019au redémarrage.', grave:true},
- {b:4, t:'Manette déconnectée',                   d:'Aucune manette Bluetooth connectée. Allumer/appairer la manette.', grave:true},
- {b:5, t:'Capteur de tension absent (info)',      d:'ADS1115 non détecté : pas de LVC ni de plafond PWM automatique. OK au banc ; à câbler avant de rouler.', grave:false},
- {b:6, t:'Encodeur : sens inversé',               d:'La roue tourne franchement à l\u2019opposé de la commande : capteur ou moteur câblé à l\u2019envers. ARRÊT TOTAL, verrouillé jusqu\u2019au redémarrage.', grave:true},
- {b:8, t:'Encodeur GAUCHE absent (AS5600)',       d:'Aucune réponse du capteur gauche sur le bus I2C. Vérifier câblage et aimant — ou mettre use_encoders à 0 pour rouler sans asservissement.', grave:true},
- {b:9, t:'Encodeur DROIT absent (AS5600)',        d:'Aucune réponse du capteur droit sur le bus I2C. Vérifier câblage et aimant — ou mettre use_encoders à 0 pour rouler sans asservissement.', grave:true},
- {b:10,t:'Manette muette (heartbeat)',           d:'Lien Bluetooth « connecté » mais aucun rapport reçu depuis plus de 250 ms : communication perdue. Désarmement et freinage immédiats.', grave:true},
- {b:7, t:'Encodeur : mesure aberrante',           d:'Vitesse mesurée physiquement impossible pour le kart. Capteur ou aimant défectueux. ARRÊT TOTAL, verrouillé jusqu\u2019au redémarrage.', grave:true},
+ {b:0, t:'Gamepad emergency stop (button B)', d:'Button B is/was pressed. Release it, then rearm with START.', grave:true},
+ {b:1, t:'Low battery (LVC)',                     d:'Voltage below the cutoff threshold of the detected battery type (12/24 V). Recharge the battery; automatic power cutoff if the condition persists.', grave:true},
+ {b:2, t:'Gamepad not calibrated',               d:'Start the stick calibration (Gamepad tab).', grave:true},
+ {b:3, t:'Encoder: wheel stuck',                 d:'PWM applied but no rotation measured. Jammed wheel, broken belt or AS5600 sensor unplugged. Locked until reboot.', grave:true},
+ {b:4, t:'Gamepad disconnected',                 d:'No Bluetooth gamepad connected. Turn on/pair the gamepad.', grave:true},
+ {b:5, t:'Voltage sensor absent (info)',         d:'ADS1115 not detected: no LVC and no automatic PWM cap. OK on the bench; to be wired before driving.', grave:false},
+ {b:6, t:'Encoder: direction reversed',          d:'The wheel turns clearly opposite to the command: sensor or motor wired backwards. FULL STOP, locked until reboot.', grave:true},
+ {b:8, t:'LEFT encoder absent (AS5600)',         d:'No response from the left sensor on the I2C bus. Check wiring and magnet — or set use_encoders to 0 to drive without control loop.', grave:true},
+ {b:9, t:'RIGHT encoder absent (AS5600)',        d:'No response from the right sensor on the I2C bus. Check wiring and magnet — or set use_encoders to 0 to drive without control loop.', grave:true},
+ {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 250 ms: communication lost. Immediate disarm and braking.', grave:true},
+ {b:7, t:'Encoder: erratic reading',             d:'Measured speed physically impossible for the kart. Faulty sensor or magnet. FULL STOP, locked until reboot.', grave:true},
 ];
 let lastFaults=-1;
 function showFaults(mask){
  if(mask===lastFaults)return; lastFaults=mask;
  const n=FAULTS_DESC.filter(f=>mask>>>f.b&1).length;
  const tab=document.getElementById('faultstab');
- tab.textContent=n?`Défauts (${n})`:'Défauts';
+ tab.textContent=n?`Faults (${n})`:'Faults';
  tab.classList.toggle('tabalert',!!FAULTS_DESC.some(f=>f.grave&&(mask>>>f.b&1)));
  const el=document.getElementById('faultlist');
- if(!n){el.innerHTML='<div class="faultok">✅ Aucun défaut actif</div>';return;}
+ if(!n){el.innerHTML='<div class="faultok">✅ No active fault</div>';return;}
  el.innerHTML=FAULTS_DESC.filter(f=>mask>>>f.b&1)
   .map(f=>`<div class="faultcard${f.grave?'':' info'}"><b>${f.grave?'⛔':'ℹ️'} ${f.t}</b><br>${f.d}</div>`).join('');
 }
@@ -436,10 +436,10 @@ function buildForm(params){
  const f=document.getElementById('f');f.innerHTML='';
  let cat=null;
  params.forEach(p=>{
-   if(p.cat&&p.cat!==cat){cat=p.cat;                       // catégories visuelles (entrées consécutives)
+   if(p.cat&&p.cat!==cat){cat=p.cat;                       // visual categories (consecutive entries)
      const h=document.createElement('div');h.className='cfgcat';h.textContent=cat;f.appendChild(h);}
    const lab=document.createElement('label');lab.textContent=p.desc;
-   if(p.help){lab.title=p.help;}                           // infobulle au survol (libellé + champ)
+   if(p.help){lab.title=p.help;}                           // tooltip on hover (label + field)
    const inp=document.createElement('input');inp.type='number';inp.name=p.name;
    if(p.help){inp.title=p.help;}
    inp.step=(p.type==='float')?'any':'1';inp.min=p.min;inp.max=p.max;inp.value=p.val;
@@ -458,11 +458,11 @@ function fillForm(params){
 function connect(){
  ws=new WebSocket('ws://'+location.host+'/ws');
  ws.onopen=()=>{
-   // 1× par connexion : métadonnées de config, infos système (immuables) et graphiques.
+   // once per connection: config metadata, system info (immutable) and charts.
    sendReq({type:'get'}); sendReq({type:'sysinfo'}); sendReq({type:'hist'});
    clearInterval(timer); clearInterval(histTimer);
-   timer=setInterval(()=>{sendReq({type:'status'});},50);       // état live 20 Hz (~150 octets binaires)
-   histTimer=setInterval(()=>{sendReq({type:'hist'});},5000);   // graphiques : lent (RAM serveur)
+   timer=setInterval(()=>{sendReq({type:'status'});},50);       // live state 20 Hz (~150 binary bytes)
+   histTimer=setInterval(()=>{sendReq({type:'hist'});},5000);   // charts: slow (server RAM)
  };
  ws.binaryType='arraybuffer';
  ws.onmessage=e=>{const m=pbDecode(e.data); if(!m)return;
@@ -474,46 +474,46 @@ function connect(){
    else if(m.type==='sysinfo')showSys(m);
    else if(m.type==='sysdyn')showSysDyn(m);
    else if(m.type==='pad')showPad(m);};
- ws.onclose=()=>{clearInterval(timer);clearInterval(histTimer);document.getElementById('status').textContent='Reconnexion…';setTimeout(connect,1000);};
+ ws.onclose=()=>{clearInterval(timer);clearInterval(histTimer);document.getElementById('status').textContent='Reconnecting…';setTimeout(connect,1000);};
 }
-function reload(){sendReq({type:'vals'});}   // métadonnées déjà en main
+function reload(){sendReq({type:'vals'});}   // metadata already in hand
 function save(){const set=[];
  document.querySelectorAll('#f input').forEach(i=>set.push({name:i.name,val:parseFloat(i.value)}));
  sendReq({type:'set',set:set});}
 function sendPad(cmd){sendReq({type:cmd});}
 function loadPad(){sendPad('padinfo');}
-function padPair(){if(confirm("Appairer une nouvelle manette ?\nCela EFFACE la calibration (il faudra recalibrer)."))sendPad('padpair');}
-function padUnpair(){if(confirm("Désappairer la manette ? (efface aussi la calibration)"))sendPad('padunpair');}
+function padPair(){if(confirm("Pair a new gamepad?\nThis ERASES the calibration (you will have to recalibrate)."))sendPad('padpair');}
+function padUnpair(){if(confirm("Unpair the gamepad? (also erases the calibration)"))sendPad('padunpair');}
 function calStart(){sendPad('calstart');}
 function calFinish(){sendPad('calfinish');}
 function calCancel(){sendPad('calcancel');}
 function showPad(m){
  document.getElementById('padinfo').textContent=
-  `Manette : ${m.conn?'connectée':'déconnectée'}`+(m.name?(' — '+m.name):'')+
-  (m.batt>=0?(' · batterie '+m.batt+'%'):'');
- const cal=m.calstate===1?'⏺ collecte des extrêmes — bouger les sticks à fond':(m.calibrated?'✅ calibrée':'❌ NON calibrée (obligatoire pour rouler)');
- document.getElementById('calstatus').textContent='Calibration : '+cal+(m.pairing?'  ·  appairage ouvert':'');
- // Calibration en cours → « Démarrer » grisé ; sinon ce sont « Terminer »/« Annuler »
- // qui le sont (ils n'ont de sens que pendant la collecte).
+  `Gamepad: ${m.conn?'connected':'disconnected'}`+(m.name?(' — '+m.name):'')+
+  (m.batt>=0?(' · battery '+m.batt+'%'):'');
+ const cal=m.calstate===1?'⏺ collecting extremes — move the sticks fully':(m.calibrated?'✅ calibrated':'❌ NOT calibrated (mandatory to drive)');
+ document.getElementById('calstatus').textContent='Calibration: '+cal+(m.pairing?'  ·  pairing open':'');
+ // Calibration in progress → "Start" greyed out; otherwise "Finish"/"Cancel"
+ // are (they only make sense during collection).
  const encours=(m.calstate===1);
  document.getElementById('calstartbtn').disabled=encours;
  document.getElementById('calfinishbtn').disabled=!encours;
  document.getElementById('calcancelbtn').disabled=!encours;
 }
-function reboot(){if(confirm("Redémarrer le système ? Il redémarrera DÉSARMÉ."))sendReq({type:'reboot'});}
+function reboot(){if(confirm("Reboot the system? It will restart DISARMED."))sendReq({type:'reboot'});}
 function showWifi(m){
  const e=document.querySelector('#wf [name=ssid]'); if(e&&document.activeElement!==e)e.value=m.ssid||'';
  const c=document.querySelector('#wf [name=enabled]'); if(c&&document.activeElement!==c)c.checked=!!m.enabled;
  document.getElementById('wifistatus').textContent=
-  `Mode station : ${m.enabled?'activé':'désactivé'}\nRéseau enregistré : ${m.ssid||'(aucun)'}\n`+
-  `Connecté : ${m.connected?'OUI':'non'}\nIP station : ${m.ip}`;
+  `Station mode: ${m.enabled?'enabled':'disabled'}\nSaved network: ${m.ssid||'(none)'}\n`+
+  `Connected: ${m.connected?'YES':'no'}\nStation IP: ${m.ip}`;
 }
 function loadWifi(){sendReq({type:'wifiget'});}
 let sysBuilt=false;
 function loadSys(){sendReq({type:sysBuilt?'sysdyn':'sysinfo'});}
 function upt(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
- return (d?d+'j ':'')+h+'h '+m+'m '+(s%60)+'s';}
-const heapTxt=m=>`${(m.heap_free/1024).toFixed(1)} ko (min ${(m.heap_min/1024).toFixed(1)} ko)`;
+ return (d?d+'d ':'')+h+'h '+m+'m '+(s%60)+'s';}
+const heapTxt=m=>`${(m.heap_free/1024).toFixed(1)} KB (min ${(m.heap_min/1024).toFixed(1)} KB)`;
 function showSysDyn(m){
  const u=document.getElementById('sysup'),h=document.getElementById('sysheap');
  if(u)u.textContent=upt(m.uptime_s);
@@ -522,16 +522,16 @@ function showSysDyn(m){
 function showSys(m){
  sysBuilt=true;
  const r=(k,v)=>`<tr><th>${k}</th><td>${v??'—'}</td></tr>`;
- const fmt6=a=>(a&&a.length)?a.map(x=>`${x.addr} <small>(${x.type})</small>`).join('<br>'):'(aucune)';
+ const fmt6=a=>(a&&a.length)?a.map(x=>`${x.addr} <small>(${x.type})</small>`).join('<br>'):'(none)';
  document.getElementById('systbl').innerHTML=
-  r('Firmware (commit)',m.fw_ver)+r('Projet',m.fw_proj)+r('Compilé le',m.fw_date)+r('ESP-IDF',m.idf)+
-  r('Puce',`${m.chip} rev ${m.rev} · ${m.cores} cœurs · ${m.flash_mb} Mo flash`)+
-  `<tr><th>Uptime</th><td id="sysup">${upt(m.uptime_s)}</td></tr>`+r('Cause du dernier reset',m.reset)+
-  `<tr><th>Heap libre</th><td id="sysheap">${heapTxt(m)}</td></tr>`+
-  r('MAC point d\'accès',m.mac_ap)+r('MAC station',m.mac_sta)+
+  r('Firmware (commit)',m.fw_ver)+r('Project',m.fw_proj)+r('Compiled on',m.fw_date)+r('ESP-IDF',m.idf)+
+  r('Chip',`${m.chip} rev ${m.rev} · ${m.cores} cores · ${m.flash_mb} MB flash`)+
+  `<tr><th>Uptime</th><td id="sysup">${upt(m.uptime_s)}</td></tr>`+r('Last reset cause',m.reset)+
+  `<tr><th>Free heap</th><td id="sysheap">${heapTxt(m)}</td></tr>`+
+  r('Access point MAC',m.mac_ap)+r('Station MAC',m.mac_sta)+
   r('AP — SSID',m.ap_ssid)+r('AP — IPv4',m.ip_ap)+r('AP — IPv6',fmt6(m.ip6_ap))+
-  r('Station — activée',m.sta_en?'oui':'non')+r('Station — SSID',m.sta_ssid||'(aucun)')+
-  r('Station — connectée',m.sta_conn?'OUI':'non')+
+  r('Station — enabled',m.sta_en?'yes':'no')+r('Station — SSID',m.sta_ssid||'(none)')+
+  r('Station — connected',m.sta_conn?'YES':'no')+
   r('Station — IPv4',m.ip_sta)+r('Station — IPv6',fmt6(m.ip6_sta));
 }
 function saveWifi(){
@@ -539,7 +539,7 @@ function saveWifi(){
  const pass=document.querySelector('#wf [name=pass]').value;
  const enabled=document.querySelector('#wf [name=enabled]').checked;
  sendReq({type:'wifiset',ssid:ssid,pass:pass,enabled:enabled});
- if(confirm("Enregistré. Redémarrer maintenant pour appliquer ?"))sendReq({type:'reboot'});
+ if(confirm("Saved. Reboot now to apply?"))sendReq({type:'reboot'});
 }
 initCharts();buildBars();buildInds();buildPadBtns();connect();
 </script></body></html>

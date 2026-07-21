@@ -1,4 +1,4 @@
-// pid.hpp — Régulateur PID réutilisable avec anti-windup (header-only).
+// pid.hpp — Reusable PID regulator with anti-windup (header-only).
 #pragma once
 
 #include <algorithm>
@@ -12,20 +12,20 @@ public:
         m_prev = 0;
     }
 
-    // sp = consigne, meas = mesure, dt = pas (s), gains kp/ki/kd, sortie bornée [out_min..out_max].
+    // sp = setpoint, meas = measurement, dt = step (s), gains kp/ki/kd, output bounded [out_min..out_max].
     float update(float sp, float meas, float dt, float kp, float ki, float kd, float out_min, float out_max)
     {
         const float error = sp - meas;
         const float deriv = (dt > 0.f) ? (error - m_prev) / dt : 0.f;
         m_prev = error;
 
-        // Intégrale « candidate » (sera validée seulement si on ne s'enfonce pas dans la saturation).
+        // "candidate" integral (validated only if we do not sink further into saturation).
         const float integ_candidate = m_integ + error * dt;
         const float out_raw = kp * error + ki * integ_candidate + kd * deriv;
         const float out = std::clamp(out_raw, out_min, out_max);
 
-        // Anti-windup (intégration conditionnelle) : si la sortie sature ET que l'erreur
-        // pousse encore plus loin dans la saturation, on GÈLE l'intégrale.
+        // Anti-windup (conditional integration): if the output saturates AND the error
+        // pushes even further into saturation, we FREEZE the integral.
         const bool winding_up = (out_raw > out_max && error > 0.f) || (out_raw < out_min && error < 0.f);
         if (!winding_up)
         {

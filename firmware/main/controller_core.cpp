@@ -1,8 +1,8 @@
-// controller_core.cpp — Logique de contrôle du kart (voir controller_core.hpp).
-// PURE : transplantée 1:1 depuis l'ancien controller.cpp ; toute E/S passe par les io*.
-// Mix arcade : y = avance, x = virage → gauche = avance + virage, droite = avance − virage.
-// Sécurités : manette déconnectée/muette, e-stop, LVC, défauts encodeur → FREINAGE.
-// Anti-renversement : le virage autorisé décroît avec la vitesse mesurée.
+// controller_core.cpp — Kart control logic (see controller_core.hpp).
+// PURE: transplanted 1:1 from the old controller.cpp; all I/O goes through the io*.
+// Arcade mixing: y = forward, x = turn → left = forward + turn, right = forward − turn.
+// Safeties: gamepad disconnected/silent, e-stop, LVC, encoder faults → BRAKING.
+// Rollover protection: the allowed turn decreases with the measured speed.
 #include "controller_core.hpp"
 
 #include <algorithm>
@@ -19,9 +19,9 @@ using ctl::turnLimit;
 
 void KartController::updateLVC(float vbat, int64_t now)
 {
-    // Seuils codés en dur selon la batterie DÉTECTÉE au démarrage (12 V ou 24 V, plomb).
-    // Tant que la tension n'a pas été stable 3 s (type inconnu) : pas de LVC — le kart
-    // démarre désarmé de toute façon, et on ne change jamais de batterie système allumé.
+    // Thresholds hard-coded according to the battery DETECTED at startup (12 V or 24 V, lead-acid).
+    // As long as the voltage has not been stable 3 s (unknown type): no LVC — the kart
+    // starts disarmed anyway, and one never changes battery with the system powered on.
     const int bt = m_batt_det.volts;
     if (0 == bt)
     {
@@ -54,7 +54,7 @@ void KartController::updateLVC(float vbat, int64_t now)
     }
 }
 
-// Freine une roue : PID vitesse → 0 (sortie signée, peut inverser). Vitesse en m/s.
+// Brakes one wheel: speed PID → 0 (signed output, can reverse). Speed in m/s.
 float KartController::brakeWheel(Pid& pid, float speed_ms, const KartConfig& cfg, float dt)
 {
     if (std::fabs(speed_ms) <= hw::EBRAKE_MIN_MPS)
@@ -78,16 +78,16 @@ void KartController::updateEncStuck(int64_t now, float cmd, float speed_ms)
     }
 }
 
-// Sanité des encodeurs : sens inversé (roue mesurée à l'opposé d'une consigne franche —
-// câblage capteur OU moteur à l'envers) et mesure aberrante (vitesse impossible). Un capteur
-// qui MENT rend le frein PID et le limiteur DANGEREUX (ils pousseraient au lieu de retenir) →
-// ARRÊT TOTAL, verrouillé jusqu'au redémarrage. « braking » exclut le frein PID : il s'oppose
-// à la rotation par design et déclencherait le test de sens à tort.
+// Encoder sanity: reversed direction (wheel measured opposite to a firm command —
+// sensor OR motor wired backwards) and aberrant measurement (impossible speed). A sensor
+// that LIES makes PID braking and the limiter DANGEROUS (they would push instead of hold) →
+// TOTAL STOP, latched until restart. "braking" excludes PID braking: it opposes
+// rotation by design and would trigger the direction test wrongly.
 void KartController::updateEncSanity(int64_t now, bool braking, float out_l, float out_r,
                                      float sl, float sr)
 {
-    // RevDetect distingue une VRAIE inversion (vitesse opposée stable/croissante) d'une
-    // DÉCÉLÉRATION commandée — freinage au stick — où la vitesse opposée fond vers zéro.
+    // RevDetect distinguishes a REAL reversal (opposed speed, stable/growing) from a
+    // commanded DECELERATION — braking at the stick — where the opposed speed melts toward zero.
     if (!braking)
     {
         constexpr int64_t win = static_cast<int64_t>(hw::ENC_REV_MS) * 1000;
@@ -114,41 +114,41 @@ void KartController::updateEncSanity(int64_t now, bool braking, float out_l, flo
     }
 }
 
-// step() — TOUTE la logique métier d'un pas. Tourne SOUS le verrou pris par tick().
+// step() — ALL the business logic of a step. Runs UNDER the lock taken by tick().
 CtrlOutputs KartController::step(const CtrlInputs& in)
 {
     CtrlOutputs out;
     const int64_t now = in.now_us;
 
-    const bool use_enc = (m_cfg.use_encoders != 0.f);   // 0 = ignore les AS5600 (banc sans encodeurs)
+    const bool use_enc = (m_cfg.use_encoders != 0.f);   // 0 = ignore the AS5600 (bench without encoders)
 
-    // Heartbeat : « connectée » mais aucun rapport HID depuis 250 ms → traitée comme
-    // DÉCONNECTÉE (désarmement + freinage immédiats, sans attendre le timeout Bluetooth).
+    // Heartbeat: "connected" but no HID report for 250 ms → treated as
+    // DISCONNECTED (immediate disarm + braking, without waiting for the Bluetooth timeout).
     const bool pad_stale = in.pad.connected &&
                            ((now - in.pad.last_report_us) > hw::PAD_HB_TIMEOUT_US);
-    // Tension lue à 20 Hz seulement (hw::VBAT_READ_TICKS) : l'ADS1115 à 128 SPS ne produit
-    // rien de neuf plus vite, et ça évite ~4000 transactions I2C/s dans la boucle 500 Hz.
+    // Voltage read at 20 Hz only (hw::VBAT_READ_TICKS): the ADS1115 at 128 SPS produces
+    // nothing new any faster, and it avoids ~4000 I2C transactions/s in the 500 Hz loop.
     if (0 == (m_vbat_tick++ % hw::VBAT_READ_TICKS))
     {
         m_vraw = in.sensors.vbat_ok ? in.sensors.vbat_v : -1.f;
     }
     const bool  vbat_valid = (m_vraw > 0.05f);
-    const float vbat = vbat_valid ? m_vraw : 0.f;   // déjà en volts batterie (hôte)
-    // Taux de counts (counts/s), lissé par EMA (atténue la quantification du Δangle par
-    // tick à basse vitesse) puis converti par les RATIOS DE CONFIG (enc_mps_per_cps /
-    // enc_rpm_per_cps) — le cœur ne connaît ni le CPR, ni la réduction, ni la roue.
+    const float vbat = vbat_valid ? m_vraw : 0.f;   // already in battery volts (host)
+    // Count rate (counts/s), smoothed by EMA (attenuates the quantization of the Δangle per
+    // tick at low speed) then converted by the CONFIG RATIOS (enc_mps_per_cps /
+    // enc_rpm_per_cps) — the core knows neither the CPR, nor the reduction, nor the wheel.
     const float cps_l = use_enc ? static_cast<float>(in.sensors.enc_delta_l) * hw::CTRL_HZ : 0.f;
     const float cps_r = use_enc ? static_cast<float>(in.sensors.enc_delta_r) * hw::CTRL_HZ : 0.f;
     m_cps_l += hw::SPEED_EMA_ALPHA * (cps_l - m_cps_l);
     m_cps_r += hw::SPEED_EMA_ALPHA * (cps_r - m_cps_r);
-    const float sl = m_cps_l * m_cfg.enc_mps_per_cps;   // vitesses roues SIGNÉES (m/s)
+    const float sl = m_cps_l * m_cfg.enc_mps_per_cps;   // SIGNED wheel speeds (m/s)
     const float sr = m_cps_r * m_cfg.enc_mps_per_cps;
-    // Vitesse VÉHICULE (m/s) = moyenne signée des deux roues : deux roues égales en sens
-    // inverse (pivot sur place) → 0 m/s. C'est elle qui sert aux ajustements de conduite.
+    // VEHICLE speed (m/s) = signed average of the two wheels: two wheels equal in opposite
+    // directions (pivot in place) → 0 m/s. It is what drives the driving adjustments.
     const float v_veh = 0.5f * (sl + sr);
     if (!use_enc)
     {
-        m_enc_fault = false;   // pas d'encodeurs → pas de défaut « capteur »
+        m_enc_fault = false;   // no encoders → no "sensor" fault
         m_enc_rev_fault = false;
         m_enc_mad_fault = false;
         m_rev_l.reset();
@@ -156,15 +156,15 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         m_mad_us = 0;
     }
 
-    // Capteur de tension absent → tension inconnue : on NE déclenche PAS la LVC (le BMS du
-    // pack assure la protection). Permet aussi de tester au banc sans l'ADS1115 câblé.
+    // Voltage sensor absent → unknown voltage: we do NOT trigger the LVC (the pack's BMS
+    // ensures protection). Also allows bench testing without the ADS1115 wired.
     if (vbat_valid)
     {
         m_batt_det.update(vbat, now, hw::VBAT_DETECT_STABLE_US,
                           hw::VBAT_DETECT_TOL_V, hw::VBAT_DETECT_24V_MIN);
         updateLVC(vbat, now);
-        // Lissage LENT pour le plafond PWM auto : l'affaissement sous charge ne doit pas
-        // faire osciller le duty (sag → Vbat baisse → duty remonte → plus de sag…).
+        // SLOW smoothing for the auto PWM cap: the sag under load must not
+        // make the duty oscillate (sag → Vbat drops → duty rises → more sag…).
         if (m_vbat_ema <= 0.f) m_vbat_ema = vbat;
         else m_vbat_ema += hw::VBAT_CAP_EMA_ALPHA * (vbat - m_vbat_ema);
     }
@@ -172,23 +172,23 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     {
         m_lvc_tripped = false;
         m_sag_start_us = 0;
-        m_vbat_ema = 0.f;   // tension inconnue → pas de plafond automatique
+        m_vbat_ema = 0.f;   // unknown voltage → no automatic cap
     }
 
-    // Plafond PWM : AUTOMATIQUE (12 V nominaux / Vbat mesurée : 12 V → ~100 %, 24 V → ~50 %)
-    // ET manuel (duty_cap, page web) — le plus restrictif gagne. Sans ADS1115 : manuel seul.
+    // PWM cap: AUTOMATIC (12 V nominal / measured Vbat: 12 V → ~100%, 24 V → ~50%)
+    // AND manual (duty_cap, web page) — the most restrictive wins. Without ADS1115: manual only.
     const float duty_max = std::min(m_cfg.duty_cap_frac, ctl::dutyCapVolts(m_vbat_ema, hw::MOTOR_V_NOM));
     const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(duty_max, 0.f, 1.f));
 
-    // ── Défauts / conditions de non-conduite ──
-    // Encodeurs ABSENTS (I2C muet) : avec use_encoders=1 c'est bloquant — frein PID et
-    // limiteur croiraient la roue arrêtée. Avec use_encoders=0 (banc) : simplement ignorés.
+    // ── Faults / non-driving conditions ──
+    // ABSENT encoders (I2C silent): with use_encoders=1 it is blocking — PID braking and
+    // the limiter would think the wheel is stopped. With use_encoders=0 (bench): simply ignored.
     const bool enc_l_abs = use_enc && !in.sensors.enc_ok_l;
     const bool enc_r_abs = use_enc && !in.sensors.enc_ok_r;
 
-    // BITSET de TOUTES les erreurs/conditions actives — l'unique représentation des
-    // défauts du cœur. fb::BLOCKING interdit la conduite ; le défaut prioritaire pour
-    // l'affichage se dérive avec primaryFault(). Bits : voir FAULTS_DESC (index.html).
+    // BITSET of ALL active errors/conditions — the sole representation of the
+    // core's faults. fb::BLOCKING forbids driving; the priority fault for
+    // display is derived with primaryFault(). Bits: see FAULTS_DESC (index.html).
     unsigned fmask = 0;
     if (in.pad.estop)                                fmask |= fb::ESTOP;
     if (m_lvc_tripped)                           fmask |= fb::LVC;
@@ -204,14 +204,14 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
 
     const bool blocking = (0 != (fmask & fb::BLOCKING));
 
-    // Manette absente / e-stop manette / DÉFAUT BLOQUANT → on désarme et on freine (sécurité
-    // absolue). Un défaut force le désarmement : réarmement (START maintenu) une fois résolu.
+    // Gamepad absent / gamepad e-stop / BLOCKING FAULT → we disarm and brake (absolute
+    // safety). A fault forces disarming: re-arm (START held) once resolved.
     if (!in.pad.connected || pad_stale || in.pad.estop || blocking) m_armed = false;
 
     const bool can_drive = m_armed && in.pad.connected && !pad_stale && !in.pad.estop && !blocking;
 
-    // ── Armement par appui maintenu sur START (anti-démarrage : manche centré + manette connectée) ──
-    // START = bouton physique OU bouton START/Options de la manette (même fonction).
+    // ── Arming by held press on START (anti-startup: stick centered + gamepad connected) ──
+    // START = physical button OR the gamepad's START/Options button (same function).
     const bool start_held = in.btn_start_hw || in.pad.start;
     const bool centered = (std::fabs(in.pad.x) < hw::ARM_CENTER_MAX) && (std::fabs(in.pad.y) < hw::ARM_CENTER_MAX);
     if (start_held)
@@ -239,19 +239,19 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
 
     float out_l = 0.f, out_r = 0.f, fwd = 0.f, turn = 0.f;
     bool braking = false;
-    bool dyn_brake = false;   // true → court-circuit moteur (freinage dynamique passif)
+    bool dyn_brake = false;   // true → motor short-circuit (passive dynamic braking)
     State state = State::Run;
 
     if (!can_drive)
     {
-        // NON ARMÉ / défaut / e-stop / manette déconnectée → FREINAGE DYNAMIQUE (court-circuit
-        // moteur). État par défaut au repos ; ne nécessite ni encodeurs ni asservissement.
+        // NOT ARMED / fault / e-stop / gamepad disconnected → DYNAMIC BRAKING (motor
+        // short-circuit). Default resting state; requires neither encoders nor control loop.
         dyn_brake = true;
         braking = true;
         m_brake_l.reset();
         m_brake_r.reset();
         m_speed_pid.reset();
-        m_fwd_cmd = 0.f;     // repart en douceur au prochain armement
+        m_fwd_cmd = 0.f;     // restarts smoothly at the next arming
         m_turn_cmd = 0.f;
         state = blocking ? State::Fault : State::Lockout;
     }
@@ -261,36 +261,36 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         m_brake_r.reset();
         float fwd_t = deadzone(in.pad.y, m_cfg.thr_deadzone);
         const float turn_t = deadzone(in.pad.x, m_cfg.thr_deadzone);
-        if (m_cfg.allow_reverse == 0.f && fwd_t < 0.f) fwd_t = 0.f;   // recul interdit ?
-        // (Pas de bride PWM au recul : la LIMITE DE VITESSE TOTALE — PID sur |v| — vaut
-        // dans les deux sens, comme l'anti-renversement qui travaille sur |v|.)
+        if (m_cfg.allow_reverse == 0.f && fwd_t < 0.f) fwd_t = 0.f;   // reverse forbidden?
+        // (No PWM limit in reverse: the TOTAL SPEED LIMIT — PID on |v| — holds
+        // in both directions, like the rollover protection which works on |v|.)
 
-        // 1) Limiteur de pente : interdit une variation trop BRUSQUE (coup de manche « sec »).
+        // 1) Slope limiter: forbids too ABRUPT a variation (a "sharp" stick move).
         m_fwd_cmd = slew(fwd_t, m_fwd_cmd, m_cfg.thr_ramp_per_s, hw::CTRL_DT_S);
         m_turn_cmd = slew(turn_t, m_turn_cmd, m_cfg.turn_rate, hw::CTRL_DT_S);
         fwd = m_fwd_cmd;
         turn = m_turn_cmd;
 
-        // 2) Anti-renversement « iso-a_lat » : la limite de virage suit la vitesse MESURÉE
-        //    en 1/v (même accélération latérale à toute vitesse — voir turnLimit) ; ±100 %
-        //    sous turn_full_ms (pivot sur place à pleine puissance), turn_hi à speed_limit_ms,
-        //    et encore plus serré au-delà. Sans encodeurs, v=0 → pas de bridage.
-        //    Désactivable (turn_limit_en=0) pour les essais au banc.
+        // 2) "iso-a_lat" rollover protection: the turn limit follows the MEASURED speed
+        //    as 1/v (same lateral acceleration at all speeds — see turnLimit); ±100%
+        //    below turn_full_ms (pivot in place at full power), turn_hi at speed_limit_ms,
+        //    and even tighter beyond. Without encoders, v=0 → no limiting.
+        //    Disableable (turn_limit_en=0) for bench testing.
         if (m_cfg.turn_limit_en != 0.f)
         {
             const float turn_max = turnLimit(std::fabs(v_veh), m_cfg.turn_full_ms, m_cfg.speed_limit_ms, m_cfg.turn_hi);
             turn = clampf(turn, -turn_max, turn_max);
-            m_turn_cmd = turn;   // garde l'état borné (pas de windup de la rampe au-delà de la limite)
+            m_turn_cmd = turn;   // keeps the state bounded (no ramp windup beyond the limit)
         }
 
-        // Mix arcade différentiel (pivot sur place possible si fwd≈0).
+        // Differential arcade mixing (pivot in place possible if fwd≈0).
         mixArcade(fwd, turn, m_cfg.turn_gain, out_l, out_r);
 
-        // Plafond de vitesse global (préserve le ratio de virage) via PID sur la vitesse moyenne.
-        // Cible selon le SENS MESURÉ : avant → speed_limit_ms, arrière → rev_speed_ms. Sur le
-        // sens mesuré (pas la consigne) : en plugging (stick arrière, kart encore en marche
-        // avant) la cible reste celle de l'avant — l'autorité de freinage n'est pas amputée.
-        // Sans encodeurs : pas d'asservissement vitesse → on s'appuie sur le plafond PWM (duty_cap).
+        // Global speed cap (preserves the turn ratio) via PID on the average speed.
+        // Target based on the MEASURED DIRECTION: forward → speed_limit_ms, reverse → rev_speed_ms. On the
+        // measured direction (not the command): in plugging (reverse stick, kart still moving
+        // forward) the target stays the forward one — the braking authority is not cut short.
+        // Without encoders: no speed control loop → we rely on the PWM cap (duty_cap).
         if (use_enc && m_cfg.vlim_enable != 0.f)
         {
             const float v_target = (v_veh < 0.f) ? m_cfg.rev_speed_ms : m_cfg.speed_limit_ms;
@@ -306,8 +306,8 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
 
         if (std::fabs(fwd) < 1e-3f && std::fabs(turn) < 1e-3f)
         {
-            // ARMÉ + manche centré → FREINAGE ACTIF (PID de plugging) si encodeurs présents
-            // ET frein PID activé ; sinon repli sur le freinage dynamique (court-circuit).
+            // ARMED + centered stick → ACTIVE BRAKING (plugging PID) if encoders present
+            // AND PID braking enabled; otherwise fallback to dynamic braking (short-circuit).
             braking = true;
             if (use_enc && m_cfg.brk_pid_enable != 0.f)
             {
@@ -326,7 +326,7 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         state = State::Run;
     }
 
-    out.dyn_brake = dyn_brake;   // court-circuit moteur, sinon pilotage / plugging actif
+    out.dyn_brake = dyn_brake;   // motor short-circuit, otherwise driving / active plugging
     out.out_l = out_l;
     out.out_r = out_r;
     out.cap = cap;
@@ -336,10 +336,10 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         updateEncSanity(now, braking || dyn_brake, out_l, out_r, sl, sr);
     }
 
-    // Désarmement auto après inactivité.
+    // Auto disarm after inactivity.
     if (m_armed && (now - m_last_act_us) > static_cast<int64_t>(m_cfg.disarm_s) * 1000000) m_armed = false;
 
-    // ── Télémétrie du tick ──
+    // ── Tick telemetry ──
     m_tel.state      = state;
     m_tel.faults     = fmask;
     m_tel.vbat       = vbat;
@@ -360,9 +360,9 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     return out;
 }
 
-// ── Enveloppe publique THREAD-SAFE ─────────────────────────────────────────
-// Les entrées/lectures verrouillent brièvement ; tick() déroule step() sous verrou mais
-// appelle les callbacks HORS verrou (pas d'interblocage si l'hôte relit le contrôleur).
+// ── Public THREAD-SAFE wrapper ─────────────────────────────────────────────
+// The inputs/reads lock briefly; tick() runs step() under lock but
+// calls the callbacks OUTSIDE the lock (no deadlock if the host reads the controller back).
 
 void KartController::setCallbacks(UpdateSensorsFn updateSensors, UpdateOutputsFn updateOutputs)
 {
@@ -412,7 +412,7 @@ CtrlOutputs KartController::tick(int64_t now_us)
     }
     CtrlInputs in;
     in.now_us = now_us;
-    in.sensors = read ? read() : SensorReadings{};   // sans câblage : capteurs « absents »
+    in.sensors = read ? read() : SensorReadings{};   // without wiring: "absent" sensors
     CtrlOutputs out;
     {
         std::lock_guard<std::mutex> lk(m_mtx);

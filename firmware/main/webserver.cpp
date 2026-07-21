@@ -1,16 +1,16 @@
-// webserver.cpp — SoftAP + serveur HTTP/WebSocket pour régler la config en direct.
+// webserver.cpp — SoftAP + HTTP/WebSocket server to tune the config live.
 //
-// Connexion : Wi-Fi « Kart-Config » (mot de passe « kart12345 »), puis
-// ouvrir http://192.168.4.1 dans un navigateur.
+// Connection: Wi-Fi "Kart-Config" (password "kart12345"), then
+// open http://192.168.4.1 in a browser.
 //
-// La page (HTML/CSS) vient de main/assets/ (EMBED_TXTFILES). Comm par WebSocket /ws :
-//   le client POLL à 4 Hz et le serveur répond de façon synchrone :
+// The page (HTML/CSS) comes from main/assets/ (EMBED_TXTFILES). Comm over WebSocket /ws:
+//   the client POLLS at 4 Hz and the server replies synchronously:
 //     {"type":"status"}     → {"type":"status",...}
 //     {"type":"get"}        → {"type":"config",...}
-//     {"type":"set",...}    → applique + {"type":"config",...}
-//     {"type":"calibrate"}  → déclenche la calibration
-//     {"type":"reboot"}     → redémarre l'ESP32 (désarmé)
-// JSON « maison » (clé/valeur plates) — pas de dépendance externe.
+//     {"type":"set",...}    → applies + {"type":"config",...}
+//     {"type":"calibrate"}  → triggers calibration
+//     {"type":"reboot"}     → reboots the ESP32 (disarmed)
+// In-house JSON (flat key/value) — no external dependency.
 #include "webserver.hpp"
 
 #include <atomic>
@@ -42,8 +42,8 @@
 
 static const char* TAG = "web";
 
-// Fichiers embarqués (EMBED_TXTFILES dans main/CMakeLists.txt) — terminés par nul.
-// Assets compressés (gzip) embarqués — servis tels quels avec Content-Encoding: gzip.
+// Embedded files (EMBED_TXTFILES in main/CMakeLists.txt) — null-terminated.
+// Embedded compressed (gzip) assets — served as-is with Content-Encoding: gzip.
 extern const uint8_t index_html_gz_start[]   asm("_binary_index_html_gz_start");
 extern const uint8_t index_html_gz_end[]     asm("_binary_index_html_gz_end");
 extern const uint8_t style_css_gz_start[]    asm("_binary_style_css_gz_start");
@@ -56,15 +56,15 @@ extern const uint8_t pb_min_js_gz_end[]      asm("_binary_pb_min_js_gz_end");
 namespace
 {
 constexpr char AP_SSID[]  = "Kart-Config";
-constexpr char AP_PASS[]  = "kart12345";   // ≥ 8 caractères (sinon AP ouvert)
+constexpr char AP_PASS[]  = "kart12345";   // ≥ 8 characters (otherwise open AP)
 constexpr int  AP_CHANNEL = 1;
 constexpr int  AP_MAX_CONN = 4;
-constexpr int  STA_RETRY_MS = 5000;   // délai avant nouvelle tentative de connexion STA
+constexpr int  STA_RETRY_MS = 5000;   // delay before a new STA connection attempt
 
-// Noms des commandes WebSocket (client → serveur) et réponses
+// Names of the WebSocket commands (client → server) and responses
 constexpr char CMD_SET[]       = "\"set\"";
-constexpr char CMD_VALS[]      = "\"vals\"";  // valeurs des paramètres (métadonnées : « get », 1× à l'ouverture)
-// Manette Bluetooth
+constexpr char CMD_VALS[]      = "\"vals\"";  // parameter values (metadata: "get", once on open)
+// Bluetooth gamepad
 
 httpd_handle_t     m_server = nullptr;
 esp_timer_handle_t m_sta_retry = nullptr;
@@ -73,7 +73,7 @@ char               m_sta_ip[16] = "0.0.0.0";
 esp_netif_t*       m_netif_ap = nullptr;
 esp_netif_t*       m_netif_sta = nullptr;
 
-// Reconnexion STA temporisée (évite de boucler trop vite).
+// Timed STA reconnection (avoids looping too fast).
 void staRetryCb(void*)
 {
     esp_wifi_connect();
@@ -87,7 +87,7 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
     }
     else if (WIFI_EVENT == base && WIFI_EVENT_STA_CONNECTED == id)
     {
-        // Demande une adresse IPv6 link-local sur la station (déclenche IP_EVENT_GOT_IP6).
+        // Request a link-local IPv6 address on the station (triggers IP_EVENT_GOT_IP6).
         if (m_netif_sta) esp_netif_create_ip6_linklocal(m_netif_sta);
     }
     else if (WIFI_EVENT == base && WIFI_EVENT_AP_START == id)
@@ -108,27 +108,27 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
         auto* ev = static_cast<ip_event_got_ip_t*>(data);
         snprintf(m_sta_ip, sizeof(m_sta_ip), IPSTR, IP2STR(&ev->ip_info.ip));
         m_sta_connected = true;
-        ESP_LOGI(TAG, "STA connecté, IP %s", m_sta_ip);
+        ESP_LOGI(TAG, "STA connected, IP %s", m_sta_ip);
     }
     else if (IP_EVENT == base && IP_EVENT_GOT_IP6 == id)
     {
         auto* ev = static_cast<ip_event_got_ip6_t*>(data);
         char buf[48];
         snprintf(buf, sizeof(buf), IPV6STR, IPV62STR(ev->ip6_info.ip));
-        ESP_LOGI(TAG, "IPv6 (%s) : %s",
+        ESP_LOGI(TAG, "IPv6 (%s): %s",
                  (m_netif_ap && ev->esp_netif == m_netif_ap) ? "AP" : "STA", buf);
     }
 }
 
-// ── Réponses WebSocket : PROTOBUF (nanopb), SANS TAS ──
-// Un seul tampon statique d'encodage (la tâche httpd est séquentielle : pas de réentrance).
-// nanopb encode PAR FLUX avec des callbacks : les chaînes (PARAMS, nom de manette…) et les
-// séries d'historique partent directement depuis leurs pointeurs d'origine — zéro copie,
-// zéro allocation, trames ~3× plus petites que le JSON.
-constexpr size_t REPLY_CAP = 6144;   // plus grosse réponse : config (4,7 ko binaire mesuré) + ~30 % de marge
+// ── WebSocket responses: PROTOBUF (nanopb), NO HEAP ──
+// A single static encoding buffer (the httpd task is sequential: no reentrancy).
+// nanopb encodes BY STREAM with callbacks: the strings (PARAMS, gamepad name…) and the
+// history series go directly from their original pointers — zero copy,
+// zero allocation, frames ~3× smaller than JSON.
+constexpr size_t REPLY_CAP = 6144;   // largest response: config (4.7 KB binary, measured) + ~30 % margin
 pb_byte_t m_reply[REPLY_CAP];
 
-// Callback générique : encode une chaîne C (arg = const char*).
+// Generic callback: encodes a C string (arg = const char*).
 bool encStr(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
 {
     const char* str = static_cast<const char*>(*arg);
@@ -137,7 +137,7 @@ bool encStr(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
     return pb_encode_string(os, reinterpret_cast<const pb_byte_t*>(str), strlen(str));
 }
 
-// Callback générique : encode un bloc d'octets (arg = BytesArg*).
+// Generic callback: encodes a block of bytes (arg = BytesArg*).
 struct BytesArg
 {
     const uint8_t* data;
@@ -150,20 +150,20 @@ bool encBytes(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
     return pb_encode_string(os, b->data, b->len);
 }
 
-// Encode l'enveloppe Msg dans m_reply ; retourne la longueur (0 = échec, loggé).
+// Encodes the Msg envelope into m_reply; returns the length (0 = failure, logged).
 size_t encodeMsg(const Msg& msg)
 {
     pb_ostream_t os = pb_ostream_from_buffer(m_reply, REPLY_CAP);
     if (!pb_encode(&os, Msg_fields, &msg))
     {
-        ESP_LOGE(TAG, "Encodage protobuf : %s", PB_GET_ERROR(&os));
+        ESP_LOGE(TAG, "Protobuf encoding: %s", PB_GET_ERROR(&os));
         return 0;
     }
     if (os.bytes_written > (REPLY_CAP * 4) / 5)
     {
-        // Marge < 20 % (la config grossit d'~190 o par paramètre ajouté) : agrandir REPLY_CAP
-        // AVANT que l'encodage n'échoue silencieusement côté page.
-        ESP_LOGW(TAG, "Réponse protobuf à %u/%u octets : marge faible",
+        // Margin < 20 % (the config grows by ~190 B per added parameter): enlarge REPLY_CAP
+        // BEFORE encoding silently fails on the page side.
+        ESP_LOGW(TAG, "Protobuf response at %u/%u bytes: low margin",
                  static_cast<unsigned>(os.bytes_written), static_cast<unsigned>(REPLY_CAP));
     }
     return os.bytes_written;
@@ -182,22 +182,22 @@ size_t buildWifiPb()
     msg.body.wifi.connected = m_sta_connected.load();
     msg.body.wifi.ip.funcs.encode = encStr;
     msg.body.wifi.ip.arg = m_sta_ip;
-    return encodeMsg(msg);   // encodage AVANT la sortie de portée de ssid
+    return encodeMsg(msg);   // encode BEFORE ssid goes out of scope
 }
 
-// ── Historique en RAM : mêmes fenêtres (10 min / 1 min / 30 min) mais échantillonnage
-// moins dense — l'ancien 600+360 points donnait un JSON de ~17 ko à anneaux PLEINS ; avec
-// 2 clients simultanés, les pics d'allocation épuisaient le tas (~40 ko libres, heap_min
-// mesuré < 11 ko) → malloc en échec dans les internals radio → gels/watchdog. ~120 points
-// suffisent largement à l'écran (graphique ~520 px).
+// ── History in RAM: same windows (10 min / 1 min / 30 min) but less dense
+// sampling — the old 600+360 points produced a ~17 KB JSON when the rings were FULL; with
+// 2 simultaneous clients, allocation peaks exhausted the heap (~40 KB free, measured heap_min
+// < 11 KB) → malloc failures in the radio internals → freezes/watchdog. ~120 points
+// are plenty for the screen (~520 px chart).
 constexpr int HIST_FAST_N   = 120;  // 10 min @ 5 s
 constexpr int HIST_FAST_DT  = 5;
-constexpr int HIST_SPEED_N  = 60;   // 1 min @ 1 s (graphique vitesse dédié, petit)
+constexpr int HIST_SPEED_N  = 60;   // 1 min @ 1 s (dedicated speed chart, small)
 constexpr int HIST_BATT_N   = 120;  // 30 min @ 15 s
 constexpr int HIST_BATT_DT  = 15;
 struct
 {
-    Ring<uint8_t, HIST_FAST_N>  accel, pwml, pwmr, rpml, rpmr;   // rpml/rpmr : tr/min roue (0..250)
+    Ring<uint8_t, HIST_FAST_N>  accel, pwml, pwmr, rpml, rpmr;   // rpml/rpmr: wheel rpm (0..250)
     Ring<uint8_t, HIST_SPEED_N> spd;
     Ring<uint8_t, HIST_BATT_N>  batt;
     int tick = 0;
@@ -205,14 +205,14 @@ struct
 SemaphoreHandle_t  m_hist_mtx = nullptr;
 esp_timer_handle_t m_hist_timer = nullptr;
 
-uint8_t pctU8(float v)   // pourcentage 0..100 (accélérateur, PWM)
+uint8_t pctU8(float v)   // percentage 0..100 (throttle, PWM)
 {
     if (v < 0.f) v = 0.f;
     if (v > 100.f) v = 100.f;
     return static_cast<uint8_t>(v + 0.5f);
 }
 
-uint8_t u8x10(float v)   // valeur physique ×10 (résolution 0,1 ; bornée 0..25,5 → km/h, V)
+uint8_t u8x10(float v)   // physical value ×10 (resolution 0.1; clamped 0..25.5 → km/h, V)
 {
     float s = v * 10.f;
     if (s < 0.f) s = 0.f;
@@ -220,7 +220,7 @@ uint8_t u8x10(float v)   // valeur physique ×10 (résolution 0,1 ; bornée 0..2
     return static_cast<uint8_t>(s + 0.5f);
 }
 
-// Vitesse roue (m/s) → tr/min, bornée 0..250 (octet ; ~3,3 m/s max avant saturation en roue 10").
+// Wheel speed (m/s) → rpm, clamped 0..250 (byte; ~3.3 m/s max before saturation on a 10" wheel).
 uint8_t rpmU8(float rpm_in)
 {
     float rpm = fabsf(rpm_in);
@@ -230,24 +230,24 @@ uint8_t rpmU8(float rpm_in)
 
 void histSample(void*)
 {
-    // Tourne dans la tâche esp_timer (priorité 22, partagée avec les timers Wi-Fi/BT) :
-    // il est INTERDIT d'y bloquer. Mutex occupé (un client construit le JSON) → on saute
-    // l'échantillon, tant pis — l'historique est indicatif.
+    // Runs in the esp_timer task (priority 22, shared with the Wi-Fi/BT timers):
+    // blocking here is FORBIDDEN. Mutex busy (a client is building the JSON) → skip
+    // the sample, never mind — the history is indicative.
     if (pdTRUE != xSemaphoreTake(m_hist_mtx, 0)) return;
     KartStatus st;
-    if (!statusTrySnapshot(st))   // même règle que m_hist_mtx : statut occupé → échantillon sauté
+    if (!statusTrySnapshot(st))   // same rule as m_hist_mtx: status busy → sample skipped
     {
         xSemaphoreGive(m_hist_mtx);
         return;
     }
-    m_hist.spd.push(u8x10(fabsf(st.m_speed_ms)));                        // |v véhicule| m/s ×10, chaque s
+    m_hist.spd.push(u8x10(fabsf(st.m_speed_ms)));                        // |vehicle v| m/s ×10, each s
     if (0 == (m_hist.tick % HIST_FAST_DT))
     {
-        m_hist.accel.push(pctU8(fabsf(st.m_fwd) * 100.f));               // % (consigne avance)
+        m_hist.accel.push(pctU8(fabsf(st.m_fwd) * 100.f));               // % (forward command)
         m_hist.pwml.push(pctU8(fabsf(st.m_out_l) * 100.f));              // %
         m_hist.pwmr.push(pctU8(fabsf(st.m_out_r) * 100.f));              // %
-        m_hist.rpml.push(rpmU8(st.m_rpm_l));                             // tr/min roue G
-        m_hist.rpmr.push(rpmU8(st.m_rpm_r));                             // tr/min roue D
+        m_hist.rpml.push(rpmU8(st.m_rpm_l));                             // rpm left wheel
+        m_hist.rpmr.push(rpmU8(st.m_rpm_r));                             // rpm right wheel
     }
     if (0 == (m_hist.tick % HIST_BATT_DT))
     {
@@ -257,10 +257,10 @@ void histSample(void*)
     xSemaphoreGive(m_hist_mtx);
 }
 
-// Historique : linéarisation des anneaux dans des tampons statiques puis encodage
-// protobuf « bytes » (1 octet/échantillon → ~850 octets à anneaux pleins, contre ~17 ko
-// du JSON d'origine). Cache binaire reconstruit au plus 1×/s, partagé entre clients.
-uint8_t m_hist_bin[1024];   // plein mesuré ≈ 900 octets (780 d'échantillons + en-têtes)
+// History: linearize the rings into static buffers then protobuf "bytes"
+// encoding (1 byte/sample → ~850 bytes when the rings are full, vs ~17 KB
+// for the original JSON). Binary cache rebuilt at most once/s, shared between clients.
+uint8_t m_hist_bin[1024];   // measured full ≈ 900 bytes (780 of samples + headers)
 size_t  m_hist_bin_len = 0;
 int64_t m_hist_bin_us = -1;
 
@@ -302,7 +302,7 @@ const pb_byte_t* buildHistPb(size_t& len)
     pb_ostream_t os = pb_ostream_from_buffer(m_hist_bin, sizeof(m_hist_bin));
     if (!pb_encode(&os, Msg_fields, &msg))
     {
-        ESP_LOGE(TAG, "Encodage hist : %s", PB_GET_ERROR(&os));
+        ESP_LOGE(TAG, "Hist encoding: %s", PB_GET_ERROR(&os));
         len = 0;
         return m_hist_bin;
     }
@@ -312,8 +312,8 @@ const pb_byte_t* buildHistPb(size_t& len)
     return m_hist_bin;
 }
 
-// Callback : encode les métadonnées de TOUS les paramètres (repeated ParamMeta) —
-// les chaînes partent directement des pointeurs de la table PARAMS (zéro copie).
+// Callback: encodes the metadata of ALL parameters (repeated ParamMeta) —
+// the strings go directly from the PARAMS table pointers (zero copy).
 bool encParamMetas(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
 {
     const KartConfig* cfg = static_cast<const KartConfig*>(*arg);
@@ -346,7 +346,7 @@ size_t buildConfigPb()
     return encodeMsg(msg);
 }
 
-// Callback : encode les VALEURS seules (repeated ParamVal).
+// Callback: encodes the VALUES only (repeated ParamVal).
 bool encParamVals(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
 {
     const KartConfig* cfg = static_cast<const KartConfig*>(*arg);
@@ -371,8 +371,8 @@ size_t buildValsPb()
     return encodeMsg(msg);
 }
 
-// Échelle d'affichage de la jauge batterie — décidée ICI (le client ne connaît aucun seuil) :
-// bas = seuil de coupure LVC du type détecté, haut = tension pleine charge au repos.
+// Battery gauge display scale — decided HERE (the client knows no threshold):
+// low = LVC cutoff threshold of the detected type, high = full-charge voltage at rest.
 float battDispLo(int bt)
 {
     return (24 == bt) ? hw::VBAT24_CUT_V : (12 == bt) ? hw::VBAT12_CUT_V : 0.f;
@@ -396,8 +396,8 @@ size_t buildStatusPb()
     st.batt_lo    = battDispLo(s.m_batt_type);
     st.batt_hi    = battDispHi(s.m_batt_type);
     st.speed_ms   = s.m_speed_ms;
-    // Roues en TR/MIN (signés), véhicule en m/s — la conversion se fait ICI, côté micro.
-    st.rpm_l      = s.m_rpm_l;   // déjà en tr/min : ratio enc_rpm_per_cps du contrôleur
+    // Wheels in RPM (signed), vehicle in m/s — the conversion happens HERE, on the micro side.
+    st.rpm_l      = s.m_rpm_l;   // already in rpm: enc_rpm_per_cps ratio from the controller
     st.rpm_r      = s.m_rpm_r;
     st.fwd        = s.m_fwd;
     st.turn       = s.m_turn;
@@ -449,14 +449,14 @@ const char* resetReasonStr(esp_reset_reason_t r)
     switch (r)
     {
         case ESP_RST_POWERON:  return "power-on";
-        case ESP_RST_SW:       return "logiciel";
+        case ESP_RST_SW:       return "software";
         case ESP_RST_PANIC:    return "panic";
         case ESP_RST_INT_WDT:
         case ESP_RST_TASK_WDT:
         case ESP_RST_WDT:      return "watchdog";
         case ESP_RST_BROWNOUT: return "brownout";
         case ESP_RST_DEEPSLEEP:return "deep-sleep";
-        default:               return "autre";
+        default:               return "other";
     }
 }
 
@@ -469,11 +469,11 @@ const char* ip6TypeStr(int t)
         case ESP_IP6_ADDR_IS_UNIQUE_LOCAL:      return "unique-local";
         case ESP_IP6_ADDR_IS_SITE_LOCAL:        return "site-local";
         case ESP_IP6_ADDR_IS_IPV4_MAPPED_IPV6:  return "ipv4-mapped";
-        default:                                return "autre";
+        default:                                return "other";
     }
 }
 
-// Callback : toutes les adresses IPv6 d'une interface (repeated Ip6), arg = esp_netif_t*.
+// Callback: all IPv6 addresses of an interface (repeated Ip6), arg = esp_netif_t*.
 bool encIp6(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
 {
     esp_netif_t* netif = static_cast<esp_netif_t*>(*arg);
@@ -560,18 +560,18 @@ size_t buildSysInfoPb()
     si.ip6_ap.arg  = m_netif_ap;
     si.ip6_sta.funcs.encode = encIp6;
     si.ip6_sta.arg = m_netif_sta;
-    return encodeMsg(msg);   // encodage AVANT la sortie de portée des tampons locaux
+    return encodeMsg(msg);   // encode BEFORE the local buffers go out of scope
 }
 
-// Brouillon de config PARESSEUX : instancié (mutex + copie) seulement si des paires
-// « set » arrivent réellement — pas pour les status à 20 Hz.
+// LAZY config draft: instantiated (mutex + copy) only if "set" pairs
+// actually arrive — not for the 20 Hz status.
 struct SetCtx
 {
     KartConfig cfg;
     bool       touched = false;
 };
 
-// Décodage d'un ParamVal de « set » : applique directement la valeur au brouillon.
+// Decoding a ParamVal from "set": applies the value directly to the draft.
 bool decSetParam(pb_istream_t* is, const pb_field_t* field, void** arg)
 {
     SetCtx* ctx = static_cast<SetCtx*>(*arg);
@@ -590,7 +590,7 @@ bool decSetParam(pb_istream_t* is, const pb_field_t* field, void** arg)
             break;
         }
     }
-    return true;   // nom inconnu → ignoré (client plus récent que le firmware, etc.)
+    return true;   // unknown name → ignored (client newer than the firmware, etc.)
 }
 
 esp_err_t sendGz(httpd_req_t* req, const char* ctype, const uint8_t* s, const uint8_t* e)
@@ -606,10 +606,10 @@ esp_err_t styleGet(httpd_req_t* req) { return sendGz(req, "text/css", style_css_
 esp_err_t chartGet(httpd_req_t* req) { return sendGz(req, "text/javascript", chart_min_js_gz_start, chart_min_js_gz_end); }
 esp_err_t pbJsGet(httpd_req_t* req)  { return sendGz(req, "text/javascript", pb_min_js_gz_start, pb_min_js_gz_end); }
 
-// Envoie une trame BINAIRE (protobuf) depuis un tampon donné.
+// Sends a BINARY (protobuf) frame from a given buffer.
 esp_err_t wsSend(httpd_req_t* req, const pb_byte_t* payload, size_t len)
 {
-    if (0 == len) return ESP_FAIL;   // encodage raté (loggé) : pas de trame vide
+    if (0 == len) return ESP_FAIL;   // encoding failed (logged): no empty frame
     httpd_ws_frame_t frame{};
     frame.final = true;
     frame.type = HTTPD_WS_TYPE_BINARY;
@@ -618,13 +618,13 @@ esp_err_t wsSend(httpd_req_t* req, const pb_byte_t* payload, size_t len)
     return httpd_ws_send_frame(req, &frame);
 }
 
-esp_err_t wsReply(httpd_req_t* req, size_t len)   // envoie l'arène m_reply
+esp_err_t wsReply(httpd_req_t* req, size_t len)   // sends the m_reply arena
 {
     return wsSend(req, m_reply, len);
 }
 
-// Tampon de RÉCEPTION statique (la tâche httpd est séquentielle). Plus grosse requête :
-// « set » complet ≈ 600 octets binaires (25 paires nom/valeur).
+// Static RECEIVE buffer (the httpd task is sequential). Largest request:
+// a full "set" ≈ 600 binary bytes (25 name/value pairs).
 constexpr size_t BODY_CAP = 1024;
 pb_byte_t m_body[BODY_CAP];
 
@@ -632,7 +632,7 @@ esp_err_t wsHandler(httpd_req_t* req)
 {
     if (HTTP_GET == req->method)
     {
-        return ESP_OK;   // handshake : le client demandera
+        return ESP_OK;   // handshake: the client will ask
     }
 
     httpd_ws_frame_t frame{};
@@ -651,8 +651,8 @@ esp_err_t wsHandler(httpd_req_t* req)
         return ESP_FAIL;
     }
 
-    // Décodage de la requête. « set » applique ses paires nom/valeur au fil du décodage
-    // (callback decSetParam) sur un brouillon instancié à la première paire.
+    // Decoding the request. "set" applies its name/value pairs as decoding proceeds
+    // (decSetParam callback) on a draft instantiated at the first pair.
     SetCtx draft;
     Req rq = Req_init_zero;
     rq.set.funcs.decode = decSetParam;
@@ -660,7 +660,7 @@ esp_err_t wsHandler(httpd_req_t* req)
     pb_istream_t is = pb_istream_from_buffer(m_body, frame.len);
     if (!pb_decode(&is, Req_fields, &rq))
     {
-        ESP_LOGW(TAG, "Requête protobuf invalide : %s", PB_GET_ERROR(&is));
+        ESP_LOGW(TAG, "Invalid protobuf request: %s", PB_GET_ERROR(&is));
         return ESP_OK;
     }
     const char* cmd = rq.type;
@@ -670,20 +670,20 @@ esp_err_t wsHandler(httpd_req_t* req)
         Msg msg = Msg_init_zero;
         msg.which_body = Msg_ok_tag;
         wsReply(req, encodeMsg(msg));
-        ESP_LOGW(TAG, "Redémarrage demandé via le web");
+        ESP_LOGW(TAG, "Reboot requested via the web");
         vTaskDelay(pdMS_TO_TICKS(150));
-        esp_restart();   // ne revient pas ; au boot → désarmé
+        esp_restart();   // does not return; on boot → disarmed
         return ESP_OK;
     }
     if (0 == strcmp(cmd, "padunpair")) { input::unpair();       return wsReply(req, buildPadPb()); }
-    if (0 == strcmp(cmd, "padpair"))   { input::startPairing(); return wsReply(req, buildPadPb()); }   // ⚠️ efface la calibration
+    if (0 == strcmp(cmd, "padpair"))   { input::startPairing(); return wsReply(req, buildPadPb()); }   // ⚠️ erases the calibration
     if (0 == strcmp(cmd, "calstart"))  { input::calStart();     return wsReply(req, buildPadPb()); }
     if (0 == strcmp(cmd, "calfinish")) { input::calFinish();    return wsReply(req, buildPadPb()); }
     if (0 == strcmp(cmd, "calcancel")) { input::calCancel();    return wsReply(req, buildPadPb()); }
     if (0 == strcmp(cmd, "padinfo"))   {                        return wsReply(req, buildPadPb()); }
     if (0 == strcmp(cmd, "wifiset"))
     {
-        configSetWifi(rq.ssid, rq.pass, rq.enabled);   // prise en compte au redémarrage
+        configSetWifi(rq.ssid, rq.pass, rq.enabled);   // takes effect on reboot
         Msg msg = Msg_init_zero;
         msg.which_body = Msg_ok_tag;
         return wsReply(req, encodeMsg(msg));
@@ -699,12 +699,12 @@ esp_err_t wsHandler(httpd_req_t* req)
     }
     if (0 == strcmp(cmd, "set"))
     {
-        if (draft.touched) configUpdate(draft.cfg, true);   // appliqué par decSetParam
+        if (draft.touched) configUpdate(draft.cfg, true);   // applied by decSetParam
         return wsReply(req, buildValsPb());
     }
     if (0 == strcmp(cmd, "sysinfo"))   { return wsReply(req, buildSysInfoPb()); }
     if (0 == strcmp(cmd, "status"))    { return wsReply(req, buildStatusPb()); }
-    return wsReply(req, buildConfigPb());   // "get" (et défaut)
+    return wsReply(req, buildConfigPb());   // "get" (and default)
 }
 } // namespace
 
@@ -721,7 +721,7 @@ void wifiSoftAPInit()
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifiEvent, nullptr, nullptr));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID, wifiEvent, nullptr, nullptr));
 
-    // Point d'accès (toujours actif)
+    // Access point (always active)
     wifi_config_t ap{};
     std::strncpy(reinterpret_cast<char*>(ap.ap.ssid), AP_SSID, sizeof(ap.ap.ssid));
     ap.ap.ssid_len = std::strlen(AP_SSID);
@@ -730,7 +730,7 @@ void wifiSoftAPInit()
     ap.ap.max_connection = AP_MAX_CONN;
     ap.ap.authmode = (std::strlen(AP_PASS) >= 8) ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
 
-    // Station (si des identifiants sont enregistrés) → mode AP+STA
+    // Station (if credentials are saved) → AP+STA mode
     char ssid[33];
     char pass[65];
     bool have_sta = configGetWifi(ssid, sizeof(ssid), pass, sizeof(pass));
@@ -749,16 +749,16 @@ void wifiSoftAPInit()
         targs.callback = staRetryCb;
         targs.name = "sta_retry";
         ESP_ERROR_CHECK(esp_timer_create(&targs, &m_sta_retry));
-        ESP_LOGI(TAG, "Mode AP+STA : connexion à « %s »", ssid);
+        ESP_LOGI(TAG, "AP+STA mode: connecting to \"%s\"", ssid);
     }
 
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "SoftAP « %s » prêt → http://192.168.4.1", AP_SSID);
+    ESP_LOGI(TAG, "SoftAP \"%s\" ready → http://192.168.4.1", AP_SSID);
 }
 
 void webServerStart()
 {
-    // Historique en RAM (échantillonné toutes les secondes)
+    // History in RAM (sampled every second)
     m_hist_mtx = xSemaphoreCreateMutex();
     esp_timer_create_args_t ht{};
     ht.callback = histSample;
@@ -767,10 +767,10 @@ void webServerStart()
     ESP_ERROR_CHECK(esp_timer_start_periodic(m_hist_timer, 1000000));   // 1 s
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192;   // défaut 4096 : trop juste pour WS + formatage %g (débordement vécu)
+    config.stack_size = 8192;   // default 4096: too tight for WS + %g formatting (overflow experienced)
     if (ESP_OK != httpd_start(&m_server, &config))
     {
-        ESP_LOGE(TAG, "Échec démarrage HTTP");
+        ESP_LOGE(TAG, "HTTP start failed");
         return;
     }
     auto reg = [](const char* uri, esp_err_t (*handler)(httpd_req_t*), bool is_ws)
@@ -788,5 +788,5 @@ void webServerStart()
     reg("/chart.js",  chartGet, false);
     reg("/pb.js",     pbJsGet,  false);
     reg("/ws",        wsHandler, true);
-    ESP_LOGI(TAG, "Serveur web + WebSocket démarrés");
+    ESP_LOGI(TAG, "Web + WebSocket server started");
 }

@@ -1,4 +1,4 @@
-// leds.hpp — Tâche dédiée au ruban WS2812B (affichage d'état).
+// leds.hpp — Task dedicated to the WS2812B strip (status display).
 #pragma once
 
-void ledsStart();   // initialise le ruban et démarre la tâche d'affichage (~20 Hz)
+void ledsStart();   // initializes the strip and starts the display task (~20 Hz)

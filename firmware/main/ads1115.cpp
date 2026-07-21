@@ -1,4 +1,4 @@
-// ads1115.cpp — Implémentation du driver ADS1115 (voir ads1115.hpp).
+// ads1115.cpp — ADS1115 driver implementation (see ads1115.hpp).
 #include "ads1115.hpp"
 
 #include "esp_log.h"
@@ -9,19 +9,19 @@ static const char* TAG = "ads1115";
 
 namespace
 {
-// Pointeurs de registre (1er octet de chaque transaction).
+// Register pointers (1st byte of each transaction).
 constexpr uint8_t REG_CONVERSION = 0x00;
 constexpr uint8_t REG_CONFIG     = 0x01;
 
-// Champs du registre de configuration (16 bits).
-constexpr uint16_t CFG_OS_SINGLE   = 0x8000;  // écrit 1 = démarre une conversion ; lu 1 = inactif
-constexpr uint16_t CFG_MUX_SE_BASE = 0x4000;  // MUX = 100b | canal → A0..A3 vs GND (bits 14..12)
-constexpr uint16_t CFG_MODE_SINGLE = 0x0100;  // 1 = single-shot, 0 = continu (bit 8)
-constexpr uint16_t CFG_COMP_OFF    = 0x0003;  // COMP_QUE = 11b : comparateur désactivé (bits 1..0)
+// Configuration register fields (16 bits).
+constexpr uint16_t CFG_OS_SINGLE   = 0x8000;  // write 1 = starts a conversion; read 1 = idle
+constexpr uint16_t CFG_MUX_SE_BASE = 0x4000;  // MUX = 100b | channel → A0..A3 vs GND (bits 14..12)
+constexpr uint16_t CFG_MODE_SINGLE = 0x0100;  // 1 = single-shot, 0 = continuous (bit 8)
+constexpr uint16_t CFG_COMP_OFF    = 0x0003;  // COMP_QUE = 11b: comparator disabled (bits 1..0)
 
-constexpr int CONV_TIMEOUT_MS = 20;   // marge au-delà du temps de conversion le plus lent
+constexpr int CONV_TIMEOUT_MS = 20;   // margin beyond the slowest conversion time
 
-// Temps de conversion approché (ms) par cadence, pour la temporisation du single-shot.
+// Approximate conversion time (ms) per rate, for the single-shot timing.
 int convMs(Ads1115::Rate rate)
 {
     constexpr int MS[] = {125, 63, 32, 16, 8, 4, 3, 2};  // 8..860 SPS
@@ -32,7 +32,7 @@ int convMs(Ads1115::Rate rate)
 
 float Ads1115::lsbVolts(Gain gain)
 {
-    // Pleine échelle (±V) selon le gain, puis FS / 32768 (15 bits côté positif).
+    // Full scale (±V) according to the gain, then FS / 32768 (15 bits on the positive side).
     constexpr float FS[] = {6.144f, 4.096f, 2.048f, 1.024f, 0.512f, 0.256f};
     const int idx = static_cast<int>(gain);
     const float fs = (idx >= 0 && idx < 6) ? FS[idx] : 2.048f;
@@ -46,7 +46,7 @@ uint16_t Ads1115::buildConfig(uint8_t channel, Gain gain, Rate rate, bool contin
     cfg |= static_cast<uint16_t>(gain) << 9;                      // PGA
     if (!continuous) cfg |= CFG_MODE_SINGLE;                      // MODE
     cfg |= static_cast<uint16_t>(rate) << 5;                      // DR
-    cfg |= CFG_COMP_OFF;                                          // comparateur off
+    cfg |= CFG_COMP_OFF;                                          // comparator off
     return cfg;
 }
 
@@ -75,7 +75,7 @@ bool Ads1115::begin(i2c_master_bus_handle_t bus, uint8_t addr, uint32_t scl_hz)
     }
     if (ESP_OK != i2c_master_probe(bus, addr, CONV_TIMEOUT_MS))
     {
-        ESP_LOGW(TAG, "ADS1115 absent à l'adresse 0x%02X", addr);
+        ESP_LOGW(TAG, "ADS1115 absent at address 0x%02X", addr);
         return false;
     }
     i2c_device_config_t dev{};
@@ -85,10 +85,10 @@ bool Ads1115::begin(i2c_master_bus_handle_t bus, uint8_t addr, uint32_t scl_hz)
     if (ESP_OK != i2c_master_bus_add_device(bus, &dev, &m_dev))
     {
         m_dev = nullptr;
-        ESP_LOGW(TAG, "Ajout du device ADS1115 échoué (0x%02X)", addr);
+        ESP_LOGW(TAG, "Adding the ADS1115 device failed (0x%02X)", addr);
         return false;
     }
-    ESP_LOGI(TAG, "ADS1115 détecté à 0x%02X", addr);
+    ESP_LOGI(TAG, "ADS1115 detected at 0x%02X", addr);
     return true;
 }
 
@@ -126,8 +126,8 @@ bool Ads1115::readSingleShot(uint8_t channel, Gain gain, Rate rate, int16_t& raw
     {
         return false;
     }
-    // Attendre la fin de conversion : scruter le bit OS (=1 quand terminé), borné par le temps
-    // de conversion théorique + une marge.
+    // Wait for the conversion to finish: poll the OS bit (=1 when done), bounded by the
+    // theoretical conversion time + a margin.
     const int deadline = convMs(rate) + 2;
     for (int waited = 0; waited <= deadline; ++waited)
     {

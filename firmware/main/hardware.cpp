@@ -1,6 +1,6 @@
-// hardware.cpp — Accès matériel (variante différentielle : 2 moteurs avant + 2 AS5600).
-// Les handles des drivers (ADC, LEDC, 2× I2C) vivent ici en statique ; le reste du firmware
-// passe par les fonctions libres du namespace `board`.
+// hardware.cpp — Hardware access (differential variant: 2 front motors + 2 AS5600).
+// The driver handles (ADC, LEDC, 2× I2C) live here as statics; the rest of the firmware
+// goes through the free functions of the `board` namespace.
 #include "hardware.hpp"
 
 #include <atomic>
@@ -19,7 +19,7 @@
 
 static const char* TAG = "board";
 
-// Sens de rotation (niveau appliqué sur la broche DIR du driver).
+// Rotation direction (level applied to the driver's DIR pin).
 enum class Dir : int { Forward = 1, Reverse = 0 };
 
 static inline float clampf(float v, float lo, float hi)
@@ -29,22 +29,22 @@ static inline float clampf(float v, float lo, float hi)
 
 namespace
 {
-// Résolution du timer LEDC (type esp_driver_ledc) — la valeur numérique correspondante
-// (PWM_MAX = 4095) vit dans control_types.hpp, seule utile à la logique.
+// LEDC timer resolution (esp_driver_ledc type) — the corresponding numeric value
+// (PWM_MAX = 4095) lives in control_types.hpp, the only one useful to the logic.
 constexpr ledc_timer_bit_t PWM_RES = LEDC_TIMER_12_BIT;
 
-i2c_master_bus_handle_t   m_bus[2] = {nullptr, nullptr};   // bus 0 = roue G, bus 1 = roue D
-i2c_master_dev_handle_t   m_as[2]  = {nullptr, nullptr};   // AS5600 par bus
-int                       m_angle_last[2] = {-1, -1};      // dernier angle brut par capteur
-Ads1115                   m_ads;                           // ADC externe (bus 0), Vbat sur A0
+i2c_master_bus_handle_t   m_bus[2] = {nullptr, nullptr};   // bus 0 = L wheel, bus 1 = R wheel
+i2c_master_dev_handle_t   m_as[2]  = {nullptr, nullptr};   // AS5600 per bus
+int                       m_angle_last[2] = {-1, -1};      // last raw angle per sensor
+Ads1115                   m_ads;                           // external ADC (bus 0), Vbat on A0
 bool                      m_led_on = false;
 
-// SENTINELLE horloge LEDC — diagnostic + auto-réparation de la course soupçonnée :
-// crash récurrent « Interrupt WDT » avec PC figé sur une ÉCRITURE de registre LEDC, sous
-// charge radio (Wi-Fi/BT). Hypothèse : un read-modify-write concurrent (non verrouillé côté
-// blobs radio) sur DPORT_PERIP_CLK_EN_REG perd le bit d'horloge du LEDC ; or écrire dans un
-// périphérique SANS horloge fige le bus APB sur ESP32 → watchdog d'interruption sans dump.
-// On vérifie le bit AVANT chaque écriture moteur : coupé → réparé + compté (page Système).
+// LEDC clock SENTINEL — diagnostic + auto-repair of the suspected race:
+// recurring "Interrupt WDT" crash with the PC frozen on a LEDC register WRITE, under
+// radio load (Wi-Fi/BT). Hypothesis: a concurrent read-modify-write (unlocked on the
+// radio blob side) on DPORT_PERIP_CLK_EN_REG loses the LEDC clock bit; and writing to a
+// peripheral WITHOUT a clock freezes the APB bus on ESP32 → interrupt watchdog with no dump.
+// We check the bit BEFORE each motor write: gated off → repaired + counted (System page).
 std::atomic<uint32_t> m_ledc_clk_fix{0};
 
 inline void ledcClockGuard()
@@ -54,14 +54,14 @@ inline void ledcClockGuard()
         DPORT_REG_SET_BIT(DPORT_PERIP_CLK_EN_REG, DPORT_LEDC_CLK_EN);
         DPORT_REG_CLR_BIT(DPORT_PERIP_RST_EN_REG, DPORT_LEDC_RST);
         const uint32_t n = m_ledc_clk_fix.fetch_add(1) + 1;
-        ESP_LOGE(TAG, "Horloge LEDC trouvée COUPÉE (course DPORT/radio ?) — réparée (n=%lu)",
+        ESP_LOGE(TAG, "LEDC clock found GATED OFF (DPORT/radio race?) — repaired (n=%lu)",
                  static_cast<unsigned long>(n));
     }
 }
 
-// Caches d'état des sorties : on n'écrit LEDC/GPIO QUE si la valeur change. À 500 Hz en
-// freinage permanent, ça élimine ~2000 écritures APB/s inutiles (et réduit d'autant la
-// fenêtre d'exposition à la course d'horloge ci-dessus).
+// Output state caches: we write LEDC/GPIO ONLY if the value changes. At 500 Hz in
+// permanent braking, this eliminates ~2000 useless APB writes/s (and shrinks by the same
+// amount the exposure window to the clock race above).
 uint32_t m_duty_last[2] = {UINT32_MAX, UINT32_MAX};
 int      m_dir_last[2]  = {-1, -1};
 
@@ -91,13 +91,13 @@ void initLED()
     gpio_config(&io);
 }
 
-// ADC externe ADS1115 (sur le bus 0). Vbat suivie en continu sur A0 en ±4,096 V
-// (résolution 125 µV) : la tension à la broche (≤ 3,3 V via le diviseur) tient largement.
+// External ADS1115 ADC (on bus 0). Vbat tracked continuously on A0 at ±4.096 V
+// (125 µV resolution): the pin voltage (≤ 3.3 V via the divider) fits with plenty of margin.
 void initExtAdc()
 {
     if (!m_ads.begin(m_bus[0], hw::ADS1115_ADDR, hw::I2C_FREQ_HZ))
     {
-        ESP_LOGW(TAG, "ADS1115 indisponible : mesure Vbat à 0");
+        ESP_LOGW(TAG, "ADS1115 unavailable: Vbat reading at 0");
         return;
     }
     m_ads.startContinuous(pins::ads::VBAT, Ads1115::Gain::FS_4V096, Ads1115::Rate::SPS_128);
@@ -132,15 +132,15 @@ void initMotors()
     io.mode = GPIO_MODE_OUTPUT;
     io.pull_down_en = GPIO_PULLDOWN_ENABLE;
     gpio_config(&io);
-    // L'attache LEDC reconfigure les broches PWM : réarmer leurs pull-down internes.
+    // The LEDC attach reconfigures the PWM pins: re-arm their internal pull-downs.
     gpio_pulldown_en(pins::PWM_L);
     gpio_pulldown_en(pins::PWM_R);
     dirPin(pins::DIR_L, Dir::Forward);
     dirPin(pins::DIR_R, Dir::Forward);
-    board::motorsBrake();   // état par défaut : freinage dynamique (jamais en roue libre)
+    board::motorsBrake();   // default state: dynamic braking (never coasting)
 }
 
-// Deux bus I2C indépendants, un capteur AS5600 (0x36) par bus.
+// Two independent I2C buses, one AS5600 sensor (0x36) per bus.
 void initEncoders()
 {
     struct { i2c_port_t port; gpio_num_t sda; gpio_num_t scl; } cfg[2] = {
@@ -158,7 +158,7 @@ void initEncoders()
         bus.flags.enable_internal_pullup = true;
         if (ESP_OK != i2c_new_master_bus(&bus, &m_bus[i]))
         {
-            ESP_LOGW(TAG, "Bus I2C %d indisponible : pas de capteur roue %c", i, i ? 'D' : 'G');
+            ESP_LOGW(TAG, "I2C bus %d unavailable: no sensor for wheel %c", i, i ? 'D' : 'G');
             continue;
         }
         i2c_device_config_t dev{};
@@ -167,17 +167,17 @@ void initEncoders()
         dev.scl_speed_hz = hw::I2C_FREQ_HZ;
         if (ESP_OK != i2c_master_bus_add_device(m_bus[i], &dev, &m_as[i]))
         {
-            ESP_LOGW(TAG, "AS5600 roue %c non ajouté", i ? 'D' : 'G');
+            ESP_LOGW(TAG, "AS5600 wheel %c not added", i ? 'D' : 'G');
             m_as[i] = nullptr;
         }
     }
 }
 
-// Présence de chaque AS5600 : dernière lecture I2C réussie ? (rafraîchi à 500 Hz par la
-// boucle de contrôle via angleDelta → alimente les défauts « encodeur absent » par roue).
+// Presence of each AS5600: last I2C read succeeded? (refreshed at 500 Hz by the
+// control loop via angleDelta → feeds the "encoder absent" faults per wheel).
 std::atomic<bool> m_enc_present[2] = {false, false};
 
-// Angle brut 12 bits (0..4095) du capteur `i`. Retourne -1 si absent/erreur.
+// Raw 12-bit angle (0..4095) of sensor `i`. Returns -1 if absent/error.
 int readAngleRaw(int i)
 {
     if (!m_as[i]) return -1;
@@ -192,7 +192,7 @@ int readAngleRaw(int i)
     return ((buf[0] & 0x0F) << 8) | buf[1];
 }
 
-// Δangle signé du capteur `i` depuis le dernier appel, wrap 0↔4095 → [-2048..2047].
+// Signed Δangle of sensor `i` since the last call, wrap 0↔4095 → [-2048..2047].
 int angleDelta(int i)
 {
     const int cur = readAngleRaw(i);
@@ -218,7 +218,7 @@ void initButton()
     gpio_config(&in);
 }
 
-// Anti-rebond : un état ne change qu'après BTN_DEBOUNCE_TICKS lectures stables.
+// Debounce: a state only changes after BTN_DEBOUNCE_TICKS stable readings.
 struct Debounce
 {
     bool state = false;
@@ -248,13 +248,13 @@ void motorApply(ledc_channel_t ch, gpio_num_t dir, float v, uint32_t cap)
 }
 } // namespace
 
-// ───────────────────────────── API publique ─────────────────────────────
+// ───────────────────────────── Public API ─────────────────────────────
 void board::init()
 {
     initLED();
     initMotors();
-    initEncoders();   // 2 bus I2C + 2 capteurs AS5600
-    initExtAdc();     // ADS1115 sur le bus 0 (après création des bus)
+    initEncoders();   // 2 I2C buses + 2 AS5600 sensors
+    initExtAdc();     // ADS1115 on bus 0 (after the buses are created)
     initButton();
     board::led(false);
 }
@@ -274,9 +274,9 @@ float board::vbatVolts(int n)
 {
     if (!m_ads.ok())
     {
-        return -1.0f;   // capteur absent → tension inconnue (le contrôleur saute la LVC)
+        return -1.0f;   // sensor absent → voltage unknown (the controller skips the LVC)
     }
-    // Moyenne de n lectures du registre de conversion (mode continu) → tension à la broche A0.
+    // Average of n readings of the conversion register (continuous mode) → voltage at pin A0.
     long acc = 0;
     int  got = 0;
     for (int k = 0; k < n; ++k)
@@ -309,8 +309,8 @@ void board::motorsStop()
 
 void board::motorsBrake()
 {
-    // Freinage dynamique passif : rapport cyclique nul + DIR bas sur les 2 canaux → les deux
-    // sorties de chaque pont sont basses → moteur court-circuité (résiste au mouvement).
+    // Passive dynamic braking: zero duty cycle + DIR low on both channels → both
+    // outputs of each bridge are low → motor short-circuited (resists movement).
     setDuty(LEDC_CHANNEL_0, 0);
     setDuty(LEDC_CHANNEL_1, 0);
     dirPin(pins::DIR_L, Dir::Reverse);
@@ -336,12 +336,12 @@ bool board::btnStart()
 
 void board::powerLatch()
 {
-    // Actif BAS : tirer la LED de l'opto vers la masse → l'opto envoie le +20 V sur la gate.
+    // Active LOW: pull the opto's LED to ground → the opto sends +20 V to the gate.
     gpio_set_level(pins::POWER_HOLD, 0);
     gpio_config_t io{};
     io.pin_bit_mask = (1ULL << pins::POWER_HOLD);
     io.mode = GPIO_MODE_OUTPUT;
-    io.pull_down_en = GPIO_PULLDOWN_ENABLE;   // actif BAS : même en haute impédance, rester « maintenu »
+    io.pull_down_en = GPIO_PULLDOWN_ENABLE;   // active LOW: even in high impedance, stay "held"
     gpio_config(&io);
     gpio_set_level(pins::POWER_HOLD, 0);
 }
@@ -353,12 +353,12 @@ void board::powerOff()
 
 void board::motorsIdleEarly()
 {
-    // PWM/DIR en sortie à l'état BAS dès le boot, avant l'init LEDC : tout bas = FREINAGE
-    // DYNAMIQUE (les deux sorties du pont au niveau bas court-circuitent le moteur). Les
-    // PULL-DOWN internes sont armés en plus : si une broche repasse en haute impédance
-    // pendant que la puce tourne, elle retombe côté frein. ⚠️ Un RESET efface ces pulls
-    // (registres IO_MUX) : le défaut électrique pendant le bootloader dépend des pull-down
-    // EXTERNES du driver — à garantir côté câblage (voir README).
+    // PWM/DIR as output at the LOW level from boot, before LEDC init: all low = DYNAMIC
+    // BRAKING (both bridge outputs at low level short-circuit the motor). The internal
+    // PULL-DOWNs are armed as well: if a pin returns to high impedance while the chip is
+    // running, it falls back to the brake side. ⚠️ A RESET clears these pulls
+    // (IO_MUX registers): the electrical default during the bootloader depends on the
+    // driver's EXTERNAL pull-downs — to be guaranteed on the wiring side (see README).
     gpio_config_t io{};
     io.pin_bit_mask = (1ULL << pins::PWM_L) | (1ULL << pins::DIR_L) |
                       (1ULL << pins::PWM_R) | (1ULL << pins::DIR_R);

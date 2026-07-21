@@ -5,3 +5,6 @@ doc/*.jpeg
 
 # Environnement Python pour les schémas (schemdraw)
 .venv-schem/
+
+# Python bytecode cache
+__pycache__/

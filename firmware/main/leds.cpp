@@ -1,6 +1,6 @@
-// leds.cpp — Tâche dédiée au ruban WS2812B : reflète l'état du kart.
-//   vert = armé/en route · rouge = désarmé · ambre pulsé = armement en cours ·
-//   orange = batterie faible · bleu = calibration · rouge clignotant = défaut.
+// leds.cpp — Task dedicated to the WS2812B strip: reflects the kart's state.
+//   green = armed/running · red = disarmed · pulsing amber = arming in progress ·
+//   orange = low battery · blue = calibration · blinking red = fault.
 #include "leds.hpp"
 
 #include "config.hpp"
@@ -40,21 +40,21 @@ void render(const KartConfig& cfg)
             break;
         case State::Run:
         {
-            // Seuil d'avertissement selon la batterie détectée (12/24 V) ; type inconnu → pas d'alerte.
+            // Warning threshold according to the detected battery (12/24 V); unknown type → no alert.
             const int   bt     = st.m_batt_type;
             const float warn_v = (24 == bt) ? hw::VBAT24_WARN_V : hw::VBAT12_WARN_V;
             if ((0 != bt) && st.m_vbat < warn_v)
             {
                 r = 255;
-                g = 120;       // batterie faible : orange
+                g = 120;       // low battery: orange
             }
             else if ((static_cast<int>(BrakeMode::None) != st.m_brake_mode) && slow)
             {
-                g = 255;       // freinage : vert clignotant
+                g = 255;       // braking: blinking green
             }
             else
             {
-                g = 255;       // armé : vert
+                g = 255;       // armed: green
             }
             break;
         }
@@ -65,12 +65,12 @@ void render(const KartConfig& cfg)
                 if (slow)
                 {
                     r = 255;
-                    g = 120;   // armement en cours : ambre pulsé
+                    g = 120;   // arming in progress: pulsing amber
                 }
             }
             else
             {
-                r = 255;       // désarmé : rouge
+                r = 255;       // disarmed: red
             }
             break;
     }

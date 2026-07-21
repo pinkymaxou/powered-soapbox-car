@@ -1,6 +1,6 @@
-// scenarios.hpp — Scénarios de simulation PARTAGÉS entre les tests automatisés (sim_main,
-// asserts) et le visualisateur 3D temps réel (mode --stream). Chaque scénario = réglages
-// (config + véhicule) + manette scriptée + durée. Extrêmes ET réalistes.
+// scenarios.hpp — Simulation scenarios SHARED between the automated tests (sim_main,
+// asserts) and the real-time 3D viewer (--stream mode). Each scenario = settings
+// (config + vehicle) + scripted gamepad + duration. Extreme AND realistic.
 #pragma once
 
 #include <cmath>
@@ -19,14 +19,14 @@ struct Scenario
     std::string name;
     std::string desc;
     float       duration_s = 10.f;
-    std::function<void(KartConfig&)> cfg = nullptr;   // mutations de config (défauts sinon)
-    std::function<void(Vehicle&)>    veh = nullptr;   // pente, pannes capteurs, batterie…
+    std::function<void(KartConfig&)> cfg = nullptr;   // config mutations (defaults otherwise)
+    std::function<void(Vehicle&)>    veh = nullptr;   // slope, sensor failures, battery…
     PadScript   pad;
     bool        calibrated = true;
 };
 
-// Armement standard : START tenu de 0,2 s à 1,5 s (arm_hold_ms = 1000 par défaut),
-// stick au centre pendant l'appui. La conduite scriptée commence donc à t ≥ 1,6 s.
+// Standard arming: START held from 0.2 s to 1.5 s (arm_hold_ms = 1000 by default),
+// stick centered during the press. Scripted driving therefore starts at t ≥ 1.6 s.
 constexpr float T_DRIVE = 1.6f;
 inline bool armPhase(float t, PadCmd& c)
 {
@@ -40,27 +40,27 @@ inline bool armPhase(float t, PadCmd& c)
     return false;
 }
 
-// Agrégats d'un run — la matière des asserts.
+// Aggregates of a run — the material for the asserts.
 struct RunResult
 {
-    float min_tip_margin = 1e9f;   // marge de renversement minimale rencontrée (m/s²)
-    float max_v = 0.f;             // |vitesse| max atteinte
+    float min_tip_margin = 1e9f;   // minimum tip margin encountered (m/s²)
+    float max_v = 0.f;             // max |speed| reached
     float max_alat = 0.f;
     float final_v = 0.f;
-    float stop_dist = -1.f;        // distance parcourue depuis le début du freinage (si mesurée)
+    float stop_dist = -1.f;        // distance traveled since the start of braking (if measured)
     bool  ever_armed = false;
     bool  ever_fault = false;
-    bool  wheel_lifted = false;   // une roue a quitté le sol (même brièvement)
-    bool  tipped = false;         // renversé (point de non-retour franchi)
+    bool  wheel_lifted = false;   // a wheel left the ground (even briefly)
+    bool  tipped = false;         // tipped (point of no return crossed)
     Fault final_fault = Fault::None;
     int   batt_type = 0;
     bool  powered_off = false;
     float t_first_fault = -1.f;
-    float t_disarmed_after = -1.f;   // date du premier désarmement APRÈS avoir été armé
+    float t_disarmed_after = -1.f;   // time of the first disarm AFTER having been armed
 };
 
-// Exécute un scénario tick par tick ; `hook` (optionnel) est appelé à chaque pas —
-// c'est là que se branchent le flux JSON du visualisateur ou une trace CSV.
+// Runs a scenario tick by tick; `hook` (optional) is called at each step —
+// this is where the viewer's JSON stream or a CSV trace hook in.
 using FrameHook = std::function<void(const Vehicle&, const SimController&, const CtrlTelemetry&)>;
 
 inline RunResult runScenario(const Scenario& sc, const FrameHook& hook = nullptr)
@@ -106,28 +106,28 @@ inline RunResult runScenario(const Scenario& sc, const FrameHook& hook = nullptr
     return r;
 }
 
-// ─────────────────────────── Les scénarios ───────────────────────────
+// ─────────────────────────── The scenarios ───────────────────────────
 inline std::vector<Scenario> allScenarios()
 {
     std::vector<Scenario> v;
 
-    // EXTRÊME — LE test du projet : plein gaz puis échelon de virage à fond, protection active.
+    // EXTREME — THE project test: full throttle then a hard-turn step, protection active.
     v.push_back({
         "virage_pleine_vitesse",
-        "Plein gaz jusqu'à vmax puis virage à fond (anti-renversement ACTIF)",
+        "Full throttle up to vmax then hard turn (rollover protection ACTIVE)",
         10.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
             c.y = 1.f;
-            c.x = (t >= 5.f) ? 1.f : 0.f;   // échelon de virage à pleine vitesse
+            c.x = (t >= 5.f) ? 1.f : 0.f;   // turn step at full speed
             return c;
         }});
 
-    // CONTRE-ÉPREUVE : même manœuvre SANS anti-renversement → doit basculer (valide la mesure).
+    // COUNTER-TEST: same maneuver WITHOUT rollover protection → must tip (validates the measurement).
     v.push_back({
         "virage_sans_protection",
-        "Même manœuvre avec turn_limit_en=0 : démontre le renversement évité",
+        "Same maneuver with turn_limit_en=0: demonstrates the avoided rollover",
         10.f,
         [](KartConfig& c) { c.turn_limit_en = 0.f; },
         nullptr,
@@ -139,10 +139,10 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // EXTRÊME légal : pivot sur place (virage 100 %, avance nulle) — stable par conception.
+    // Legal EXTREME: pivot in place (100% turn, zero forward) — stable by design.
     v.push_back({
         "pivot_surplace",
-        "Virage à fond sans avance : pivot sur place, vitesse ≈ 0",
+        "Hard turn with no forward motion: pivot in place, speed ≈ 0",
         8.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;
@@ -151,10 +151,10 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // RÉALISTE : slalom soutenu.
+    // REALISTIC: sustained slalom.
     v.push_back({
         "slalom",
-        "Avance 60 %, virage sinusoïdal ±80 % à 0,5 Hz",
+        "60% forward, sinusoidal turn ±80% at 0.5 Hz",
         14.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;
@@ -164,10 +164,10 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // RÉALISTE : conduite d'enfant — à-coups pseudo-aléatoires (déterministes, somme de sinus).
+    // REALISTIC: child driving — pseudo-random jerks (deterministic, sum of sines).
     v.push_back({
         "conduite_enfant",
-        "Entrées erratiques : à-coups d'avance et coups de virage brusques",
+        "Erratic inputs: forward jerks and abrupt turn jabs",
         16.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;
@@ -180,26 +180,26 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // Décélération commandée (freinage au stick) : le scénario de la fausse « inversion ».
+    // Commanded deceleration (stick braking): the scenario of the false "reversal".
     v.push_back({
         "freinage_stick",
-        "Accélère puis stick plein arrière : plugging — AUCUN défaut EncoderDir attendu",
+        "Accelerate then stick fully back: plugging — NO EncoderDir fault expected",
         10.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
             if (t < 5.f)      c.y = 1.f;
-            else if (t < 7.f) c.y = -1.f;   // plein arrière lancé (plugging)
+            else if (t < 7.f) c.y = -1.f;   // full reverse while moving (plugging)
             else              c.y = 0.f;
             return c;
         }});
 
-    // Marche arrière : plein recul — tenue par SA PROPRE limite de vitesse (rev_speed_ms,
-    // même PID, cible choisie selon le sens mesuré), indépendante de la limite avant
-    // (laissée à 3,3). 2 m/s pour prouver l'asservissement (les moteurs saturent vers 3).
+    // Reverse: full reverse — held by ITS OWN speed limit (rev_speed_ms,
+    // same PID, target chosen by the measured direction), independent of the forward limit
+    // (left at 3.3). 2 m/s to prove the control loop (the motors saturate around 3).
     v.push_back({
         "marche_arriere",
-        "Plein recul : la vitesse converge sur rev_speed_ms (2 m/s), aucun défaut",
+        "Full reverse: the speed converges on rev_speed_ms (2 m/s), no fault",
         12.f,
         [](KartConfig& c) { c.rev_speed_ms = 2.f; },
         nullptr,
@@ -210,10 +210,10 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // Frein PID : relâcher à pleine vitesse → arrêt actif.
+    // Active (PID) braking: release at full speed → active stop.
     v.push_back({
         "frein_pid_arret",
-        "Relâche le stick à vmax : frein PID (consigne 0), distance d'arrêt bornée",
+        "Release the stick at vmax: active (PID) braking (command 0), bounded stopping distance",
         10.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;
@@ -222,23 +222,23 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // Heartbeat : la manette cesse d'émettre à pleine vitesse.
+    // Heartbeat: the gamepad stops transmitting at full speed.
     v.push_back({
         "heartbeat_perte",
-        "Rapports manette coupés à pleine vitesse : désarmement ≤ 250 ms + freinage",
+        "Gamepad reports cut at full speed: disarm ≤ 250 ms + braking",
         9.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
             c.y = 1.f;
-            if (t >= 5.f) c.reports = false;   // lien « connecté » mais muet
+            if (t >= 5.f) c.reports = false;   // link "connected" but silent
             return c;
         }});
 
-    // Pannes d'encodeur (l'ARRÊT TOTAL doit tomber, la bonne cause affichée).
+    // Encoder failures (the FULL STOP must trigger, the right cause displayed).
     v.push_back({
         "encodeur_inverse",
-        "AS5600 gauche câblé à l'envers : Fault::EncoderDir en < 1,5 s de conduite",
+        "Left AS5600 wired backwards: Fault::EncoderDir in < 1.5 s of driving",
         8.f, nullptr,
         [](Vehicle& v) { v.enc_mode_l = EncMode::Reversed; },
         [](float t) {
@@ -249,7 +249,7 @@ inline std::vector<Scenario> allScenarios()
         }});
     v.push_back({
         "encodeur_absent",
-        "AS5600 droit muet (I2C) : Fault::EncoderAbsent, armement refusé",
+        "Right AS5600 silent (I2C): Fault::EncoderAbsent, arming refused",
         5.f, nullptr,
         [](Vehicle& v) { v.enc_mode_r = EncMode::Absent; },
         [](float t) {
@@ -260,7 +260,7 @@ inline std::vector<Scenario> allScenarios()
         }});
     v.push_back({
         "encodeur_fou",
-        "Mesure aberrante (> 8 m/s) : Fault::EncoderMad",
+        "Aberrant measurement (> 8 m/s): Fault::EncoderMad",
         6.f, nullptr,
         [](Vehicle& v) { v.enc_mode_l = EncMode::Crazy; },
         [](float t) {
@@ -271,7 +271,7 @@ inline std::vector<Scenario> allScenarios()
         }});
     v.push_back({
         "roue_bloquee",
-        "Encodeurs figés (roue coincée/courroie) : Fault::Encoder après ~1 s de poussée",
+        "Stuck encoders (jammed wheel/belt): Fault::Encoder after ~1 s of pushing",
         7.f, nullptr,
         [](Vehicle& v) { v.enc_mode_l = EncMode::Stuck; v.enc_mode_r = EncMode::Stuck; },
         [](float t) {
@@ -281,26 +281,26 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // LVC : batterie fatiguée qui s'affaisse sous charge (détection 12 V puis coupure).
+    // LVC: worn battery that sags under load (12 V detection then cutoff).
     v.push_back({
         "lvc_batterie_faible",
-        "Batterie 12 V fatiguée : l'affaissement sous charge déclenche la LVC (après anti-rebond)",
+        "Worn 12 V battery: the sag under load triggers the LVC (after debounce)",
         12.f, nullptr,
         [](Vehicle& v) {
-            v.params().batt_v0 = 11.2f;     // à vide : au-dessus du seuil (10,5 V)
-            v.params().batt_rint = 0.12f;   // usée : s'écroule sous 20-30 A
+            v.params().batt_v0 = 11.2f;     // open-circuit: above the threshold (10.5 V)
+            v.params().batt_rint = 0.12f;   // worn: collapses under 20-30 A
         },
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
-            c.y = (t > 5.f) ? 1.f : 0.f;    // 3,4 s au repos (détection du type), puis charge
+            c.y = (t > 5.f) ? 1.f : 0.f;    // 3.4 s at rest (type detection), then load
             return c;
         }});
 
-    // Détection 24 V au boot (tension stable 3 s).
+    // 24 V detection at boot (stable voltage 3 s).
     v.push_back({
         "detection_24v",
-        "Batterie 24 V (2×12 V série) : type détecté = 24 après 3 s de stabilité",
+        "24 V battery (2×12 V series): type detected = 24 after 3 s of stability",
         6.f, nullptr,
         [](Vehicle& v) { v.params().batt_v0 = 25.6f; },
         [](float t) {
@@ -309,40 +309,40 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // RÉALISTE : descente 8 %, stick relâché — le frein actif retient le kart dans la pente
-    // (dans la capacité des moteurs : ~134 N de retenue contre 77 N de gravité).
+    // REALISTIC: 8% downhill, stick released — active braking holds the kart on the slope
+    // (within the motor capacity: ~134 N of holding force against 77 N of gravity).
     v.push_back({
         "descente_frein",
-        "Pente 8 % : stick relâché, le frein (PID) doit retenir le kart",
+        "Slope 8%: stick released, the (PID) brake must hold the kart",
         12.f, nullptr,
         [](Vehicle& v) { v.params().slope_rad = -std::atan(0.08f); },
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
-            c.y = (t < 4.f) ? 0.4f : 0.f;   // s'engage doucement puis relâche dans la pente
+            c.y = (t < 4.f) ? 0.4f : 0.f;   // eases in then releases on the slope
             return c;
         }});
 
-    // Descente 8 % avec FREIN DYNAMIQUE SEUL (brk_pid_enable=0) : le court-circuit ne peut
-    // pas arrêter (force ∝ vitesse) mais doit PLAFONNER la descente à une vitesse terminale
-    // rampante — la question du scénario : « est-ce qu'il tient quand même ? »
+    // 8% downhill with DYNAMIC BRAKING ONLY (brk_pid_enable=0): the short-circuit cannot
+    // stop (force ∝ speed) but must CAP the descent at a crawling terminal
+    // speed — the scenario's question: "does it hold anyway?"
     v.push_back({
         "descente_frein_dynamique",
-        "Pente 8 %, frein dynamique SEUL (sans PID) : vitesse terminale bornée attendue",
+        "Slope 8%, dynamic braking ONLY (without PID): bounded terminal speed expected",
         18.f,
         [](KartConfig& c) { c.brk_pid_enable = 0.f; },
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.08f); },
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
-            c.y = (t < 4.f) ? 0.4f : 0.f;   // s'engage dans la pente puis relâche tout
+            c.y = (t < 4.f) ? 0.4f : 0.f;   // engages on the slope then releases everything
             return c;
         }});
 
-    // Pente 16 % (raide !) — frein PID ACTIF : doit retenir le kart près de l'arrêt.
+    // Slope 16% (steep!) — active (PID) braking: must hold the kart near a stop.
     v.push_back({
         "descente16_frein_actif",
-        "Pente 16 %, frein PID actif : le kart doit être retenu près de l'arrêt",
+        "Slope 16%, active (PID) braking: the kart must be held near a stop",
         18.f, nullptr,
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.16f); },
         [](float t) {
@@ -352,10 +352,10 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // Pente 16 % — frein DYNAMIQUE seul : vitesse terminale plus élevée (∝ pente), bornée ?
+    // Slope 16% — dynamic braking only: higher terminal speed (∝ slope), bounded?
     v.push_back({
         "descente16_frein_dynamique",
-        "Pente 16 %, frein dynamique SEUL : vitesse terminale ~1 m/s attendue",
+        "Slope 16%, dynamic braking ONLY: terminal speed ~1 m/s expected",
         18.f,
         [](KartConfig& c) { c.brk_pid_enable = 0.f; },
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.16f); },
@@ -366,25 +366,25 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // CHAMPIGNON EN PENTE : alimentation coupée → MOSFET ouverts → ROUE LIBRE. Il ne reste
-    // que le roulement (~30 N) contre la gravité : sur 8 % (77 N) comme sur 16 % (152 N),
-    // le kart S'EMBALLE — c'est la démonstration chiffrée de l'avertissement du README
-    // (remède matériel : relais normalement fermé en travers des moteurs).
+    // KILL SWITCH ON A SLOPE: power cut off → MOSFETs open → COASTING. Only
+    // rolling resistance (~30 N) remains against gravity: on 8% (77 N) as on 16% (152 N),
+    // the kart RUNS AWAY — this is the quantified demonstration of the README warning
+    // (hardware fix: normally-closed relay across the motors).
     v.push_back({
         "coupure_pente8",
-        "Pente 8 % : champignon actionné à t=6 s → roue libre, emballement attendu",
+        "Slope 8%: kill switch pressed at t=6 s → coasting, runaway expected",
         14.f, nullptr,
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.08f); },
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
             c.y = (t < 5.f) ? 0.3f : 0.f;
-            if (t >= 6.f) c.sys_power = false;   // champignon
+            if (t >= 6.f) c.sys_power = false;   // kill switch
             return c;
         }});
     v.push_back({
         "coupure_pente16",
-        "Pente 16 % : champignon actionné à t=6 s → emballement rapide",
+        "Slope 16%: kill switch pressed at t=6 s → fast runaway",
         14.f, nullptr,
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.16f); },
         [](float t) {
@@ -395,12 +395,12 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // CHARGEMENT ASYMÉTRIQUE — un seul enfant assis sur le siège GAUCHE (pas au centre).
-    // 33 kg à +0,20 m (demi-banquette) → y_cg = 33×0,20/(32+33) ≈ +0,10 m ; CG un peu plus
-    // bas et plus avant (moins de masse sur la banquette arrière).
+    // ASYMMETRIC LOAD — a single child sitting on the LEFT seat (not centered).
+    // 33 kg at +0.20 m (half-bench) → y_cg = 33×0.20/(32+33) ≈ +0.10 m; CG a bit
+    // lower and more forward (less mass on the rear bench).
     v.push_back({
         "enfant_seul_cote",
-        "UN enfant (33 kg) assis à gauche : virage à fond des deux côtés à pleine vitesse",
+        "ONE child (33 kg) sitting on the left: hard turn on both sides at full speed",
         13.f, nullptr,
         [](Vehicle& veh) {
             auto& p = veh.params();
@@ -413,22 +413,22 @@ inline std::vector<Scenario> allScenarios()
             PadCmd c;
             if (armPhase(t, c)) return c;
             c.y = 1.f;
-            if (t >= 5.f && t < 8.f)  c.x = 1.f;    // virage droite → charge l'arête GAUCHE (côté chargé)
-            if (t >= 8.f)             c.x = -1.f;   // virage gauche → arête droite
+            if (t >= 5.f && t < 8.f)  c.x = 1.f;    // turn right → loads the LEFT edge (loaded side)
+            if (t >= 8.f)             c.x = -1.f;   // turn left → right edge
             return c;
         }});
 
-    // Un ADULTE (70 kg) à gauche + un enfant (33 kg) à droite : plus lourd, CG plus haut,
-    // décalé vers l'adulte : y_cg = (70−33)×0,20/135 ≈ +0,055 m.
+    // An ADULT (70 kg) on the left + a child (33 kg) on the right: heavier, higher CG,
+    // offset toward the adult: y_cg = (70−33)×0.20/135 ≈ +0.055 m.
     v.push_back({
         "adulte_enfant",
-        "Adulte 70 kg à gauche + enfant 33 kg à droite : lourd, CG haut, décalé",
+        "Adult 70 kg on the left + child 33 kg on the right: heavy, high CG, offset",
         13.f, nullptr,
         [](Vehicle& veh) {
             auto& p = veh.params();
             p.mass_pass_kg = 103.f;
             p.ycg_m = 0.055f;
-            p.hcg_m = 0.44f;   // torse d'adulte
+            p.hcg_m = 0.44f;   // adult torso
             p.iz_kgm2 = 16.f;
         },
         [](float t) {

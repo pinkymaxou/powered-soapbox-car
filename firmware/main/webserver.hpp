@@ -1,5 +1,5 @@
-// webserver.hpp — Point d'accès SoftAP + serveur web/WebSocket de configuration.
+// webserver.hpp — SoftAP access point + configuration web/WebSocket server.
 #pragma once
 
-void wifiSoftAPInit();   // démarre le Wi-Fi en mode point d'accès (SoftAP)
-void webServerStart();   // démarre le serveur HTTP/WebSocket (après wifiSoftAPInit)
+void wifiSoftAPInit();   // starts Wi-Fi in access point mode (SoftAP)
+void webServerStart();   // starts the HTTP/WebSocket server (after wifiSoftAPInit)

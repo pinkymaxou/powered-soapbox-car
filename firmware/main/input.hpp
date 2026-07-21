@@ -1,51 +1,51 @@
-// input.hpp — Entrée de pilotage (manette). Abstraction : le reste du firmware ne dépend
-// pas du backend (Bluepad32 / autre). Axes normalisés [-1..1], + état de connexion.
+// input.hpp — Control input (gamepad). Abstraction: the rest of the firmware does not
+// depend on the backend (Bluepad32 / other). Normalized axes [-1..1], + connection state.
 //
-// Convention arcade : y = avance (+1 = avant), x = virage (+1 = vers la droite).
-// Le mixage différentiel se fait dans controller.cpp.
+// Arcade convention: y = forward (+1 = ahead), x = steering (+1 = to the right).
+// The differential mixing is done in controller.cpp.
 #pragma once
 
 #include <cstdint>
 
 namespace input
 {
-int64_t lastReportUs();   // date (µs, esp_timer) du dernier rapport HID — heartbeat manette
+int64_t lastReportUs();   // timestamp (µs, esp_timer) of the last HID report — gamepad heartbeat
 
 struct State
 {
-    float x = 0.f;          // virage CALIBRÉ [-1..1]  (+ = droite)
-    float y = 0.f;          // avance CALIBRÉ [-1..1]  (+ = avant)
-    float rx = 0.f;         // virage BRUT (non calibré) [-1..1] — pour l'affichage
-    float ry = 0.f;         // avance BRUT (non calibré) [-1..1] — pour l'affichage
-    float zl = 0.f;         // gâchette analogique gauche (ZL) [0..1] — affichage
-    float zr = 0.f;         // gâchette analogique droite (ZR) [0..1] — affichage
-    float rx2 = 0.f;        // stick DROIT X [-1..1] — affichage seulement (non calibré)
-    float ry2 = 0.f;        // stick DROIT Y [-1..1] — affichage seulement (non calibré)
-    uint32_t buttons = 0;   // masque : boutons | (misc<<16) | (dpad<<24) — affichage
-    bool  connected = false; // manette appairée ET connectée
-    bool  estop = false;     // bouton d'arrêt manette (ex. B) — frein immédiat
-    bool  start = false;     // bouton START/Options manette — armement (comme le bouton physique)
+    float x = 0.f;          // CALIBRATED steering [-1..1]  (+ = right)
+    float y = 0.f;          // CALIBRATED forward [-1..1]  (+ = ahead)
+    float rx = 0.f;         // RAW steering (uncalibrated) [-1..1] — for the display
+    float ry = 0.f;         // RAW forward (uncalibrated) [-1..1] — for the display
+    float zl = 0.f;         // left analog trigger (ZL) [0..1] — display
+    float zr = 0.f;         // right analog trigger (ZR) [0..1] — display
+    float rx2 = 0.f;        // RIGHT stick X [-1..1] — display only (uncalibrated)
+    float ry2 = 0.f;        // RIGHT stick Y [-1..1] — display only (uncalibrated)
+    uint32_t buttons = 0;   // mask: buttons | (misc<<16) | (dpad<<24) — display
+    bool  connected = false; // gamepad paired AND connected
+    bool  estop = false;     // gamepad stop button (e.g. B) — immediate brake
+    bool  start = false;     // gamepad START/Options button — arming (like the physical button)
 };
 
-// Retour haptique : fait vibrer la manette (magnitudes 0..255, durée en ms).
-// Sûr à appeler depuis n'importe quelle tâche (la requête est relayée au thread BT).
+// Haptic feedback: makes the gamepad rumble (magnitudes 0..255, duration in ms).
+// Safe to call from any task (the request is relayed to the BT thread).
 void rumble(uint8_t strong, uint8_t weak, uint16_t dur_ms);
 
-void        init();          // démarre le backend (BT) — appelé une fois au boot
-State       get();           // dernier état (axes CALIBRÉS [-1..1] ; {0,0} si non calibré)
-void        startPairing();  // ouvre une fenêtre d'appairage. ⚠️ EFFACE la calibration.
-void        unpair();        // oublie la manette appairée et déconnecte (efface aussi la calibration)
-bool        pairing();       // true si fenêtre d'appairage ouverte
-const char* name();          // modèle de la manette ("" si aucune)
-int         battery();       // niveau batterie manette 0..100, -1 si inconnu
+void        init();          // starts the backend (BT) — called once at boot
+State       get();           // last state (CALIBRATED axes [-1..1]; {0,0} if not calibrated)
+void        startPairing();  // opens a pairing window. ⚠️ CLEARS the calibration.
+void        unpair();        // forgets the paired gamepad and disconnects (also clears the calibration)
+bool        pairing();       // true if a pairing window is open
+const char* name();          // gamepad model ("" if none)
+int         battery();       // gamepad battery level 0..100, -1 if unknown
 
-// Calibration manette — OBLIGATOIRE pour conduire (le contrôleur refuse de rouler sinon).
-// Séquence : calStart() manche au repos (capture le centre) → bouger les sticks à fond
-// dans tous les sens (capture des extrêmes) → calFinish() (calcule l'échelle, persiste en NVS).
-bool calibrated();   // true si une calibration valide est enregistrée
-void calStart();     // capture le centre + démarre la collecte des extrêmes
-void calFinish();    // valide + sauvegarde (NVS)
-void calCancel();    // abandonne la calibration en cours
-int  calState();     // 0 = inactif, 1 = collecte des extrêmes en cours
+// Gamepad calibration — MANDATORY to drive (the controller refuses to run otherwise).
+// Sequence: calStart() with the stick at rest (captures the center) → move the sticks fully
+// in every direction (captures the extremes) → calFinish() (computes the scale, persists to NVS).
+bool calibrated();   // true if a valid calibration is stored
+void calStart();     // captures the center + starts collecting the extremes
+void calFinish();    // validates + saves (NVS)
+void calCancel();    // aborts the calibration in progress
+int  calState();     // 0 = idle, 1 = collecting the extremes
 
 } // namespace input

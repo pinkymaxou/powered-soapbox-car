@@ -1,11 +1,11 @@
-// ws2812.cpp — Pilote WS2812B via le périphérique RMT (encodeur d'octets).
+// ws2812.cpp — WS2812B driver via the RMT peripheral (bytes encoder).
 #include "ws2812.hpp"
 
 #include "driver/rmt_encoder.h"
 #include "esp_log.h"
 
 static const char* TAG = "ws2812";
-static constexpr uint32_t RES_HZ = 10'000'000;  // 0,1 µs / tick
+static constexpr uint32_t RES_HZ = 10'000'000;  // 0.1 µs / tick
 
 void Ws2812::init(gpio_num_t pin, int count, uint8_t brightness)
 {
@@ -21,18 +21,18 @@ void Ws2812::init(gpio_num_t pin, int count, uint8_t brightness)
     chan_cfg.trans_queue_depth = 4;
     ESP_ERROR_CHECK(rmt_new_tx_channel(&chan_cfg, &m_chan));
 
-    // Encodeur d'octets : symboles « bit 0 » et « bit 1 » au timing WS2812B.
+    // Bytes encoder: "bit 0" and "bit 1" symbols at the WS2812B timing.
     rmt_bytes_encoder_config_t enc_cfg{};
-    enc_cfg.bit0.level0 = 1; enc_cfg.bit0.duration0 = 3;   // 0,3 µs haut
-    enc_cfg.bit0.level1 = 0; enc_cfg.bit0.duration1 = 9;   // 0,9 µs bas
-    enc_cfg.bit1.level0 = 1; enc_cfg.bit1.duration0 = 9;   // 0,9 µs haut
-    enc_cfg.bit1.level1 = 0; enc_cfg.bit1.duration1 = 3;   // 0,3 µs bas
+    enc_cfg.bit0.level0 = 1; enc_cfg.bit0.duration0 = 3;   // 0.3 µs high
+    enc_cfg.bit0.level1 = 0; enc_cfg.bit0.duration1 = 9;   // 0.9 µs low
+    enc_cfg.bit1.level0 = 1; enc_cfg.bit1.duration0 = 9;   // 0.9 µs high
+    enc_cfg.bit1.level1 = 0; enc_cfg.bit1.duration1 = 3;   // 0.3 µs low
     enc_cfg.flags.msb_first = 1;
     ESP_ERROR_CHECK(rmt_new_bytes_encoder(&enc_cfg, &m_enc));
 
     ESP_ERROR_CHECK(rmt_enable(m_chan));
-    show();  // éteint au démarrage
-    ESP_LOGI(TAG, "Ruban WS2812B : %d LEDs sur GPIO%d", m_count, static_cast<int>(pin));
+    show();  // off at startup
+    ESP_LOGI(TAG, "WS2812B strip: %d LEDs on GPIO%d", m_count, static_cast<int>(pin));
 }
 
 void Ws2812::setPixel(int i, uint8_t r, uint8_t g, uint8_t b)
@@ -41,7 +41,7 @@ void Ws2812::setPixel(int i, uint8_t r, uint8_t g, uint8_t b)
     {
         return;
     }
-    // Mise à l'échelle par la luminosité, ordre GRB.
+    // Scaling by brightness, GRB order.
     m_buf[i * 3 + 0] = static_cast<uint16_t>(g) * m_brightness / 255;
     m_buf[i * 3 + 1] = static_cast<uint16_t>(r) * m_brightness / 255;
     m_buf[i * 3 + 2] = static_cast<uint16_t>(b) * m_brightness / 255;

@@ -1,29 +1,29 @@
-# Firmware ESP32 — Kart à entraînement différentiel
+# ESP32 Firmware — Differential-Drive Kart
 
-Firmware **ESP-IDF 6.1** (C++) pilotant **2 moteurs avant indépendants** (un par roue) :
-la **direction se fait par différence de vitesse** entre les deux roues (*differential /
-skid steer*). La **roue arrière est folle** (roulette pivotante libre). Commande par
-**manette Bluetooth**, retour de vitesse par **2 capteurs d'angle AS5600** (un par roue,
-sur 2 bus I²C), sécurités, **ruban WS2812B** et **configuration par Wi-Fi**.
+**ESP-IDF 6.1** firmware (C++) driving **2 independent front motors** (one per wheel):
+**steering is done by the speed difference** between the two wheels (*differential /
+skid steer*). The **rear wheel is idle** (free-pivoting caster wheel). Controlled by a
+**Bluetooth gamepad**, speed feedback from **2 AS5600 angle sensors** (one per wheel,
+on 2 I²C buses), safety features, a **WS2812B strip** and **Wi-Fi configuration**.
 
-## Architecture mécanique (rappel)
+## Mechanical architecture (recap)
 
 ```
-        AVANT
-   🛞 G        🛞 D     ← 2 roues motrices, chacune son moteur + son AS5600
+        FRONT
+   🛞 L        🛞 R     ← 2 drive wheels, each its own motor + its own AS5600
     \          /
-     \        /         direction = différentiel de vitesse G/D
-      \      /          (pivote sur place si avance ≈ 0)
-        🛞               ← 1 roue arrière FOLLE (roulette pivotante)
-       ARRIÈRE
+     \        /         steering = L/R speed differential
+      \      /          (pivots in place if forward ≈ 0)
+        🛞               ← 1 IDLE rear wheel (pivoting caster)
+        REAR
 ```
 
-- **Mélange « arcade »** : `gauche = avance + virage·gain`, `droite = avance − virage·gain` (stick à gauche → roue droite plus rapide → le kart vire à gauche).
-- **Anti-renversement** : un tricycle se renverse facilement → la **limite de virage suit
-  la vitesse mesurée** (rampe ±100 % → ±50 %) et le **recul est bridé**.
-  Voir [Anti-renversement](#anti-renversement-virage-trop-sec).
+- **"Arcade" mixing**: `left = forward + turn·gain`, `right = forward − turn·gain` (stick to the left → right wheel faster → the kart turns left).
+- **Rollover protection**: a tricycle tips over easily → the **turn limit follows
+  the measured speed** (ramp ±100% → ±50%) and **reverse is capped**.
+  See [Rollover protection](#rollover-protection-turn-too-sharp).
 
-## Compilation / flash
+## Build / flash
 
 ```bash
 . ~/esp/esp-idf-6.1/export.sh
@@ -32,272 +32,272 @@ idf.py build
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
-> **Composants vendorés** (dans [`components/`](components/), **commités** — un clone frais
-> compile sans étape manuelle) : `bluepad32`, `btstack`, `cmd_nvs`, `cmd_system`, **patchés
-> pour IDF 6.1**. Provenance et détail des patches : [`components/README.md`](components/README.md).
+> **Vendored components** (in [`components/`](components/), **committed** — a fresh clone
+> builds without any manual step): `bluepad32`, `btstack`, `cmd_nvs`, `cmd_system`, **patched
+> for IDF 6.1**. Provenance and patch details: [`components/README.md`](components/README.md).
 
-### Bluetooth + Wi-Fi : configuration radio
+### Bluetooth + Wi-Fi: radio configuration
 
-L'ESP32 partage une **seule radio** entre Wi-Fi et Bluetooth (coexistence TDM) et l'app
-grossit nettement (~1,4 Mo). Réglages dans [`sdkconfig.defaults`](sdkconfig.defaults) :
+The ESP32 shares a **single radio** between Wi-Fi and Bluetooth (TDM coexistence) and the app
+grows significantly (~1.4 MB). Settings in [`sdkconfig.defaults`](sdkconfig.defaults):
 
-- **Table de partitions custom** ([`partitions.csv`](partitions.csv)) : `factory` ~2,75 Mo,
-  **sans OTA** (flash 4 Mo) — il reste ~51 % libre.
-- **BT activé** (`BT_ENABLED`, mode **BTDM** = BLE + BR/EDR, *modem sleep* désactivé) +
-  **coexistence logicielle** (`ESP_COEX_SW_COEXIST_ENABLE`).
-- **Bluepad32** : plateforme **CUSTOM** (`BLUEPAD32_PLATFORM_CUSTOM`), audio désactivé.
-- **IRAM** : Wi-Fi + BT saturent l'IRAM → `ESP_WIFI_IRAM_OPT` / `ESP_WIFI_RX_IRAM_OPT`
-  désactivés (code Wi-Fi déplacé en flash ; impact négligeable sur la commande).
+- **Custom partition table** ([`partitions.csv`](partitions.csv)): `factory` ~2.75 MB,
+  **no OTA** (4 MB flash) — ~51% stays free.
+- **BT enabled** (`BT_ENABLED`, **BTDM** mode = BLE + BR/EDR, *modem sleep* disabled) +
+  **software coexistence** (`ESP_COEX_SW_COEXIST_ENABLE`).
+- **Bluepad32**: **CUSTOM** platform (`BLUEPAD32_PLATFORM_CUSTOM`), audio disabled.
+- **IRAM**: Wi-Fi + BT saturate the IRAM → `ESP_WIFI_IRAM_OPT` / `ESP_WIFI_RX_IRAM_OPT`
+  disabled (Wi-Fi code moved to flash; negligible impact on control).
 
-## Manette Bluetooth (Bluepad32)
+## Bluetooth gamepad (Bluepad32)
 
-Le backend ([`input_bp32.c`](main/input_bp32.c)) implémente une **plateforme Bluepad32
-custom** et fait tourner la boucle **BTstack** dans une tâche dédiée (cœur 0). Les trames
-manette sont transmises au firmware via des hooks C (`inputbp_on_data` / `inputbp_on_conn`)
-consommés par [`input.cpp`](main/input.cpp), qui expose l'interface neutre
+The backend ([`input_bp32.c`](main/input_bp32.c)) implements a **custom Bluepad32
+platform** and runs the **BTstack** loop in a dedicated task (core 0). Gamepad frames
+are passed to the firmware through C hooks (`inputbp_on_data` / `inputbp_on_conn`)
+consumed by [`input.cpp`](main/input.cpp), which exposes the neutral interface
 [`input.hpp`](main/input.hpp) (`input::get()` → `{x, y, connected, estop}`).
 
-- **Stick gauche** : `Y` = avance/recul, `X` = virage (mélange arcade dans le contrôleur).
-- **Compensation cercle→carré** : le stick est borné mécaniquement par un **cercle**
-  (`x²+y²≤1`) → en diagonale pleine chaque axe plafonnerait à ~0,71. `input::get()` **étire
-  radialement** la consigne (facteur `|v|/max(|x|,|y|)`, =√2 en diagonale) pour que les
-  **coins du carré soient atteignables** : avance **et** virage à fond simultanément.
-- **Bouton B** = **arrêt d'urgence** (frein immédiat).
-- **Retour haptique** (`input::rumble`) : vibration **douce** à l'armement, **forte** sur
-  erreur soudaine / e-stop, et **forte (répétée)** si on pousse le stick alors que le
-  véhicule est bloqué (non armé, etc.). La requête est posée par la boucle de contrôle et
-  jouée dans le thread BT (`play_dual_rumble`).
-- **Appairage / désappairage** pilotés depuis la page web (onglet **Manette**).
+- **Left stick**: `Y` = forward/reverse, `X` = turn (arcade mixing in the controller).
+- **Circle→square compensation**: the stick is mechanically bounded by a **circle**
+  (`x²+y²≤1`) → at full diagonal each axis would cap at ~0.71. `input::get()` **radially
+  stretches** the command (factor `|v|/max(|x|,|y|)`, =√2 on the diagonal) so that the
+  **corners of the square become reachable**: full forward **and** full turn simultaneously.
+- **B button** = **emergency stop** (immediate braking).
+- **Haptic feedback** (`input::rumble`): a **soft** vibration on arming, a **strong** one on
+  a sudden error / e-stop, and a **strong (repeated)** one if you push the stick while the
+  vehicle is blocked (not armed, etc.). The request is posted by the control loop and
+  played in the BT thread (`play_dual_rumble`).
+- **Pairing / unpairing** driven from the web page (**Gamepad** tab).
 
-### Calibration OBLIGATOIRE
+### MANDATORY calibration
 
-**Le kart refuse de rouler tant que la manette n'est pas calibrée** (`input::get()`
-renvoie des axes à 0 si non calibré → le contrôleur reste au frein). La calibration se
-fait **exclusivement depuis la page web**, **pour la manette uniquement** :
+**The kart refuses to move until the gamepad is calibrated** (`input::get()`
+returns zeroed axes if not calibrated → the controller stays braked). Calibration is
+done **exclusively from the web page**, **for the gamepad only**:
 
-1. **Centre** : manche au repos → capture le point neutre.
-2. **Extrêmes** : bouger les sticks à fond → capture l'amplitude par axe.
+1. **Center**: stick at rest → captures the neutral point.
+2. **Extremes**: move the sticks fully → captures the amplitude per axis.
 
-L'échelle (centre + demi-amplitude par axe) est **persistée en NVS** (namespace `pad`).
-⚠️ **Un (ré)appairage EFFACE la calibration** (nouvelle manette = nouvelle calibration).
+The scale (center + half-amplitude per axis) is **persisted in NVS** (namespace `pad`).
+⚠️ **A (re)pairing ERASES the calibration** (new gamepad = new calibration).
 
-### Sécurité : déconnexion → frein
+### Safety: disconnect → braking
 
-Si la manette **se déconnecte** (hors de portée, batterie vide, désappairage), `connected`
-passe à `false` et le contrôleur **met immédiatement les 2 moteurs en mode freinage**.
-Idem si non armé, non calibré, arrêt d'urgence, ou défaut capteur/LVC.
+If the gamepad **disconnects** (out of range, dead battery, unpairing), `connected`
+goes to `false` and the controller **immediately puts both motors into braking mode**.
+Same if not armed, not calibrated, emergency stop, or sensor/LVC fault.
 
-### Sécurité : défaut électrique = frein (dead-man)
+### Safety: electrical fault = braking (dead-man)
 
-- **Watchdog de tâche à 2 s avec PANIC** : une boucle de contrôle gelée → reboot (et non
-  un simple avertissement) ; au redémarrage les moteurs repartent en frein dynamique.
-- **Broches moteur : tout bas = frein** (duty 0 + DIR bas court-circuitent le pont). Le
-  firmware arme des **pull-down internes** sur PWM/DIR (haute impédance → frein tant que
-  la puce tourne) et force l'état frein dès la première ligne d'`app_main`.
-- ⚠️ **Câblage requis** : les pull-down internes **ne survivent pas à un reset** (registres
-  IO_MUX). Pendant le bootloader (~700 ms), seuls des **pull-down EXTERNES** (~10 kΩ) sur
-  les entrées PWM/DIR du driver garantissent le frein — les prévoir (ou vérifier que le
-  module driver les intègre). Idem pour le **latch d'alimentation** (`POWER_HOLD`, actif
-  bas) : prévoir la résistance/le condensateur qui maintient l'alimentation pendant un
-  reboot, sinon un reset en pente = driver hors tension = **roue libre** (scénarios
-  `coupure_pente*` de la simulation).
+- **2 s task watchdog with PANIC**: a frozen control loop → reboot (not
+  just a warning); on restart the motors come back up in dynamic braking.
+- **Motor pins: all low = braking** (duty 0 + DIR low short the bridge). The
+  firmware arms **internal pull-downs** on PWM/DIR (high impedance → braking as long as
+  the chip is running) and forces the braking state on the very first line of `app_main`.
+- ⚠️ **Wiring required**: the internal pull-downs **do not survive a reset** (IO_MUX
+  registers). During the bootloader (~700 ms), only **EXTERNAL pull-downs** (~10 kΩ) on
+  the driver's PWM/DIR inputs guarantee braking — plan for them (or check that the
+  driver module includes them). Same for the **power latch** (`POWER_HOLD`, active
+  low): plan for the resistor/capacitor that keeps the power on during a
+  reboot, otherwise a reset on a slope = driver powered off = **coasting** (the
+  `coupure_pente*` simulation scenarios).
 
-## Mesures analogiques (ADC externe ADS1115)
+## Analog measurements (external ADS1115 ADC)
 
-Toutes les entrées analogiques passent par un **ADS1115** (16 bits, I²C, PGA) au lieu de
-l'ADC interne de l'ESP32 — **plus précis et linéaire**, et sans le conflit ADC2/Wi-Fi.
-Le breakout se branche **en piggyback sur le bus I²C 0** (avec l'AS5600 gauche : adresses
-distinctes `0x36` / `0x48`). Driver dédié : [`ads1115.hpp`](main/ads1115.hpp).
+All analog inputs go through an **ADS1115** (16-bit, I²C, PGA) instead of
+the ESP32's internal ADC — **more accurate and linear**, and without the ADC2/Wi-Fi conflict.
+The breakout is wired **piggyback on I²C bus 0** (alongside the left AS5600: distinct
+addresses `0x36` / `0x48`). Dedicated driver: [`ads1115.hpp`](main/ads1115.hpp).
 
-- ⚠️ **Alimenter en 3,3 V** (niveaux I²C compatibles ESP32) → `AIN_max = 3,3 V`.
-- **A0 = tension batterie** (via le pont diviseur 100k/15k), suivie en **mode continu**
-  (±4,096 V, résolution 125 µV). `board::vbatVolts()` lit le registre de conversion.
-- **A1 / A2 = réservés** au futur joystick X/Y (lecture single-shot) ; **A3 libre**.
-- Adresse réglable par la broche ADDR (`0x48` GND … `0x4B` SCL) — voir `pinout.hpp`.
+- ⚠️ **Power it at 3.3 V** (ESP32-compatible I²C levels) → `AIN_max = 3.3 V`.
+- **A0 = battery voltage** (via the 100k/15k voltage divider), sampled in **continuous
+  mode** (±4.096 V, 125 µV resolution). `board::vbatVolts()` reads the conversion register.
+- **A1 / A2 = reserved** for the future X/Y joystick (single-shot read); **A3 free**.
+- Address set by the ADDR pin (`0x48` GND … `0x4B` SCL) — see `pinout.hpp`.
 
-Le driver **dégrade proprement** : si l'ADS1115 est absent (non câblé), `begin()` le détecte
-(probe I²C) et `vbatVolts()` renvoie 0 — aucun crash.
+The driver **degrades gracefully**: if the ADS1115 is absent (not wired), `begin()` detects it
+(I²C probe) and `vbatVolts()` returns 0 — no crash.
 
-### Joystick physique (réservé, non implémenté)
+### Physical joystick (reserved, not implemented)
 
-La conception prévoit un **joystick physique** en alternative à la manette. Pour l'instant
-**seul le Bluetooth est implémenté**, mais l'interface `input::` est neutre et **2 voies de
-l'ADS1115 (A1/A2) sont réservées** ([`pinout.hpp`](main/pinout.hpp), `namespace pins::ads`).
+The design provides for a **physical joystick** as an alternative to the gamepad. For now
+**only Bluetooth is implemented**, but the `input::` interface is neutral and **2 ADS1115
+channels (A1/A2) are reserved** ([`pinout.hpp`](main/pinout.hpp), `namespace pins::ads`).
 
-### Encodeurs de roue (réservés, non câblés)
+### Wheel encoders (reserved, not wired)
 
-En plus des 2× AS5600, des broches sont **réservées « au cas où »** pour des **encodeurs
-incrémentaux en quadrature AMT103-V** (un par roue avant), en alternative/complément
-([`pinout.hpp`](main/pinout.hpp), `namespace pins::future`) :
+In addition to the 2× AS5600, some pins are **reserved "just in case"** for **AMT103-V
+quadrature incremental encoders** (one per front wheel), as an alternative/complement
+([`pinout.hpp`](main/pinout.hpp), `namespace pins::future`):
 
-| Encodeur | Canal A | Canal B |
+| Encoder | Channel A | Channel B |
 |---|---|---|
-| Roue gauche | GPIO34 | GPIO35 |
-| Roue droite | GPIO36 | GPIO39 |
+| Left wheel | GPIO34 | GPIO35 |
+| Right wheel | GPIO36 | GPIO39 |
 
-- Broches **input-only** (34/35/36/39) → idéales en entrée ; décodage matériel via **PCNT**.
-- Sorties **CMOS push-pull** A/B (+ index X optionnel sur 22/23) — **aucun pull-up requis**.
-- ⚠️ **Alimentation** : VDD min ~3,6 V → sortie haute ≈ 2,8 V, **lisible par l'ESP32 sans
-  level-shift**. À **5 V** la sortie monte à ~4,2 V → **diviseur/level-shift obligatoire**.
+- **Input-only** pins (34/35/36/39) → ideal as inputs; hardware decoding via **PCNT**.
+- **CMOS push-pull** A/B outputs (+ optional X index on 22/23) — **no pull-up required**.
+- ⚠️ **Power**: VDD min ~3.6 V → high output ≈ 2.8 V, **readable by the ESP32 without
+  a level-shift**. At **5 V** the output rises to ~4.2 V → **divider/level-shift mandatory**.
 
-## Configuration sans fil (SoftAP + WebSocket)
+## Wireless configuration (SoftAP + WebSocket)
 
-Au démarrage, l'ESP32 crée un point d'accès :
+On startup, the ESP32 creates an access point:
 
-- **SSID** : `Kart-Config`  ·  **mot de passe** : `kart12345`
-- Ouvrir **http://192.168.4.1**
+- **SSID**: `Kart-Config`  ·  **password**: `kart12345`
+- Open **http://192.168.4.1**
 
-L'onglet **Wi-Fi** permet de saisir un SSID/mot de passe et d'**activer le mode station**
-(case à cocher) : le kart se connecte alors à ce réseau **tout en gardant le SoftAP**
-(mode AP+STA). Prise en compte **au redémarrage** ; reconnexion automatique toutes les 5 s.
+The **Wi-Fi** tab lets you enter an SSID/password and **enable station mode**
+(checkbox): the kart then connects to that network **while keeping the SoftAP**
+(AP+STA mode). Applied **at restart**; automatic reconnection every 5 s.
 
-La page (6 onglets : **Tableau de bord / Configuration / Manette / Wi-Fi / Brochage /
-Système**) communique par **WebSocket** (`/ws`) en **Protocol Buffers binaires** — schéma
-unique [`main/proto/kart.proto`](main/proto/kart.proto) (régénérer : `main/proto/generate.sh`),
-encodé côté kart par **nanopb** (vendorisé, callbacks → zéro copie/zéro tas, depuis l'arène
-statique) et décodé côté navigateur par **protobuf.js** (`/pb.js` embarqué, descripteur JSON
-miroir dans la page). Trames ~3–10× plus petites que l'ancien JSON (status ≈ 150 o, hist plein
-≈ 0,9 ko). Ce qui est **immuable en cours d'exécution part une seule fois à l'ouverture** :
-métadonnées de config (« get »), infos système (« sysinfo »). Ensuite : « vals » (valeurs
-seules) après sauvegarde/rechargement, « sysdyn » (uptime/heap) à l'affichage de l'onglet,
-graphiques (« hist ») toutes les 5 s. État live à 20 Hz (badge d'état, barres,
-pastilles d'E/S) + **graphiques Chart.js gradués** alimentés par un **historique en RAM**
-côté ESP32. Le graphe **Avance · PWM** affiche en plus le **régime (tr/min) de chaque roue
-sur un 2ᵉ axe** (droite). L'onglet **Manette** regroupe : **bouton d'appairage**, **infos
-manette** (nom, batterie, connexion), **bouton de désappairage**, le **mode calibration**,
-et une **visualisation temps réel** : pavé 2D montrant **deux points** — la **position
-physique** du stick gauche (bleu, sur le cercle) et la **consigne compensée** cercle→carré
-(orange, atteint les coins du carré), reliés par un trait — un 2ᵉ pavé pour le **stick droit**
-(affichage seul, non calibré), la **croix directionnelle (D-pad)**, les pastilles **d'état des
-boutons**, les **barres des gâchettes ZL/ZR**, et le **masque brut (hex)** des boutons (pour
-identifier les boutons spécifiques d'une manette).
+The page (6 tabs: **Dashboard / Configuration / Gamepad / Wi-Fi / Pinout /
+System**) communicates over **WebSocket** (`/ws`) using **binary Protocol Buffers** — a single
+schema [`main/proto/kart.proto`](main/proto/kart.proto) (regenerate: `main/proto/generate.sh`),
+encoded on the kart side by **nanopb** (vendored, callbacks → zero-copy/zero-heap, from the
+static arena) and decoded browser-side by **protobuf.js** (`/pb.js` embedded, mirror JSON
+descriptor in the page). Frames are ~3–10× smaller than the old JSON (status ≈ 150 B, full hist
+≈ 0.9 kB). Whatever is **immutable at runtime is sent once when the page opens**:
+config metadata ("get"), system info ("sysinfo"). After that: "vals" (values
+only) after save/reload, "sysdyn" (uptime/heap) when the tab is shown,
+charts ("hist") every 5 s. Live state at 20 Hz (status badge, bars,
+I/O dots) + **graduated Chart.js charts** fed by an **in-RAM history**
+on the ESP32 side. The **Forward · PWM** chart additionally shows the **speed (rpm) of each wheel
+on a 2nd axis** (right). The **Gamepad** tab gathers: a **pairing button**, **gamepad
+info** (name, battery, connection), an **unpairing button**, the **calibration mode**,
+and a **real-time visualization**: a 2D pad showing **two points** — the **physical
+position** of the left stick (blue, on the circle) and the **compensated command** circle→square
+(orange, reaching the corners of the square), joined by a line — a 2nd pad for the **right stick**
+(display only, not calibrated), the **directional cross (D-pad)**, the **button-state
+dots**, the **ZL/ZR trigger bars**, and the **raw (hex) button mask** (to
+identify the specific buttons of a gamepad).
 
-## Architecture logicielle
+## Software architecture
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `pinout.hpp` | **Brochage matériel** (2 moteurs, 2 bus I²C, réserves joystick/futur) |
-| `control_types.hpp` | **Types PURS partagés hôte/cible** : `KartConfig`, enums d'état/défaut, constantes `hw::`, `ParamDesc` |
-| `config_params.cpp` | **Table `PARAMS[]`** (défauts/bornes/aides) — PURE, compilée aussi par la simulation |
-| `config.hpp` / `.cpp` | Persistance **NVS** (delta + différée si armé) + télémétrie `KartStatus` + mutex |
-| `hardware.hpp` / `.cpp` | Matériel bas niveau (`board::` — Vbat via ADS1115, **2× PWM/DIR**, **2× AS5600** sur 2 bus I²C, boutons, LED, latch) |
-| `ads1115.hpp` / `.cpp` | **Driver ADS1115** (ADC externe 16 bits I²C, PGA) — modes continu / single-shot, par canal |
-| `input.hpp` / `.cpp` | **Entrée manette** (interface neutre) + **calibration obligatoire** (NVS) |
-| `input_bp32.c` | **Backend Bluepad32/BTstack** (plateforme custom + tâche boucle BT) |
-| `controller_core.hpp` / `.cpp` | **CŒUR du contrôle (classe abstraite `ControllerBase`, PURE)** : mélange différentiel, anti-renversement, armement, défauts — E/S par callbacks virtuels `io*` |
-| `controller.hpp` / `.cpp` | `EspController` : branche les callbacks sur `board::`/`input::`, publie `g_status`, tâche 500 Hz |
-| `pid.hpp` | Régulateur **PID** réutilisable avec **anti-windup** |
-| `leds.hpp` / `.cpp` · `ws2812.*` | Tâche d'état (ruban WS2812B, pilote RMT) |
-| `webserver.hpp` / `.cpp` | SoftAP + serveur **HTTP/WebSocket** (commandes appairage/calibration) |
-| `assets/` | `index.html` + `style.css` + `chart.min.js` — **gzippés au build** et servis en `Content-Encoding: gzip` |
-| `main.cpp` | `app_main` : init des sous-systèmes + démarrage des tâches |
+| `pinout.hpp` | **Hardware pinout** (2 motors, 2 I²C buses, joystick/future reserves) |
+| `control_types.hpp` | **PURE types shared host/target**: `KartConfig`, state/fault enums, `hw::` constants, `ParamDesc` |
+| `config_params.cpp` | **`PARAMS[]` table** (defaults/bounds/help) — PURE, also compiled by the simulation |
+| `config.hpp` / `.cpp` | **NVS** persistence (delta + deferred if armed) + `KartStatus` telemetry + mutex |
+| `hardware.hpp` / `.cpp` | Low-level hardware (`board::` — Vbat via ADS1115, **2× PWM/DIR**, **2× AS5600** on 2 I²C buses, buttons, LED, latch) |
+| `ads1115.hpp` / `.cpp` | **ADS1115 driver** (external 16-bit I²C ADC, PGA) — continuous / single-shot modes, per channel |
+| `input.hpp` / `.cpp` | **Gamepad input** (neutral interface) + **mandatory calibration** (NVS) |
+| `input_bp32.c` | **Bluepad32/BTstack backend** (custom platform + BT loop task) |
+| `controller_core.hpp` / `.cpp` | **Control CORE (abstract class `ControllerBase`, PURE)**: differential mixing, rollover protection, arming, faults — I/O through virtual `io*` callbacks |
+| `controller.hpp` / `.cpp` | `EspController`: wires the callbacks onto `board::`/`input::`, publishes `g_status`, 500 Hz task |
+| `pid.hpp` | Reusable **PID** controller with **anti-windup** |
+| `leds.hpp` / `.cpp` · `ws2812.*` | Status task (WS2812B strip, RMT driver) |
+| `webserver.hpp` / `.cpp` | SoftAP + **HTTP/WebSocket** server (pairing/calibration commands) |
+| `assets/` | `index.html` + `style.css` + `chart.min.js` — **gzipped at build** and served with `Content-Encoding: gzip` |
+| `main.cpp` | `app_main`: subsystem init + task startup |
 
-### Simulation physique + visualisateur 3D
+### Physics simulation + 3D visualizer
 
-La MÊME logique (`controller_core.cpp`) pilote un **modèle physique du véhicule**
-(`test_host/sim/vehicle.hpp` : dynamique différentielle, moteurs CC avec f.c.é.m., batterie
-avec résistance interne, capteurs simulés, pente, **critère de renversement du tricycle**) à
-travers des **scénarios extrêmes et réalistes** (`test_host/sim/scenarios.hpp`) : virage à fond
-à pleine vitesse (avec ET sans anti-renversement — la contre-épreuve bascule), slalom, conduite
-erratique, freinage au stick, perte de manette (heartbeat), pannes d'encodeur, LVC, descente…
-plus un **balayage de paramètres** (`turn_hi × turn_full_ms × speed_limit_ms`).
+The SAME logic (`controller_core.cpp`) drives a **physics model of the vehicle**
+(`test_host/sim/vehicle.hpp`: differential dynamics, DC motors with back-EMF, battery
+with internal resistance, simulated sensors, slope, **tricycle rollover criterion**)
+through **extreme and realistic scenarios** (`test_host/sim/scenarios.hpp`): full turn
+at full speed (with AND without rollover protection — the counter-test tips over), slalom, erratic
+driving, stick braking, gamepad loss (heartbeat), encoder failures, LVC, descent…
+plus a **parameter sweep** (`turn_hi × turn_full_ms × speed_limit_ms`).
 
-- **Tests automatisés** : `test_host/run_tests.sh` (exécutés par le CI). Trace CSV :
+- **Automated tests**: `test_host/run_tests.sh` (run by CI). CSV trace:
   `KART_SIM_TRACE=trace.csv ./sim`.
-- **Visualisateur 3D temps réel** : `python3 tools/sim_viewer.py` → http://localhost:8650/ —
-  mêmes scénarios, vue 3D (caméra de poursuite, traînée, roulis proportionnel à a_lat,
-  alerte RENVERSEMENT), jauge de marge et badges d'état en direct.
-- Les paramètres physiques ESTIMÉS (Ra, Iz, h_cg, x_cg, frottements) sont regroupés et
-  commentés dans `VehicleParams` — à recaler avec des mesures réelles.
+- **Real-time 3D visualizer**: `python3 tools/sim_viewer.py` → http://localhost:8650/ —
+  same scenarios, 3D view (chase camera, trail, roll proportional to a_lat,
+  ROLLOVER alert), margin gauge and live status badges.
+- The ESTIMATED physical parameters (Ra, Iz, h_cg, x_cg, frictions) are grouped and
+  commented in `VehicleParams` — to be recalibrated with real measurements.
 
-Tâches : **`control`** (cœur 1, 500 Hz, watchdog 5 s), **`leds`** (cœur 0, ~20 Hz) et la
-**boucle BTstack** (cœur 0). Partage de `g_cfg` (mutex) et `g_status` (atomics) ;
-l'état manette passe par les atomics de `input.cpp`. FreeRTOS tourne à **1000 Hz**.
-Priorités / cœurs / piles : [`main/rtos.hpp`](main/rtos.hpp) · [`../doc/firmware-tasks.md`](../doc/firmware-tasks.md).
+Tasks: **`control`** (core 1, 500 Hz, 5 s watchdog), **`leds`** (core 0, ~20 Hz) and the
+**BTstack loop** (core 0). Sharing of `g_cfg` (mutex) and `g_status` (atomics);
+gamepad state passes through the atomics in `input.cpp`. FreeRTOS runs at **1000 Hz**.
+Priorities / cores / stacks: [`main/rtos.hpp`](main/rtos.hpp) · [`../doc/firmware-tasks.md`](../doc/firmware-tasks.md).
 
-## Boucle de contrôle (500 Hz)
+## Control loop (500 Hz)
 
-1. Lit la manette (`input::get()` → `x`, `y`, `connected`, `estop`, `start`).
-2. Lit les **2 vitesses de roue** (chaque AS5600, dérivée d'angle 12 bits signée → **m/s**).
-   **Vitesse véhicule = moyenne signée des deux roues** : deux roues égales en sens inverse
-   (pivot sur place) → **0 m/s**. C'est elle qui alimente le limiteur et la télémétrie.
-3. **Limiteur de pente** sur avance et virage (anti à-coups), puis **mélange arcade**
-   `(avance y, virage x)` → consignes roue gauche / droite, après **bridage anti-renversement**
-   (désactivable : `turn_limit_en`, pour les essais).
-4. Par roue : **PID de freinage** (ramène à 0 quand consigne nulle, désactivable :
-   `brk_pid_enable` → repli frein dynamique) + **PID limiteur de
-   vitesse** (plafonne la vitesse véhicule à `speed_limit_ms`, en m/s ; désactivable :
-   `vlim_enable`), sortie **plafonnée** : plafond
-   **automatique 12 V/Vbat mesurée** (moteurs 12 V, driver 6–30 V : batterie 12 V → ~100 %, 24 V → ~50 %)
-   ET plafond **manuel** `duty_cap` — le plus restrictif gagne. Sans ADS1115 (Vbat inconnue) : manuel seul.
-5. **PWM + DIR indépendants** vers les 2 canaux du driver.
+1. Reads the gamepad (`input::get()` → `x`, `y`, `connected`, `estop`, `start`).
+2. Reads the **2 wheel speeds** (each AS5600, signed 12-bit angle derivative → **m/s**).
+   **Vehicle speed = signed average of the two wheels**: two equal wheels in opposite directions
+   (pivot in place) → **0 m/s**. This is what feeds the limiter and the telemetry.
+3. **Slope limiter** on forward and turn (jerk suppression), then **arcade mixing**
+   `(forward y, turn x)` → left / right wheel commands, after **rollover-protection capping**
+   (can be disabled: `turn_limit_en`, for testing).
+4. Per wheel: **braking PID** (brings back to 0 when the command is zero, can be disabled:
+   `brk_pid_enable` → dynamic-braking fallback) + **speed-limiter
+   PID** (caps the vehicle speed at `speed_limit_ms`, in m/s; can be disabled:
+   `vlim_enable`), output **capped**: **automatic 12 V/measured-Vbat**
+   cap (12 V motors, 6–30 V driver: 12 V battery → ~100%, 24 V → ~50%)
+   AND **manual** cap `duty_cap` — the more restrictive one wins. Without an ADS1115 (Vbat unknown): manual only.
+5. **Independent PWM + DIR** to the driver's 2 channels.
 
-`can_drive` exige : manette **connectée**, **calibrée**, **armée**, pas d'arrêt d'urgence,
-pas de défaut. Sinon → **freinage des deux roues** (état **par défaut**, dès le boot). La page
-web affiche un **bandeau listant clairement tous les motifs de blocage** (déconnectée, non
-armée, non calibrée, e-stop, LVC, défaut capteur).
+`can_drive` requires: gamepad **connected**, **calibrated**, **armed**, no emergency stop,
+no fault. Otherwise → **braking of both wheels** (the **default** state, from boot). The
+web page shows a **banner clearly listing every blocking reason** (disconnected, not
+armed, not calibrated, e-stop, LVC, sensor fault).
 
-Sécurités : **armement** par appui ~1 s sur START — **bouton physique OU bouton START/Options
-de la manette** (manette centrée + connectée requises ; démarrage **désarmé**),
-**tout défaut force le désarmement** (il faut réarmer une fois résolu), **désarmement auto**
-après inactivité, **arrêt d'urgence** (bouton B → frein immédiat), **coupure basse tension
-(LVC)** avec hystérésis (+ coupure du latch), **seuils codés en dur selon la batterie 12 V ou
-24 V détectée au démarrage** (tension stable 3 s, type figé jusqu'au redémarrage) — **désactivée si le capteur de tension est
-absent** (Vbat < 0 ⇒ on s'appuie sur le BMS, utile au banc sans ADS1115), **sanité des
-encodeurs** — roue **bloquée** (PWM sans rotation), sens **inversé** (roue mesurée à l'opposé
-d'une consigne franche : câblage capteur/moteur à l'envers) et mesure **aberrante** (vitesse
-physiquement impossible) ⇒ **arrêt total verrouillé jusqu'au redémarrage** (un capteur qui ment
-rendrait frein PID et limiteur dangereux), **watchdog 5 s**, **PWM plafonné automatiquement**
-(12 V/Vbat mesurée).
+Safety features: **arming** by a ~1 s press on START — **physical button OR the gamepad's
+START/Options button** (centered + connected gamepad required; starts **disarmed**),
+**any fault forces disarming** (you must rearm once it is resolved), **auto disarm**
+after inactivity, **emergency stop** (B button → immediate braking), **low-voltage cutoff
+(LVC)** with hysteresis (+ latch cutoff), **thresholds hard-coded for the 12 V or
+24 V battery detected at startup** (voltage stable 3 s, type frozen until restart) — **disabled if the voltage sensor is
+absent** (Vbat < 0 ⇒ we rely on the BMS, useful on the bench without an ADS1115), **encoder
+sanity** — **stalled** wheel (PWM without rotation), **reversed** direction (wheel measured opposite
+to a clear command: sensor/motor wiring reversed) and **aberrant** measurement (physically
+impossible speed) ⇒ **total stop latched until restart** (a lying sensor
+would make active (PID) braking and the limiter dangerous), **5 s watchdog**, **automatically capped PWM**
+(12 V/measured Vbat).
 
-La page web a un onglet **Défauts** : liste de **toutes les conditions actives** en simultané
-(masque `faults`, bits nommés `fb::` dans `config.hpp`), avec explication et remède — l'onglet
-passe en rouge dès qu'un défaut grave est présent.
+The web page has a **Faults** tab: a list of **all active conditions** simultaneously
+(the `faults` mask, bits named `fb::` in `config.hpp`), with explanation and remedy — the tab
+turns red as soon as a serious fault is present.
 
-> **Option `use_encoders` (0/1)** : à **0**, le firmware ignore les AS5600 — pas d'asservissement
-> vitesse ni de frein PID (on s'appuie sur les plafonds PWM), et **pas de défaut « capteur
-> bloqué »**. Indispensable pour **tester au banc sans encodeurs câblés** (sinon le défaut
-> capteur se déclenche dès qu'on commande du PWM sans rotation mesurée).
+> **`use_encoders` option (0/1)**: at **0**, the firmware ignores the AS5600s — no speed
+> control and no active (PID) braking (it relies on the PWM caps), and **no "stalled
+> sensor" fault**. Essential for **testing on the bench without wired encoders** (otherwise the sensor
+> fault triggers as soon as you command PWM without measured rotation).
 
-### Anti-renversement (virage trop sec)
+### Rollover protection (turn too sharp)
 
-Un tricycle (2 roues motrices + 1 roulette) bascule facilement si on tourne trop fort ou
-trop vite. Le virage est protégé sur **deux plans** :
+A tricycle (2 drive wheels + 1 caster) tips over easily if you turn too hard or
+too fast. The turn is protected on **two fronts**:
 
-1. **Limite vitesse→virage ISO-a_lat** (`ctl::turnLimit`, testée sur l'hôte) — la limite
-   suit la **vitesse véhicule MESURÉE** (m/s, moyenne signée des 2 roues) :
-   - `|v| ≤ turn_full_ms` (défaut 0,5 m/s) — et partout où la courbe 1/v dépasse 100 % —
-     virage **±100 %** : le **pivot sur place à pleine puissance** (`turn_gain` défaut 1,0)
-     reste autorisé ;
-   - au-delà, la limite décroît en **1/v** (même accélération latérale à toute vitesse)
-     jusqu'à **`turn_at_vmax`** (défaut ±20 %) à `speed_limit_ms`, puis **continue de se
-     resserrer** en cas d'emballement. Calibrée par simulation : l'ancienne rampe linéaire
-     renversait les chargements décalés dès `turn_gain = 1`.
-   ⚠️ S'appuie sur la vitesse mesurée : avec `use_encoders = 0`, v = 0 → pas de bridage.
-2. **Brusquerie (limiteur de pente / slew-rate)** — la consigne de virage ne peut pas varier
-   de plus de `turn_rate` unités/s : un coup de manche instantané est **lissé**. L'avance est
-   lissée de même par `thr_ramp_per_s`.
+1. **Speed→turn ISO-a_lat limit** (`ctl::turnLimit`, tested on the host) — the limit
+   follows the **MEASURED vehicle speed** (m/s, signed average of the 2 wheels):
+   - `|v| ≤ turn_full_ms` (default 0.5 m/s) — and everywhere the 1/v curve exceeds 100% —
+     turn **±100%**: **full-power pivot in place** (`turn_gain` default 1.0)
+     stays allowed;
+   - beyond that, the limit decreases as **1/v** (same lateral acceleration at any speed)
+     down to **`turn_at_vmax`** (default ±20%) at `speed_limit_ms`, then **keeps
+     tightening** in case of runaway. Calibrated by simulation: the old linear ramp
+     tipped over offset loads as soon as `turn_gain = 1`.
+   ⚠️ Relies on the measured speed: with `use_encoders = 0`, v = 0 → no capping.
+2. **Sharpness (slope limiter / slew-rate)** — the turn command cannot change
+   by more than `turn_rate` units/s: an instantaneous stick jab is **smoothed**. The forward
+   command is smoothed likewise by `thr_ramp_per_s`.
 
-En complément, la **marche arrière** a **sa propre limite de vitesse** (`rev_speed_ms`,
-défaut 1 m/s) : même limiteur PID que l'avant (`speed_limit_ms`), la cible est choisie selon
-le **sens mesuré** — en plugging (stick arrière, kart encore en marche avant) l'autorité de
-freinage reste entière. Plus de bride PWM dédiée. L'anti-renversement travaille sur |v| :
-il borne le virage en recul comme en avance (la roulette arrière ne guide pas en recul).
+In addition, **reverse** has **its own speed limit** (`rev_speed_ms`,
+default 1 m/s): same PID limiter as forward (`speed_limit_ms`), the target is chosen according
+to the **measured direction** — during plugging (stick back, kart still moving forward) the braking
+authority stays full. No more dedicated PWM cap. Rollover protection works on |v|:
+it bounds the turn in reverse as in forward (the rear caster does not steer in reverse).
 
-Paramètres web : **`turn_gain`**, **`turn_full_ms`**, **`turn_hi`**,
+Web parameters: **`turn_gain`**, **`turn_full_ms`**, **`turn_hi`**,
 **`turn_rate`**, **`thr_ramp_per_s`**.
 
-## ⚠️ À ajuster avant la première mise en route
+## ⚠️ To adjust before first startup
 
-- **Capteurs de vitesse** : cinématique **hardcodée** dans `config.hpp` (`namespace hw`) —
-  `AS5600_CPR = 4096`, `GEAR_RATIO = 1,28` (aimant en sortie de boîte 1:12,5, poulies 25T→32T),
-  `WHEEL_DIAM_M = 0,254` (roue 10″). **2 AS5600**,
-  **un par bus I²C** (adresse fixe `0x36` → un seul capteur par bus). À **vérifier au banc**.
-- **Manette** : appairer (onglet Manette) puis **calibrer** — obligatoire pour rouler.
-- **Réglages web** : `vbat_div_ratio` (au multimètre), `speed_limit_ms` (m/s), `duty_cap` (plafond PWM manuel),
-  `turn_gain` / `a_lat_max` (anti-renversement). Commencer **roues en l'air**, vitesse basse.
-- **PID** : `vmax_*` (limiteur de vitesse) et `pid_*` (frein) par roue — pré-réglés
-  (limiteur ≈ 0,15/0,14, frein ≈ 0,12/0,08/0,003), à **affiner au banc**.
+- **Speed sensors**: kinematics **hardcoded** in `config.hpp` (`namespace hw`) —
+  `AS5600_CPR = 4096`, `GEAR_RATIO = 1.28` (magnet at the output of the 1:12.5 gearbox, 25T→32T pulleys),
+  `WHEEL_DIAM_M = 0.254` (10″ wheel). **2 AS5600**,
+  **one per I²C bus** (fixed address `0x36` → a single sensor per bus). To be **verified on the bench**.
+- **Gamepad**: pair (Gamepad tab) then **calibrate** — mandatory to drive.
+- **Web settings**: `vbat_div_ratio` (with a multimeter), `speed_limit_ms` (m/s), `duty_cap` (manual PWM cap),
+  `turn_gain` / `a_lat_max` (rollover protection). Start **wheels up**, low speed.
+- **PID**: `vmax_*` (speed limiter) and `pid_*` (braking) per wheel — preset
+  (limiter ≈ 0.15/0.14, braking ≈ 0.12/0.08/0.003), to be **fine-tuned on the bench**.
 
-> Vérifier le **sens de chaque roue** (inverser les fils moteur si besoin) et le **sens du
-> différentiel** (pousser le stick à droite doit faire tourner à droite) **avant le sol**.
+> Check the **direction of each wheel** (swap the motor wires if needed) and the **direction of the
+> differential** (pushing the stick to the right must turn right) **before touching the ground**.

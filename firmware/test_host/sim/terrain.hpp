@@ -1,8 +1,8 @@
-// terrain.hpp — Terrain vallonné du mode CONDUITE MANUELLE : somme de collines gaussiennes.
-// La pente sous le kart (le long du cap) alimente la physique à chaque pas — grimper ralentit,
-// descendre emballe, exactement comme les scénarios de pente, mais en continu.
-// ⚠️ MIROIR JS : les mêmes collines sont codées dans tools/sim_viewer.html (maillage 3D) —
-// garder les deux tables synchronisées.
+// terrain.hpp — Hilly terrain of the MANUAL DRIVING mode: sum of Gaussian hills.
+// The slope under the kart (along the heading) feeds the physics at each step — climbing slows down,
+// descending runs away, exactly like the slope scenarios, but continuously.
+// ⚠️ JS MIRROR: the same hills are coded in tools/sim_viewer.html (3D mesh) —
+// keep the two tables synchronized.
 #pragma once
 
 #include <cmath>
@@ -12,13 +12,13 @@ namespace sim
 
 struct Hill
 {
-    float cx, cy;    // centre (m)
-    float sigma;     // étalement (m)
-    float amp;       // hauteur (m)
+    float cx, cy;    // center (m)
+    float sigma;     // spread (m)
+    float amp;       // height (m)
 };
 
-// Zone de départ (±20 m autour de l'origine) quasi plate ; pentes max ~13 % sur les flancs —
-// certaines dépassent donc la capacité de retenue des moteurs (~11 %) : réaliste et instructif.
+// Starting zone (±20 m around the origin) nearly flat; max slopes ~13% on the flanks —
+// some therefore exceed the holding capacity of the motors (~11%): realistic and instructive.
 constexpr Hill TERRAIN_HILLS[] = {
     {  60.f,  20.f, 18.f, 4.0f },
     { -50.f,  40.f, 22.f, 5.0f },
@@ -27,8 +27,8 @@ constexpr Hill TERRAIN_HILLS[] = {
     {  90.f, -30.f, 16.f, 3.0f },
 };
 
-// TREMPLIN : rampe de 0,6 m sur 3 m (pente ~20 %) avec ARÊTE FRANCHE à x=17 — franchie à
-// pleine vitesse, le kart DÉCOLLE (la physique verticale est balistique une fois en l'air).
+// RAMP: 0.6 m rise over 3 m (slope ~20%) with a SHARP EDGE at x=17 — crossed at
+// full speed, the kart TAKES OFF (the vertical physics is ballistic once airborne).
 inline float rampH(float x, float y)
 {
     if (y < -2.5f || y > 2.5f) return 0.f;
@@ -47,7 +47,7 @@ inline float terrainH(float x, float y)
     return h;
 }
 
-// Pente du terrain sous le kart, le long du cap (rad ; + = montée devant → freine l'avance).
+// Terrain slope under the kart, along the heading (rad; + = uphill ahead → brakes the advance).
 inline float terrainSlopeAlong(float x, float y, float heading)
 {
     constexpr float EPS = 0.5f;

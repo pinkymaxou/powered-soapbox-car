@@ -1,6 +1,6 @@
-// config.hpp — Configuration côté ESP : table PARAMS (clé NVS/web → champ), persistance,
-// télémétrie partagée (KartStatus, atomics) et accès thread-safe. Les TYPES purs du contrôle
-// (KartConfig, enums, constantes hw::) vivent dans control_types.hpp (partagés avec l'hôte).
+// config.hpp — ESP-side configuration: PARAMS table (NVS/web key → field), persistence,
+// shared telemetry (KartStatus, atomics) and thread-safe access. The pure control TYPES
+// (KartConfig, enums, hw:: constants) live in control_types.hpp (shared with the host).
 #pragma once
 
 #include <cstdint>
@@ -11,44 +11,44 @@
 
 struct KartStatus
 {
-    // Struct SIMPLE (plus d'atomics) : lecture par COPIE sous mutex via statusSnapshot(),
-    // écriture par statusPublish() — un seul écrivain (la boucle de contrôle).
+    // SIMPLE struct (no more atomics): read by COPY under mutex via statusSnapshot(),
+    // written by statusPublish() — a single writer (the control loop).
     int      m_state = static_cast<int>(State::Lockout);
     int      m_fault = static_cast<int>(Fault::None);
-    unsigned m_faults = 0;    // masque des conditions ACTIVES (page Défauts)
+    unsigned m_faults = 0;    // mask of ACTIVE conditions (Faults page)
     float    m_vbat = 0.f;
-    int      m_batt_type = 0; // batterie détectée au démarrage : 0 = en cours, 12 ou 24 (V)
-    float    m_rpm_l = 0.f;   // roue avant gauche SIGNÉE (AS5600 #1, tr/min)
+    int      m_batt_type = 0; // battery detected at startup: 0 = in progress, 12 or 24 (V)
+    float    m_rpm_l = 0.f;   // SIGNED front left wheel (AS5600 #1, rpm)
     float    m_rpm_r = 0.f;
-    float    m_speed_ms = 0.f;// vitesse VÉHICULE signée (m/s) — pivot sur place → 0
-    float    m_fwd = 0.f;     // consigne d'avance après mix/limites [-1..1]
-    float    m_turn = 0.f;    // consigne de virage après anti-renversement [-1..1]
+    float    m_speed_ms = 0.f;// SIGNED VEHICLE speed (m/s) — pivot in place → 0
+    float    m_fwd = 0.f;     // forward command after mix/limits [-1..1]
+    float    m_turn = 0.f;    // turn command after rollover protection [-1..1]
     bool     m_btn_start = false;
-    float    m_out_l = 0.f;   // PWM moteur gauche [-1..1]
+    float    m_out_l = 0.f;   // left motor PWM [-1..1]
     float    m_out_r = 0.f;
     int      m_brake_mode = static_cast<int>(BrakeMode::Dynamic);
     bool     m_arming = false;
     bool     m_estop = false;
     bool     m_pad_conn = false;
-    int      m_pad_batt = -1;   // batterie manette 0..100 (-1 inconnu)
-    float    m_pad_x = 0.f;     // stick BRUT virage [-1..1] (position physique, cercle)
+    int      m_pad_batt = -1;   // gamepad battery 0..100 (-1 unknown)
+    float    m_pad_x = 0.f;     // RAW turn stick [-1..1] (physical position, circle)
     float    m_pad_y = 0.f;
-    float    m_pad_cx = 0.f;    // consigne virage COMPENSÉE cercle→carré [-1..1]
+    float    m_pad_cx = 0.f;    // COMPENSATED turn command circle→square [-1..1]
     float    m_pad_cy = 0.f;
-    float    m_pad_zl = 0.f;    // gâchettes analogiques [0..1] (affichage)
+    float    m_pad_zl = 0.f;    // analog triggers [0..1] (display)
     float    m_pad_zr = 0.f;
-    float    m_pad_rx2 = 0.f;   // stick DROIT [-1..1] (affichage seulement)
+    float    m_pad_rx2 = 0.f;   // RIGHT stick [-1..1] (display only)
     float    m_pad_ry2 = 0.f;
-    unsigned m_pad_btns = 0;    // masque : boutons | (misc<<16) | (dpad<<24) (affichage)
+    unsigned m_pad_btns = 0;    // mask: buttons | (misc<<16) | (dpad<<24) (display)
 };
 
-// Accès PROTÉGÉ à la télémétrie (mutex interne) : copie cohérente pour les lecteurs
-// (webserver, LED), écriture atomique d'un bloc pour la boucle de contrôle.
+// PROTECTED access to the telemetry (internal mutex): coherent copy for the readers
+// (webserver, LED), atomic write of a block for the control loop.
 KartStatus statusSnapshot();
-bool       statusTrySnapshot(KartStatus& out);   // timeout 0 — pour les callbacks esp_timer
+bool       statusTrySnapshot(KartStatus& out);   // timeout 0 — for the esp_timer callbacks
 void       statusPublish(const KartStatus& s);
 
-// ───────────────────────── Globaux ─────────────────────────
+// ───────────────────────── Globals ─────────────────────────
 extern KartConfig        g_cfg;
 extern SemaphoreHandle_t g_cfg_mtx;
 
@@ -57,7 +57,7 @@ bool       configLoad();
 bool       configSave();
 KartConfig configSnapshot();
 void       configUpdate(const KartConfig& c, bool persist);
-void       configFlushPending();   // persiste un « set » différé (à appeler une fois désarmé)
+void       configFlushPending();   // persists a deferred "set" (to call once disarmed)
 
 bool configGetWifi(char* ssid, size_t ssid_size, char* pass, size_t pass_size, bool* enabled = nullptr);
 void configSetWifi(const char* ssid, const char* pass, bool enabled);

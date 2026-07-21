@@ -1,5 +1,5 @@
-# power_latch.py — Architecture d'alimentation du kart (latch low-side, 2 chemins).
-# Amorcage par bouton (+20 V direct sur la gate) ; maintien par l'ESP via opto (LED cote 3,3 V).
+# power_latch.py — Kart power architecture (low-side latch, 2 paths).
+# Priming by button (+20 V directly on the gate); hold by the ESP via opto (LED 3.3 V side).
 #   . .venv-schem/bin/activate && python doc/schematics/power_latch.py
 import schemdraw
 import schemdraw.elements as elm
@@ -7,49 +7,49 @@ import schemdraw.elements as elm
 schemdraw.config(fontsize=12, lw=1.9, unit=2.6)
 
 with schemdraw.Drawing(file='doc/schematics/power_latch.png', dpi=170, show=False) as d:
-    # ───────── Optocoupleur : LED (gauche, cote 3,3 V) / phototransistor (droite, cote +20 V) ─────────
+    # ───────── Optocoupler: LED (left, 3.3 V side) / phototransistor (right, +20 V side) ─────────
     opto = d.add(elm.Optocoupler(box=True).right())
     ocx = (opto.anode[0] + opto.collector[0]) / 2
-    d += elm.Label().label('OPTOCOUPLEUR\n(isolation)').at((ocx, opto.emitter[1] - 1.1)).color('#1565c0')
+    d += elm.Label().label('OPTOCOUPLER\n(isolation)').at((ocx, opto.emitter[1] - 1.1)).color('#1565c0')
 
-    # LED : anode -> R -> +3,3 V (present seulement APRES demarrage)
+    # LED: anode -> R -> +3.3 V (present only AFTER startup)
     d += elm.Resistor().up().at(opto.anode).label('220 Ω')
-    d += elm.Vdd().label('+3,3 V (ESP)')
+    d += elm.Vdd().label('+3.3 V (ESP)')
 
-    # LED : cathode -> ESP GPIO13 (actif bas : tire la LED a la masse pour MAINTENIR)
+    # LED: cathode -> ESP GPIO13 (active low: pulls the LED to ground to HOLD)
     d += elm.Line().down().at(opto.cathode).length(1.4)
     d += elm.Switch().down().length(1.6)
     esp_end = d.here
     d += elm.Ground()
-    d += elm.Label().label('ESP GPIO13\nPOWER_HOLD\n(actif BAS = maintien)').at((esp_end[0], esp_end[1] - 1.3))
+    d += elm.Label().label('ESP GPIO13\nPOWER_HOLD\n(active LOW = hold)').at((esp_end[0], esp_end[1] - 1.3))
 
-    # ───────── Cote +20 V : e-stop -> ligne de gate, 2 chemins (opto OU bouton) ─────────
-    # Collecteur de l'opto remonte au noeud E (apres e-stop)
+    # ───────── +20 V side: e-stop -> gate line, 2 paths (opto OR button) ─────────
+    # The opto collector goes up to node E (after e-stop)
     d += elm.Line().up().at(opto.collector).length(1.2)
     Enode = d.here
     d += elm.Dot()
-    d += elm.Switch().up().length(1.7).label('e-stop\n(NF, serie)', loc='right')
+    d += elm.Switch().up().length(1.7).label('e-stop\n(NC, series)', loc='right')
     d += elm.Line().up().length(0.5)
     d += elm.Vdd().label('+20 V')
 
-    # Chemin AMORCAGE : E -> bouton -> noeud de merge M
+    # PRIMING path: E -> button -> merge node M
     d += elm.Line().right().at(Enode).length(3.2)
     btn_top = d.here
-    d += elm.Button().down().length(1.7).label('Bouton\ndemarrage\n(amorcage)', loc='right')
+    d += elm.Button().down().length(1.7).label('Start\nbutton\n(priming)', loc='right')
     Mnode = d.here
     d += elm.Dot()
 
-    # Chemin MAINTIEN : emetteur de l'opto -> descend -> rejoint M
+    # HOLD path: opto emitter -> goes down -> joins M
     d += elm.Line().down().at(opto.emitter).length(1.0)
-    d += elm.Line().toy(Mnode[1]).color('#000')   # aligne en y
-    d += elm.Line().tox(Mnode[0])                  # rejoint M en x
+    d += elm.Line().toy(Mnode[1]).color('#000')   # align in y
+    d += elm.Line().tox(Mnode[0])                  # joins M in x
 
-    # M -> Rg serie -> GATE commune
+    # M -> Rg series -> common GATE
     d += elm.Resistor().right().at(Mnode).length(2.4).label('Rg', loc='bottom')
     gpt = d.here
-    d += elm.Dot().label('GATE commune', loc='top', ofst=(0, 0.25)).color('#1565c0')
+    d += elm.Dot().label('common GATE', loc='top', ofst=(0, 0.25)).color('#1565c0')
 
-    # Securites : pull-down + zener
+    # Safeties: pull-down + zener
     d += elm.Resistor().down().at(gpt).length(2.6).label('R\npull-down', loc='left', ofst=(-0.1, 0.4))
     d += elm.Ground()
     d += elm.Line().right().at(gpt).length(2.0)
@@ -58,7 +58,7 @@ with schemdraw.Drawing(file='doc/schematics/power_latch.png', dpi=170, show=Fals
     d += elm.Zener().down().at(zpt).length(2.6).label('Zener\n~15 V', loc='left', ofst=(-0.6, 0.9))
     d += elm.Ground()
 
-    # ───────── 2x IRFZ44N en low-side (gate commune) ─────────
+    # ───────── 2x IRFZ44N low-side (common gate) ─────────
     d += elm.Line().right().at(zpt).length(2.4)
     gA = d.here
     q1 = d.add(elm.NFet(bulk=False).right().anchor('gate'))

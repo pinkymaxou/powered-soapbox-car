@@ -1,4 +1,4 @@
-// controller.cpp — Implémentation d'EspController + amorçage (namespace Controller).
+// controller.cpp — EspController implementation + bootstrap (Controller namespace).
 #include "controller.hpp"
 
 #include "config.hpp"
@@ -10,9 +10,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-// Callback capteurs : encodeurs + tension batterie — les ERREURS de lecture voyagent dans
-// le retour (enc_ok_*/vbat_ok), et la tension part en VOLTS BATTERIE (la conversion broche
-// ADC → batterie, ratio du diviseur, se fait ICI, pas dans le cœur).
+// Sensor callback: encoders + battery voltage — the read ERRORS travel in
+// the return (enc_ok_*/vbat_ok), and the voltage leaves in BATTERY VOLTS (the ADC pin →
+// battery conversion, divider ratio, is done HERE, not in the core).
 SensorReadings EspController::readSensors()
 {
     SensorReadings s;
@@ -26,17 +26,17 @@ SensorReadings EspController::readSensors()
     return s;
 }
 
-// Callback sorties : la commande moteur, rien d'autre (voir CtrlOutputs).
+// Output callback: the motor command, nothing else (see CtrlOutputs).
 void EspController::applyOutputs(const CtrlOutputs& out)
 {
     if (out.dyn_brake) board::motorsBrake();
     else               board::motorsSet(out.out_l, out.out_r, out.cap);
 }
 
-// Pousse le dernier état manette au cœur (fonction d'entrée setPad).
+// Pushes the last gamepad state to the core (setPad input function).
 void EspController::pushPad()
 {
-    m_in = input::get();   // instantané complet, gardé pour publier les champs d'affichage
+    m_in = input::get();   // complete snapshot, kept to publish the display fields
     PadInputs p;
     p.x = m_in.x;
     p.y = m_in.y;
@@ -51,12 +51,12 @@ void EspController::pushPad()
     m_pad_in = p;
 }
 
-// Publie la télémétrie du tick + les champs d'affichage manette (hors logique).
+// Publishes the tick telemetry + the gamepad display fields (outside the logic).
 void EspController::publish(const CtrlTelemetry& t)
 {
     KartStatus st;
     st.m_state      = static_cast<int>(t.state);
-    st.m_fault      = static_cast<int>(primaryFault(t.faults));   // dérivé du bitset
+    st.m_fault      = static_cast<int>(primaryFault(t.faults));   // derived from the bitset
     st.m_faults     = t.faults;
     st.m_vbat       = t.vbat;
     st.m_batt_type  = t.batt_type;
@@ -74,9 +74,9 @@ void EspController::publish(const CtrlTelemetry& t)
     st.m_estop    = m_in.estop;
     st.m_pad_conn = m_in.connected;
     st.m_pad_batt = input::battery();
-    st.m_pad_x    = m_in.rx;      // position physique du stick (cercle)
+    st.m_pad_x    = m_in.rx;      // physical stick position (circle)
     st.m_pad_y    = m_in.ry;
-    st.m_pad_cx   = m_in.x;       // consigne compensée cercle→carré
+    st.m_pad_cx   = m_in.x;       // compensated command circle→square
     st.m_pad_cy   = m_in.y;
     st.m_pad_zl   = m_in.zl;
     st.m_pad_zr   = m_in.zr;
@@ -92,30 +92,30 @@ void EspController::init()
     input::init();
     m_ctrl.setCallbacks([this] { return readSensors(); },
                         [this](const CtrlOutputs& out) { applyOutputs(out); });
-    statusPublish(KartStatus{});   // défauts sûrs : Lockout, frein dynamique, aucun défaut
+    statusPublish(KartStatus{});   // safe defaults: Lockout, dynamic braking, no fault
 }
 
 void EspController::tickOnce()
 {
-    board::pollButtons();               // échantillonnage/anti-rebond du bouton START
+    board::pollButtons();               // sampling/debounce of the START button
     pushPad();
     m_ctrl.setStartButton(board::btnStart());
-    m_ctrl.setConfig(configSnapshot());   // la config web peut changer à tout moment
+    m_ctrl.setConfig(configSnapshot());   // the web config can change at any time
     const int64_t now = esp_timer_get_time();
     m_ctrl.tick(now);
 
-    // Décisions d'HÔTE dérivées de la télémétrie (hors du cœur, voir advisors.hpp).
+    // HOST decisions derived from the telemetry (outside the core, see advisors.hpp).
     const CtrlTelemetry t = m_ctrl.telemetry();
     const RumbleCmd r = m_rumble.update(t, m_pad_in, now);
     if (r.active) input::rumble(r.strong, r.weak, r.duration_ms);
     if (m_poweroff.update(t, now)) board::powerOff();
-    if (m_was_armed && !t.armed) configFlushPending();   // « set » différé reçu en roulant
+    if (m_was_armed && !t.armed) configFlushPending();   // deferred "set" received while driving
     m_was_armed = t.armed;
 
     publish(t);
 }
 
-// ── Amorçage : l'instance, la tâche 500 Hz, la boucle sur tickOnce(). Rien d'autre. ──
+// ── Bootstrap: the instance, the 500 Hz task, the loop over tickOnce(). Nothing else. ──
 namespace
 {
 EspController m_controller;

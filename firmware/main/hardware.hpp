@@ -1,5 +1,5 @@
-// hardware.hpp — Accès matériel bas niveau (LED, ADC, moteurs, encodeurs, boutons).
-// Fonctions libres dans le namespace `board` ; tout est initialisé par board::init().
+// hardware.hpp — Low-level hardware access (LED, ADC, motors, encoders, buttons).
+// Free functions in the `board` namespace; everything is initialized by board::init().
 #pragma once
 
 #include <cstdint>
@@ -7,39 +7,39 @@
 namespace board
 {
 
-void init();   // initialise LED, moteurs (LEDC+DIR), 2× AS5600 (I2C), ADS1115 (Vbat), bouton START
+void init();   // initializes LED, motors (LEDC+DIR), 2× AS5600 (I2C), ADS1115 (Vbat), START button
 
-// LED d'état (onboard)
+// Status LED (onboard)
 void led(bool on);
 void ledToggle();
 
-// Lecture analogique (via ADC externe ADS1115) — tension à la broche A0 (AVANT le ratio du diviseur).
-float vbatVolts(int oversample);     // oversample = nb de lectures moyennées
+// Analog reading (via external ADS1115 ADC) — voltage at pin A0 (BEFORE the divider ratio).
+float vbatVolts(int oversample);     // oversample = number of readings averaged
 
-// Moteurs (l, r ∈ [-1..1], indépendants ; cap = duty max = plafond PWM)
+// Motors (l, r ∈ [-1..1], independent; cap = max duty = PWM ceiling)
 void motorsSet(float l, float r, uint32_t cap);
 void motorsStop();
-// Freinage dynamique : court-circuite les moteurs (sorties basses) → résiste au mouvement.
-// État PAR DÉFAUT du contrôleur au repos (plutôt que roue libre).
+// Dynamic braking: short-circuits the motors (low outputs) → resists movement.
+// DEFAULT state of the controller at rest (rather than coasting).
 void motorsBrake();
 
-// Capteurs d'angle AS5600 (un par roue avant) : Δcounts signé (12 bits) depuis le dernier appel.
-int encLeftDelta();    // roue avant gauche  (bus I2C 0)
-int encRightDelta();   // roue avant droite  (bus I2C 1)
-uint32_t ledcClkFixCount();   // nb de réparations du clock-gate LEDC (sentinelle anti-course DPORT)
-bool encLeftPresent();   // dernière lecture I2C du AS5600 gauche réussie
-bool encRightPresent();  // idem droite
+// AS5600 angle sensors (one per front wheel): signed Δcounts (12 bits) since the last call.
+int encLeftDelta();    // front left wheel   (I2C bus 0)
+int encRightDelta();   // front right wheel  (I2C bus 1)
+uint32_t ledcClkFixCount();   // number of LEDC clock-gate repairs (DPORT anti-race sentinel)
+bool encLeftPresent();   // last I2C read of the left AS5600 succeeded
+bool encRightPresent();  // same, right
 
-// Bouton START : pollButtons() une fois par tick (anti-rebond), puis btnStart().
+// START button: pollButtons() once per tick (debounce), then btnStart().
 void pollButtons();
 bool btnStart();
 
-// À appeler AU TOUT DÉBUT du boot : force les broches PWM/DIR à l'état bas (moteurs à l'arrêt)
-// avant l'init complète, pour éviter tout mouvement parasite pendant que les GPIO flottent.
+// Call at the VERY START of boot: forces the PWM/DIR pins to the low level (motors stopped)
+// before full init, to prevent any spurious movement while the GPIOs float.
 void motorsIdleEarly();
 
-// Maintien d'alimentation (latch). powerLatch() : à appeler le plus tôt possible au boot
-// pour que l'ESP tienne sa propre alimentation après le relâché du bouton externe.
+// Power latch. powerLatch(): call as early as possible at boot
+// so the ESP holds its own power after the external button is released.
 void powerLatch();
 void powerOff();
 
