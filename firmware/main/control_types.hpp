@@ -105,7 +105,8 @@ constexpr int64_t PAD_HB_TIMEOUT_US  = 250000;
 // Tout est stocké en float (les entiers/bool aussi) → pointeur-vers-membre homogène.
 struct KartConfig
 {
-    float speed_limit_ms;   // limite de vitesse VÉHICULE (m/s)
+    float speed_limit_ms;   // limite de vitesse VÉHICULE en marche AVANT (m/s)
+    float rev_speed_ms;     // limite de vitesse en marche ARRIÈRE (m/s) — distincte
     float duty_cap_frac;
     float thr_deadzone;   // zone morte du manche (avance ET virage)
     float thr_ramp_per_s; // limiteur de pente de l'AVANCE (douceur, Δ/s)
@@ -120,7 +121,6 @@ struct KartConfig
     float turn_limit_en; // 1 = anti-renversement actif (rampe vitesse→virage) ; 0 = désactivé (essais)
     float turn_full_ms;  // sous cette vitesse (m/s), virage ±100 % (pivot permis) — anti-renversement
     float turn_hi;       // limite de virage (0..1) atteinte à speed_limit_ms (rampe linéaire)
-    float rev_limit;     // plafond d'avance en MARCHE ARRIÈRE (0..1) — recul bridé
     float turn_rate;     // pente max du virage (Δ/s) — adoucit les coups de manche brusques
     float vlim_enable;   // 1 = limiteur de vitesse PID actif ; 0 = désactivé (essais)
     float brk_pid_enable;// 1 = frein PID actif à l'arrêt ; 0 = frein dynamique seul (essais)

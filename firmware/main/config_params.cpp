@@ -13,8 +13,11 @@
 const ParamDesc PARAMS[] =
 {
     {"speed_limit_ms",  "Limite vitesse (m/s)",   "Vitesse et puissance",
-     "Vitesse maximale du vehicule en m/s. Au-dela, le limiteur PID retient le kart (encodeurs requis). C'est aussi la vitesse ou le virage est le plus bride par l'anti-renversement.",
+     "Vitesse maximale en MARCHE AVANT (m/s). Au-dela, le limiteur PID retient le kart (encodeurs requis). C'est aussi la vitesse ou le virage est le plus bride par l'anti-renversement.",
      PType::Float, 0.3f,  3.3f,   7.f,    &KartConfig::speed_limit_ms},
+    {"rev_speed_ms",    "Limite recul (m/s)",     "Vitesse et puissance",
+     "Vitesse maximale en MARCHE ARRIERE (m/s) — meme limiteur PID, cible choisie selon le sens MESURE. La roulette ne guide pas en recul : rester lent.",
+     PType::Float, 0.3f,  1.0f,   3.f,    &KartConfig::rev_speed_ms},
     // Plafond PWM MANUEL (le plus restrictif gagne) — le plafond AUTOMATIQUE 12 V/Vbat
     // mesurée (ctl::dutyCapVolts) s'applique EN PLUS. Défaut 1,0 = laisser faire l'auto.
     {"duty_cap",        "Plafond PWM manuel (0-1)", "Vitesse et puissance",
@@ -34,7 +37,7 @@ const ParamDesc PARAMS[] =
      PType::Float, 0.3f,  3.0f,   20.f,   &KartConfig::turn_rate},
     // Anti-renversement « iso-a_lat » : virage ±100 % sous turn_full_ms (et partout où
     // 1/v le permet), puis limite ∝ 1/v jusqu'à turn_hi à speed_limit_ms (vitesse MESURÉE),
-    // et continue de se resserrer au-delà (emballement). Recul plafonné à rev_limit.
+    // et continue de se resserrer au-delà (emballement).
     {"turn_limit_en",   "Anti-renversement (0/1)", "Anti-renversement",
      "1 = la limite de virage suit la vitesse mesuree (rampe anti-renversement). 0 = desactive — pour les essais au banc uniquement, virage a 100 % a toute vitesse.",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::turn_limit_en},
@@ -47,9 +50,6 @@ const ParamDesc PARAMS[] =
     {"turn_alat_vmax",  "Virage max a Vmax (0-1)", "Anti-renversement",
      "Limite de virage a la vitesse maximale ; entre les deux la limite suit 1/v (meme acceleration laterale a toute vitesse). 0,2 = seule valeur verifiee sure par simulation pour les chargements decales (enfant seul d'un cote, adulte+enfant) avec gain de virage 1.",
      PType::Float, 0.1f,  0.2f,   0.4f,   &KartConfig::turn_hi},
-    {"rev_limit",       "Limite recul (0-1)",      "Anti-renversement",
-     "Plafond de puissance en marche arriere. 0,5 = on recule au maximum a 50 % — evite de reculer dangereusement vite.",
-     PType::Float, 0.f,   0.5f,   1.f,    &KartConfig::rev_limit},
     {"vbat_div_ratio",  "Ratio diviseur Vbat",     "Batterie",
      "Rapport du pont diviseur de mesure de tension : Vbat = tension lue par l'ADS1115 x ce ratio. A calibrer au multimetre. Le type de batterie (12 ou 24 V) et les seuils de coupure sont detectes automatiquement au demarrage.",
      PType::Float, 1.f,   7.667f, 20.f,   &KartConfig::vbat_div_ratio},
@@ -82,7 +82,7 @@ const ParamDesc PARAMS[] =
      "1 = les capteurs AS5600 servent au limiteur de vitesse, au frein PID, a l'anti-renversement et au defaut capteur bloque. 0 = banc d'essai sans encodeurs cables.",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::use_encoders},
     {"allow_reverse",   "Marche arriere (0/1)",    "Comportement",
-     "Autoriser la marche arriere (toujours plafonnee par la limite de recul).",
+     "Autoriser la marche arriere (tenue par sa propre limite de vitesse, rev_speed_ms).",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::allow_reverse},
     {"arm_hold_ms",     "Appui armement (ms)",     "Comportement",
      "Duree d'appui maintenu sur START (physique ou manette) pour armer, stick centre exige.",

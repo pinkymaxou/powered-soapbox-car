@@ -189,8 +189,24 @@ inline std::vector<Scenario> allScenarios()
             PadCmd c;
             if (armPhase(t, c)) return c;
             if (t < 5.f)      c.y = 1.f;
-            else if (t < 7.f) c.y = -1.f;   // plein arrière lancé (bridé à rev_limit)
+            else if (t < 7.f) c.y = -1.f;   // plein arrière lancé (plugging)
             else              c.y = 0.f;
+            return c;
+        }});
+
+    // Marche arrière : plein recul — tenue par SA PROPRE limite de vitesse (rev_speed_ms,
+    // même PID, cible choisie selon le sens mesuré), indépendante de la limite avant
+    // (laissée à 3,3). 2 m/s pour prouver l'asservissement (les moteurs saturent vers 3).
+    v.push_back({
+        "marche_arriere",
+        "Plein recul : la vitesse converge sur rev_speed_ms (2 m/s), aucun défaut",
+        12.f,
+        [](KartConfig& c) { c.rev_speed_ms = 2.f; },
+        nullptr,
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = -1.f;
             return c;
         }});
 

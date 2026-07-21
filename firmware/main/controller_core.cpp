@@ -261,8 +261,9 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         m_brake_r.reset();
         float fwd_t = deadzone(in.pad.y, m_cfg.thr_deadzone);
         const float turn_t = deadzone(in.pad.x, m_cfg.thr_deadzone);
-        if (m_cfg.allow_reverse == 0.f && fwd_t < 0.f) fwd_t = 0.f;              // recul interdit ?
-        else if (fwd_t < 0.f) fwd_t = std::max(fwd_t, -m_cfg.rev_limit);         // recul BRIDÉ (50 % défaut)
+        if (m_cfg.allow_reverse == 0.f && fwd_t < 0.f) fwd_t = 0.f;   // recul interdit ?
+        // (Pas de bride PWM au recul : la LIMITE DE VITESSE TOTALE — PID sur |v| — vaut
+        // dans les deux sens, comme l'anti-renversement qui travaille sur |v|.)
 
         // 1) Limiteur de pente : interdit une variation trop BRUSQUE (coup de manche « sec »).
         m_fwd_cmd = slew(fwd_t, m_fwd_cmd, m_cfg.thr_ramp_per_s, hw::CTRL_DT_S);
@@ -286,10 +287,14 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         mixArcade(fwd, turn, m_cfg.turn_gain, out_l, out_r);
 
         // Plafond de vitesse global (préserve le ratio de virage) via PID sur la vitesse moyenne.
+        // Cible selon le SENS MESURÉ : avant → speed_limit_ms, arrière → rev_speed_ms. Sur le
+        // sens mesuré (pas la consigne) : en plugging (stick arrière, kart encore en marche
+        // avant) la cible reste celle de l'avant — l'autorité de freinage n'est pas amputée.
         // Sans encodeurs : pas d'asservissement vitesse → on s'appuie sur le plafond PWM (duty_cap).
         if (use_enc && m_cfg.vlim_enable != 0.f)
         {
-            const float vcap = m_speed_pid.update(m_cfg.speed_limit_ms, std::fabs(v_veh), hw::CTRL_DT_S,
+            const float v_target = (v_veh < 0.f) ? m_cfg.rev_speed_ms : m_cfg.speed_limit_ms;
+            const float vcap = m_speed_pid.update(v_target, std::fabs(v_veh), hw::CTRL_DT_S,
                                                   m_cfg.vlim_kp, m_cfg.vlim_ki, m_cfg.vlim_kd, 0.f, 1.f);
             out_l *= vcap;
             out_r *= vcap;

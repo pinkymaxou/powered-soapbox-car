@@ -278,10 +278,13 @@ trop vite. Le virage est protégé sur **deux plans** :
    de plus de `turn_rate` unités/s : un coup de manche instantané est **lissé**. L'avance est
    lissée de même par `thr_ramp_per_s`.
 
-En complément, la **marche arrière est bridée** à `rev_limit` (défaut 50 %) pour éviter de
-reculer dangereusement (la roulette arrière ne guide pas en recul).
+En complément, la **marche arrière** a **sa propre limite de vitesse** (`rev_speed_ms`,
+défaut 1 m/s) : même limiteur PID que l'avant (`speed_limit_ms`), la cible est choisie selon
+le **sens mesuré** — en plugging (stick arrière, kart encore en marche avant) l'autorité de
+freinage reste entière. Plus de bride PWM dédiée. L'anti-renversement travaille sur |v| :
+il borne le virage en recul comme en avance (la roulette arrière ne guide pas en recul).
 
-Paramètres web : **`turn_gain`**, **`turn_full_ms`**, **`turn_hi`**, **`rev_limit`**,
+Paramètres web : **`turn_gain`**, **`turn_full_ms`**, **`turn_hi`**,
 **`turn_rate`**, **`thr_ramp_per_s`**.
 
 ## ⚠️ À ajuster avant la première mise en route

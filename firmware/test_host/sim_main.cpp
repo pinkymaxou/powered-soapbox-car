@@ -117,6 +117,17 @@ void testScenarios()
         CHECK(r.max_v > 2.0f);
     }
 
+    // Marche arrière : plus de bride PWM — la limite de vitesse TOTALE tient dans les 2 sens.
+    {
+        const RunResult r = run(get("marche_arriere"));
+        CHECK(r.ever_armed && !r.ever_fault);
+        CHECK(std::fabs(r.final_v) > 1.7f);          // roule bel et bien en arrière (pas rebridé)
+        CHECK(std::fabs(r.final_v) < 2.f * 1.05f);   // CONVERGÉ sur la limite totale (±5 %)
+        CHECK(r.max_v < 2.f * 1.25f);                // dépassement transitoire du PID borné
+        std::printf("  marche_arriere : v finale=%.2f m/s, pointe %.2f (limite 2,0)\n",
+                    r.final_v, r.max_v);
+    }
+
     // Frein PID : arrêt actif après relâche, sans repartir en sens inverse.
     {
         const RunResult r = run(get("frein_pid_arret"));
