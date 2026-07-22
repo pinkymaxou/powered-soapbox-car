@@ -79,7 +79,7 @@ flowchart TB
 
 **Footprint:** length ~125 cm · width ~91 cm · **front track width ~84 cm** · **wheelbase ~76 cm** (axle **set back** into the body, nose ~30 cm) · **2 front drive wheels Ø25.4 cm (10″) + tech bay in the nose** + **1 free rear caster wheel 10″** · **side guardrails** + **emergency stop at the top of the seatback (centered)** · low seat (tip-resistant).
 
-> ⚠️ For **flat ground, under adult supervision** only. Estimated speed ~8–11.5 km/h (~3.2 m/s), runtime ~10–20 min. **A tricycle tips over more easily than a 4-wheeler** → software rollover protection (see §3).
+> ⚠️ For **flat ground, under adult supervision** only. Estimated speed ~8–12 km/h (~3.3 m/s), runtime ~10–20 min. **A tricycle tips over more easily than a 4-wheeler** → software rollover protection (see §3).
 
 ## At a glance
 
@@ -88,7 +88,7 @@ flowchart TB
 | **Seats** | 2, single bench side by side; **driver on the left** (gamepad) |
 | **Steering** | **Differential (skid steer)**: speed difference between the 2 front wheels; **pivot in place** possible; **no mechanical steering parts** |
 | **Propulsion** | **2× 12 V DC motors (~172 W / 0.23 HP)** at the FRONT, **independent** (one per wheel) — **PWM/DIR per wheel** |
-| **Transmission** | **3D-printed 1:16 gearboxes** (two 4:1 stages, 16T/24 DP motor pinion — see [`doc/reducteur.md`](doc/reducteur.md)) + **pulleys bolted to the front wheels + belts** |
+| **Transmission** | **3D-printed gearboxes** (16→80 then 30→80 = 1:13.33, 16T/24 DP motor pinion — see [`doc/reducteur.md`](doc/reducteur.md)) + **1.28:1 pulleys bolted to the front wheels + belts** = **1:17 total** |
 | **Wheels** | **2× front drive Ø25.4 cm (10″)** (plastic rim, 1/2" bearing) + **1 free pivoting rear caster wheel** |
 | **Driving** | **Bluetooth gamepad** (stick: Y = forward/reverse, X = turn); **calibration mandatory**; analog joystick reserved (future) |
 | **Electronics** | **ESP32** → **dual-channel driver 20 A / 6–30 V** (PWM + DIR / channel), **PWM capped at ≈ 12 V/Vbat** (12 V → ~100%, 24 V → ~50%); **tech bay in the nose** (near the 2 motors, short power wiring) |
@@ -281,8 +281,8 @@ Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_h
 | | **1× pivoting rear caster wheel (caster)** | **Free**, unpowered caster; **Ø ~12.5 cm (5")**, mounted height ~15 cm, **load ≥ 50 kg** |
 | | Shoulder bolts (front wheels) | **Supplied with the wheels** (1/2" shoulder, 3/8" thread) |
 | **Propulsion** | **2× 12 V DC motors** (one per **front** wheel) | ~172 W (0.23 HP), 19.6 A, 4615 rpm; **independent** |
-| | 2 3D gearboxes | **1:16** ratio (two 4:1 stages, [design](doc/reducteur.md)), printed (PETG/ABS/nylon) |
-| | Pulleys + belts | Pulley **bolted to each front wheel** + belt to the gearbox (**1:1**) |
+| | 2 3D gearboxes | **1:13.33** (16→80 then 30→80, [design](doc/reducteur.md)) + 1.28:1 pulleys = **1:17 total**, printed (PETG/ABS/nylon) |
+| | Pulleys + belts | Pulley **bolted to each front wheel** + belt from the gearbox (**1.28:1 pulleys**) |
 | | **2× AS5600 angle sensor** + diametric magnet | one per front wheel, **1 per I²C bus**; contactless magnetic, **12-bit absolute I²C** (fixed address 0x36), **3.3 V native** (no level-shift), 4.7 kΩ pull-ups |
 | **Driving** | **Bluetooth gamepad** | stick: Y = forward/reverse, X = turn; button **B** = emergency stop, button **START** = arming; **calibration mandatory** |
 | | *Analog joystick* | **reserved (future, not wired)**: 2 ADS1115 channels (A1/A2) planned behind the same software abstraction |
@@ -306,7 +306,7 @@ Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_h
 
 ### Propulsion — 2 front 12 V DC motors
 
-Each **front wheel** is driven by its **own 12 V permanent-magnet DC motor** through a **3D-printed 1:12.5 gearbox** (16→80, 32→80) and **25T→32T pulleys (1.28:1)** — total reduction **1:16.0**. The **two motors are controlled independently** (PWM + DIR per channel): it's this **command difference** that provides steering. **Each wheel has its own AS5600 sensor** for the control loop.
+Each **front wheel** is driven by its **own 12 V permanent-magnet DC motor** through a **3D-printed 1:13.33 gearbox** (16→80, 30→80) and **25T→32T pulleys (1.28:1)** — total reduction **1:17.07**. The **two motors are controlled independently** (PWM + DIR per channel): it's this **command difference** that provides steering. **Each wheel has its own AS5600 sensor** for the control loop.
 
 | Characteristic | Value |
 |---|---|
@@ -327,8 +327,8 @@ flowchart LR
     DRV["Dual-channel driver<br/>20 A · 6–30 V · PWM+DIR"]
     M1["Front L motor 12 V (~172 W)"]
     M2["Front R motor 12 V (~172 W)"]
-    G1["3D gearbox 1:16"]
-    G2["3D gearbox 1:16"]
+    G1["3D gearbox 1:13.33"]
+    G2["3D gearbox 1:13.33"]
     R1["🛞 Front left wheel"]
     R2["🛞 Front right wheel"]
     CAS["🛞 Free rear caster"]
@@ -359,7 +359,7 @@ flowchart LR
 | Parameter | Value |
 |---|---|
 | Speed at ~50% (≈ 10 V) | ~**3850 rpm** motor → **~240 rpm wheel** (÷16) |
-| Estimated top speed | **~3.2 m/s (11.5 km/h)** — firmware-limited |
+| Estimated top speed | **~3.3 m/s (~12 km/h)** — firmware-limited |
 | Total current | ~**40 A** → 2 batteries in parallel (~20 A/pack) |
 | Battery energy / runtime | ~90–100 Wh → **~10–20 min** depending on use |
 
@@ -374,7 +374,7 @@ flowchart LR
 
 ### AS5600 speed sensors (×2, on I²C)
 
-**AS5600** angle sensor: **contactless** magnetic, **12-bit absolute angle** (4096 points/turn) read over **I²C**, with a **diametric magnet** on the shaft end. There is **one AS5600 per front wheel**, **one per I²C bus** (each AS5600 having the fixed address **0x36**, they cannot coexist on the same bus). **Known kinematics** (see [`doc/reducteur.md`](doc/reducteur.md)): the magnet is on the **output of the 1:12.5 gearbox**, followed by **1.28:1 pulleys** → **the sensor makes 1.28 turns per wheel turn** ⇒ `GEAR_RATIO = 1.28`, **10″ wheel = 0.254 m**. The **vehicle speed** (m/s) = **signed average** of the 2 wheels (pivot in place → 0 m/s). The conversion is **fully determined**. They serve to:
+**AS5600** angle sensor: **contactless** magnetic, **12-bit absolute angle** (4096 points/turn) read over **I²C**, with a **diametric magnet** on the shaft end. There is **one AS5600 per front wheel**, **one per I²C bus** (each AS5600 having the fixed address **0x36**, they cannot coexist on the same bus). **Known kinematics** (see [`doc/reducteur.md`](doc/reducteur.md)): the magnet is on the **output of the 1:13.33 gearbox**, followed by **1.28:1 pulleys** → **the sensor makes 1.28 turns per wheel turn** ⇒ `GEAR_RATIO = 1.28`, **10″ wheel = 0.254 m**. The **vehicle speed** (m/s) = **signed average** of the 2 wheels (pivot in place → 0 m/s). The conversion is **fully determined**. They serve to:
 - **Measure each wheel's speed** → reliable limiter; **PID brake** toward 0; **direction** (sign of Δangle, the DIR pin sets the convention); **safety** (stall: PWM active with no rotation > 1 s → fault).
 
 ✅ **3.3 V native** (VDD5V/VDD3V3 tied together) → **SDA/SCL directly on the ESP32, NO level-shift**. Wiring per sensor: **SDA, SCL, 3.3 V, GND** (+ magnet), **4.7 kΩ** pull-ups per bus.
@@ -714,7 +714,7 @@ flowchart LR
     P7 --> P8["7. Progressive tests"] --> P9["8. Final safety"]
 ```
 
-**Phase 0 — Preparation.** Gather hardware (§4) and tools (drill, saw, wrenches, soldering iron, multimeter, 3D printer). Print the 2 gearboxes (1:16) + drilling template. Work with **batteries disconnected**.
+**Phase 0 — Preparation.** Gather hardware (§4) and tools (drill, saw, wrenches, soldering iron, multimeter, 3D printer). Print the 2 gearboxes (1:17) + drilling template. Work with **batteries disconnected**.
 
 **Phase 1 — Wooden frame.** 2×3 grid (crossmembers ~25–30 cm) + 6 mm plywood floor (12 mm under the bench) + **tech bay at the front** (~30 cm, between the drive axle and the bench) + **continuous** ~80 cm bench (no divider) + **side guardrails** (1/2″ plywood, ~30 cm) + seatback. ✅ *Two people can sit without excessive flex; the guardrails hold a child who slides sideways well.*
 
@@ -726,7 +726,7 @@ flowchart LR
 
 **Phase 5 — Control electronics.** ESP32 + breakout; **buck 20→5 V** on the +20 rail (the ESP makes its own 3.3 V); **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO17). *(Future reserves wired but unused: 2× encoder A/B 34/35 + 36/39; joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
 
-**Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://192.168.4.1`. **Pair then calibrate the gamepad** (mandatory to drive); adjust **`vbat_div_ratio`** with a multimeter. Speed conversion **already determined** (AS5600 at the output of the 1:12.5 gearbox + 1.28:1 pulleys → `GEAR_RATIO=1.28`, 10″ wheel, **vehicle speed in m/s**) → **verify on the bench** + **fine-tune the PIDs** per wheel (limiter ≈ 0.54/0.50, brake ≈ 0.43/0.29/0.011 — in m/s). Set a **low speed limit** (`speed_limit_ms`) + **rollover protection** (`turn_gain`, `turn_full_ms`, `turn_hi`, `turn_rate`, `thr_ramp_per_s`) + check LVC. *(500 Hz loop, IPv6, System page: automatic.)*
+**Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://192.168.4.1`. **Pair then calibrate the gamepad** (mandatory to drive); adjust **`vbat_div_ratio`** with a multimeter. Speed conversion **already determined** (AS5600 at the output of the 1:13.33 gearbox + 1.28:1 pulleys → `GEAR_RATIO=1.28`, 10″ wheel, **vehicle speed in m/s**) → **verify on the bench** + **fine-tune the PIDs** per wheel (limiter ≈ 0.54/0.50, brake ≈ 0.43/0.29/0.011 — in m/s). Set a **low speed limit** (`speed_limit_ms`) + **rollover protection** (`turn_gain`, `turn_full_ms`, `turn_hi`, `turn_rate`, `thr_ramp_per_s`) + check LVC. *(500 Hz loop, IPv6, System page: automatic.)*
 
 **Phase 7 — Progressive tests (wheels in the air).** Arm (physical or gamepad START), light forward → correct direction of **each wheel** (swap M1A/M1B if needed); push the stick right → turns right; test **default brake**, **pivot in place**, **disarm**, **gamepad emergency stop (B)** and **gamepad disconnect → braking**, **central hardware e-stop** (cuts everything); trigger the faults (simulated **LVC**, **sensor failure** by unplugging an AS5600) → must refuse/cut. Then on the ground: flat terrain, minimum speed, rollover protection active, 1 light child first, **progressive** limit.
 

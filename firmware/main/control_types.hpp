@@ -41,9 +41,9 @@ constexpr int VBAT_READ_TICKS = 25;   // 500 Hz / 25 = 20 Hz
 constexpr uint8_t ADS1115_ADDR = 0x48;
 
 // AS5600 angle sensor (I2C, 12-bit absolute = 4096 counts/turn). Kinematics (see
-// doc/reducteur.md): gearbox 16T→80T then 32T→80T = 1:12.5; magnet on the GEARBOX OUTPUT,
+// doc/reducteur.md): gearbox 16T→80T then 30T→80T = 1:13.33; magnet on the GEARBOX OUTPUT,
 // then pulleys 25T→32T (1.28:1) up to the wheel → the sensor turns 1.28 times per wheel turn
-// ⇒ GEAR_RATIO = 1.28 (total motor→wheel reduction: 12.5 × 1.28 = 16.0 EXACTLY).
+// ⇒ GEAR_RATIO = 1.28 (total motor→wheel reduction: 13.33 × 1.28 = 17.07).
 // 10" wheel = 0.254 m. Native 3.3 V supply → NO level-shift. Speed = derivative of the angle
 // (Δcounts × CTRL_HZ) with 0↔4095 wrap; the SIGN of Δ gives the direction. 500 Hz: unambiguous.
 constexpr float AS5600_CPR    = 4096.0f;  // counts per turn (12 bits)

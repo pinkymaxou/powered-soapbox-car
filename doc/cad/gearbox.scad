@@ -1,62 +1,62 @@
-// gearbox.scad — Réducteur 1:8 du kart, PARAMÉTRIQUE (OpenSCAD, autonome — générateur de
-// denture en développante inclus). Cotes = doc/reducteur.md (révision 1:12,5) : 24 DP / 20°,
-// 16T (moteur, métal) → 80T ép. 10, puis 32T ép. 20–25 (pignon composé) → 80T sortie.
-// Entraxes 50,80 / 59,27 mm ; poulies 25T→32T (1,28:1) → total 1:16,0. Roulements 6805 (25×37×7), tourillons Ø24,9, pilote Ø10,
-// 3 vis M4 sur Ø22. Carter : plaque arrière (moteur) + plaque avant dévissable.
+// gearbox.scad — Kart 1:17 gearbox, PARAMETRIC (OpenSCAD, standalone — involute
+// tooth generator included). Dims = doc/reducteur.md (revision 1:13.33): 24 DP / 20°,
+// 16T (motor, metal) → 80T thk 10, then 30T thk 20–25 (compound pinion) → 80T output.
+// Center distances 50.80 / 58.21 mm; pulleys 25T→32T (1.28:1) → total 1:17.07. Bearings 6805 (25×37×7), journals Ø24.9, pilot Ø10,
+// 3× M4 screws on Ø22. Housing: rear plate (motor) + removable front plate.
 //
-// Usage : régler `part` puis F6/exporter le STL.
-//   part = "assembly" (vue), "compound" (80T+32T), "output" (80T sortie),
-//          "back" / "front" (plaques), "pinion_test" (pignon d'essai 16T)
-// `explode` écarte les pièces dans la vue assemblage.
+// Usage: set `part` then F6/export the STL.
+//   part = "assembly" (view), "compound" (80T+30T), "output" (80T output),
+//          "back" / "front" (plates), "pinion_test" (16T test pinion)
+// `explode` spreads the parts apart in the assembly view.
 
 part = "assembly";
-explode = 0;            // mm d'écartement vertical (vue assemblage) — 0 = empilement réel
+explode = 0;            // mm of vertical spacing (assembly view) — 0 = real stack-up
 
-// ───────────────────────── Paramètres denture ─────────────────────────
-DP   = 24;              // diametral pitch (impérial)
-PA   = 20;              // angle de pression (deg)
-BKL  = 0.10;            // backlash linéaire (mm) — jeu d'impression
-mmod = 25.4 / DP;       // module équivalent (1,058 mm)
+// ───────────────────────── Tooth parameters ─────────────────────────
+DP   = 24;              // diametral pitch (imperial)
+PA   = 20;              // pressure angle (deg)
+BKL  = 0.10;            // linear backlash (mm) — print clearance
+mmod = 25.4 / DP;       // equivalent module (1.058 mm)
 
-// ───────────────────────── Cotes mécaniques (mm) ─────────────────────────
-T64_1   = 10;           // épaisseur 80T étage 1
-T32     = 20;           // épaisseur 32T
-T64_OUT = 20;           // épaisseur 80T de sortie (25 recommandé, voir doc)
-GAP     = 1.5;          // jeu axial 80T sortie ↔ 80T étage 1
+// ───────────────────────── Mechanical dimensions (mm) ─────────────────────────
+T64_1   = 10;           // stage-1 80T thickness
+T32     = 20;           // 30T pinion thickness
+T64_OUT = 20;           // output 80T thickness (25 recommended, see doc)
+GAP     = 1.5;          // axial clearance output 80T ↔ stage-1 80T
 
-JRN_D   = 24.9;         // Ø tourillon (serrage léger dans la bague int. 6805)
-BRG_D   = 37.1;         // Ø logement roulement (6805 = 37,0 + ajustement imprimé)
-BRG_T   = 7;            // épaisseur roulement 6805
-PILOT_D = 10;           // Ø pilote central (alignement flasques)
-BC_D    = 22;           // Ø cercle des 3 vis
-SCR_D   = 4.2;          // Ø passage vis M4
+JRN_D   = 24.9;         // journal Ø (light fit in the 6805 inner race)
+BRG_D   = 37.1;         // bearing seat Ø (6805 = 37.0 + printed fit)
+BRG_T   = 7;            // 6805 bearing thickness
+PILOT_D = 10;           // central pilot Ø (flange alignment)
+BC_D    = 22;           // Ø of the 3-screw bolt circle
+SCR_D   = 4.2;          // M4 screw clearance Ø
 
-PLATE_T = 8;            // épaisseur plaques carter
-CLR     = 1.0;          // jeu axial pièce ↔ plaque
+PLATE_T = 8;            // housing plate thickness
+CLR     = 1.0;          // axial clearance part ↔ plate
 
-E1 = (16 + 80) / (2 * DP) * 25.4;   // 50,80 — entraxe 16T→80T
-E2 = (32 + 80) / (2 * DP) * 25.4;   // 59,27 — entraxe 32T→80T
+E1 = (16 + 80) / (2 * DP) * 25.4;   // 50.80 — center distance 16T→80T
+E2 = (30 + 80) / (2 * DP) * 25.4;   // 58.21 — center distance 30T→80T
 
 $fn = 90;
 
-// ───────────────────── Générateur d'engrenage (développante) ─────────────────────
-function _rp(z)  = mmod * z / 2;                 // rayon primitif
-function _rb(z)  = _rp(z) * cos(PA);             // rayon de base
-function _ra(z)  = _rp(z) + mmod;                // rayon de tête
-function _rr(z)  = _rp(z) - 1.25 * mmod;         // rayon de pied
-function _roll(z, r) = let(rb = _rb(z)) sqrt(max(0, (r / rb) * (r / rb) - 1));  // angle de roulement (rad)
-function _inv(u) = u * 180 / PI - atan(u);       // fonction involute (deg), u en rad
-// demi-épaisseur angulaire de dent au rayon r (deg), backlash déduit
+// ───────────────────── Gear generator (involute) ─────────────────────
+function _rp(z)  = mmod * z / 2;                 // pitch radius
+function _rb(z)  = _rp(z) * cos(PA);             // base radius
+function _ra(z)  = _rp(z) + mmod;                // tip radius
+function _rr(z)  = _rp(z) - 1.25 * mmod;         // root radius
+function _roll(z, r) = let(rb = _rb(z)) sqrt(max(0, (r / rb) * (r / rb) - 1));  // roll angle (rad)
+function _inv(u) = u * 180 / PI - atan(u);       // involute function (deg), u in rad
+// angular half-thickness of a tooth at radius r (deg), backlash subtracted
 function _half(z, r) = 90 / z - (BKL / 2) / _rp(z) * 180 / PI + _inv(_roll(z, _rp(z))) - _inv(_roll(z, r));
 function _pol(r, a) = [r * cos(a), r * sin(a)];
 
 module gear2d(z)
 {
     rr = _rr(z); ra = _ra(z); rb = _rb(z);
-    r0 = max(rr, rb);            // départ du profil en développante
-    ri = rr - 0.6;               // ancrage SOUS le cercle de pied : chevauchement franc avec
-                                 // le corps → pas de faces coplanaires (z-fighting en aperçu F5)
-    N  = 14;                     // points par flanc
+    r0 = max(rr, rb);            // start of the involute profile
+    ri = rr - 0.6;               // anchor BELOW the root circle: clean overlap with
+                                 // the body → no coplanar faces (z-fighting in F5 preview)
+    N  = 14;                     // points per flank
     flank = [for (i = [0:N]) let(r = r0 + (ra - r0) * i / N) _pol(r, -_half(z, r))];
     tooth = concat(
         [_pol(ri, -_half(z, r0))],
@@ -73,40 +73,40 @@ module gear2d(z)
 
 module gear(z, th) { linear_extrude(height = th) gear2d(z); }
 
-// ───────────────────── Perçages communs (pilote + 3 vis) ─────────────────────
+// ───────────────────── Common drillings (pilot + 3 screws) ─────────────────────
 module axial_holes(h)
 {
-    cylinder(d = PILOT_D, h = h);                                  // pilote central
+    cylinder(d = PILOT_D, h = h);                                  // central pilot
     for (k = [0:2]) rotate(k * 120) translate([BC_D / 2, 0, 0])
-        cylinder(d = SCR_D, h = h);                                // 3 vis M4
+        cylinder(d = SCR_D, h = h);                                // 3× M4 screws
 }
 
-// ───────────────────── Pièces ─────────────────────
-// Pignon composé : tourillon AR + 80T(10) + 32T + tourillon AV, percé pilote + 3 vis.
+// ───────────────────── Parts ─────────────────────
+// Compound pinion: rear journal + 80T(10) + 30T + front journal, drilled pilot + 3 screws.
 module compound_gear()
 {
-    jl_b = BRG_T + CLR;                                   // tourillon arrière (dans le roulement AR)
-    jl_f = GAP + T64_OUT - T32 + CLR + BRG_T;             // tourillon avant (atteint le fond du logement)
+    jl_b = BRG_T + CLR;                                   // rear journal (in the rear bearing)
+    jl_f = GAP + T64_OUT - T32 + CLR + BRG_T;             // front journal (reaches the bottom of the seat)
     difference()
     {
         union()
         {
             translate([0, 0, -jl_b]) cylinder(d = JRN_D, h = jl_b);
             gear(80, T64_1);
-            translate([0, 0, T64_1]) gear(32, T32);
+            translate([0, 0, T64_1]) gear(30, T32);
             translate([0, 0, T64_1 + T32]) cylinder(d = JRN_D, h = jl_f);
         }
         translate([0, 0, -jl_b - 1]) axial_holes(jl_b + T64_1 + T32 + jl_f + 2);
     }
 }
 
-// 80T de sortie : long tourillon AR (traverse le plan de l'étage 1) + tourillon AV
-// prolongé au travers de la plaque avant (bout de sortie → poulie).
+// output 80T: long rear journal (crosses the stage-1 plane) + front journal
+// extended through the front plate (output stub → pulley).
 module output_gear()
 {
-    z0   = T64_1 + GAP;                        // plan inférieur de la roue (au niveau de la 32T)
-    jl_b = BRG_T + CLR + z0;                   // jusqu'au roulement AR
-    jl_f = BRG_T + CLR + PLATE_T + 12;         // traverse la plaque avant + 12 mm pour la poulie
+    z0   = T64_1 + GAP;                        // lower plane of the gear (at the 30T level)
+    jl_b = BRG_T + CLR + z0;                   // up to the rear bearing
+    jl_f = BRG_T + CLR + PLATE_T + 12;         // crosses the front plate + 12 mm for the pulley
     difference()
     {
         union()
@@ -119,23 +119,23 @@ module output_gear()
     }
 }
 
-// Pignon d'essai 16T (valide le standard 24 DP contre le pignon moteur).
+// 16T test pinion (validates the 24 DP standard against the motor pinion).
 module pinion_test() { difference() { gear(16, 8); translate([0,0,-1]) cylinder(d = 5, h = 10); } }
 
-// ───────────────────── Carter (architecture « bac » façon version Fusion) ─────────────────────
-// Plaque arrière prolongée d'un MURET périphérique (chambre fermée) + OREILLES de fixation
-// châssis aux 4 coins ; couvercle vissé sur le muret, LAMAGES au droit des logements.
-PL_W = 192; PL_H = 100;                       // encombrement hors oreilles (80T Ø86,8)
-WALL_T  = 4;                                  // épaisseur du muret périphérique
-EAR_W   = 22; EAR_L = 16;                     // oreilles de fixation (4×, aux coins)
-EAR_HOLE = 5.2;                               // Ø trou de fixation châssis (M5)
-COVER_SCR = 4.2;                              // Ø vis du couvercle (M4, dans le muret)
-INNER_H = CLR + T64_1 + GAP + T64_OUT + CLR;  // hauteur intérieure de la chambre
-function plate_off() = [-30, 0];              // origine moteur → coin des plaques (centrage)
+// ───────────────────── Housing (tub-style architecture) ─────────────────────
+// Rear plate extended with a peripheral WALL (closed chamber) + mounting LUGS to the
+// chassis at the 4 corners; cover screwed onto the wall, COUNTERBORES over the seats.
+PL_W = 192; PL_H = 100;                       // footprint excluding lugs (80T Ø86.8)
+WALL_T  = 4;                                  // peripheral wall thickness
+EAR_W   = 22; EAR_L = 16;                     // mounting lugs (4×, at the corners)
+EAR_HOLE = 5.2;                               // chassis mounting hole Ø (M5)
+COVER_SCR = 4.2;                              // cover screw Ø (M4, in the wall)
+INNER_H = CLR + T64_1 + GAP + T64_OUT + CLR;  // inner height of the chamber
+function plate_off() = [-30, 0];              // motor origin → plate corner (centering)
 
 module plate_outline() { offset(r = 6) offset(delta = -6) square([PL_W, PL_H]); }
 
-// Oreilles : 2 par extrémité (coins), dépassent en X, un trou châssis chacune.
+// Lugs: 2 per end (corners), protrude in X, one chassis hole each.
 module ears2d()
 {
     for (sx = [0, 1], sy = [0, 1])
@@ -149,7 +149,7 @@ module ear_holes()
                    -PL_H / 2 + sy * (PL_H - EAR_W) + EAR_W / 2, -1])
             cylinder(d = EAR_HOLE, h = INNER_H + 2 * PLATE_T + 2);
 }
-// Positions des vis + pions du couvercle (dans l'axe du muret)
+// Positions of the cover screws + dowels (along the wall axis)
 function cover_scr_pos() = [for (t = [[18,0],[PL_W/2,0],[PL_W-18,0],[18,1],[PL_W/2,1],[PL_W-18,1]])
     [plate_off()[0] + t[0], -PL_H / 2 + WALL_T / 2 + t[1] * (PL_H - WALL_T)]];
 function dowel_pos() = [[plate_off()[0] + WALL_T / 2 + 4, -PL_H / 2 + WALL_T / 2],
@@ -157,7 +157,7 @@ function dowel_pos() = [[plate_off()[0] + WALL_T / 2 + 4, -PL_H / 2 + WALL_T / 2
 
 module bearing_pocket() { translate([0, 0, PLATE_T - BRG_T]) cylinder(d = BRG_D, h = BRG_T + 1); }
 
-// Plaque arrière = fond + muret + oreilles. Face intérieure du fond = z = PLATE_T.
+// Rear plate = floor + wall + lugs. Inner face of the floor = z = PLATE_T.
 module plate_back()
 {
     difference()
@@ -166,22 +166,22 @@ module plate_back()
         {
             translate([plate_off()[0], -PL_H / 2, 0])
                 linear_extrude(height = PLATE_T) union() { plate_outline(); ears2d(); }
-            // muret périphérique (jusqu'au plan du couvercle)
+            // peripheral wall (up to the cover plane)
             translate([plate_off()[0], -PL_H / 2, PLATE_T])
                 linear_extrude(height = INNER_H)
                     difference() { plate_outline(); offset(delta = -WALL_T) plate_outline(); }
         }
-        translate([0, 0, -1]) cylinder(d = 22, h = PLATE_T + 2);          // passage pignon moteur
-        for (x = [E1, E1 + E2]) translate([x, 0, 0]) bearing_pocket();    // logements 6805 (fond)
-        // trous de fixation moteur (entraxe 25 mm, à adapter au moteur réel)
+        translate([0, 0, -1]) cylinder(d = 22, h = PLATE_T + 2);          // motor pinion clearance hole
+        for (x = [E1, E1 + E2]) translate([x, 0, 0]) bearing_pocket();    // 6805 seats (floor)
+        // motor mounting holes (25 mm center distance, adapt to the actual motor)
         for (k = [0:1]) rotate(k * 180) translate([0, 12.5, -1]) cylinder(d = 4.2, h = PLATE_T + 2);
         ear_holes();
-        for (q = cover_scr_pos()) translate([q[0], q[1], PLATE_T + INNER_H - 12]) cylinder(d = 3.4, h = 13);  // taraudage/insert M4
-        for (q = dowel_pos())     translate([q[0], q[1], PLATE_T + INNER_H - 6])  cylinder(d = 4.05, h = 7);  // pions
+        for (q = cover_scr_pos()) translate([q[0], q[1], PLATE_T + INNER_H - 12]) cylinder(d = 3.4, h = 13);  // M4 tapping/insert
+        for (q = dowel_pos())     translate([q[0], q[1], PLATE_T + INNER_H - 6])  cylinder(d = 4.05, h = 7);  // dowels
     }
 }
 
-// Couvercle : logements miroirs (avec LAMAGE apparent côté extérieur), vis au droit du muret.
+// Cover: mirrored seats (with visible COUNTERBORE on the outer side), screws over the wall.
 module plate_front()
 {
     difference()
@@ -190,29 +190,29 @@ module plate_front()
             linear_extrude(height = PLATE_T) union() { plate_outline(); ears2d(); }
         for (x = [E1, E1 + E2])
         {
-            translate([x, 0, -1]) cylinder(d = BRG_D, h = BRG_T + 1);         // poche roulement (int.)
-            translate([x, 0, PLATE_T - 1.2]) cylinder(d = BRG_D + 8, h = 2);  // lamage décoratif ext.
+            translate([x, 0, -1]) cylinder(d = BRG_D, h = BRG_T + 1);         // bearing pocket (inner)
+            translate([x, 0, PLATE_T - 1.2]) cylinder(d = BRG_D + 8, h = 2);  // decorative counterbore (outer)
         }
-        translate([E1 + E2, 0, -1]) cylinder(d = JRN_D + 1.2, h = PLATE_T + 2);   // passage tourillon sortie
+        translate([E1 + E2, 0, -1]) cylinder(d = JRN_D + 1.2, h = PLATE_T + 2);   // output journal clearance hole
         ear_holes();
         for (q = cover_scr_pos()) translate([q[0], q[1], -1]) cylinder(d = COVER_SCR, h = PLATE_T + 2);
         for (q = dowel_pos())     translate([q[0], q[1], -1]) cylinder(d = 4.05, h = PLATE_T / 2 + 1);
     }
 }
 
-// ───────────────────── Assemblage ─────────────────────
+// ───────────────────── Assembly ─────────────────────
 module assembly()
 {
     color("dimgray")  translate([0, 0, -PLATE_T]) plate_back();
-    color("silver")   translate([0, 0, CLR]) gear(16, 6.35);                       // pignon moteur (réf.)
+    color("silver")   translate([0, 0, CLR]) gear(16, 6.35);                       // motor pinion (ref.)
     color("gold")     translate([E1, 0, CLR + explode])       rotate(180 / 80) compound_gear();
-    color("orange")   translate([E1 + E2, 0, CLR + 2*explode]) rotate(180 / 80 * (1 + 32 / 80)) output_gear();
-    // Couvercle TRANSLUCIDE. ⚠️ L'aperçu (F5/OpenCSG) trie mal la transparence → surfaces
-    // « bizarres » ; utiliser le RENDU COMPLET (F6) pour un affichage correct.
+    color("orange")   translate([E1 + E2, 0, CLR + 2*explode]) rotate(180 / 80 * (1 + 30 / 80)) output_gear();
+    // TRANSLUCENT cover. ⚠️ The preview (F5/OpenCSG) sorts transparency poorly → "weird"
+    // surfaces; use the FULL RENDER (F6) for a correct display.
     color("lightsteelblue", 0.30) translate([0, 0, INNER_H + 3*explode]) plate_front();
 }
 
-// ───────────────────── Sélecteur ─────────────────────
+// ───────────────────── Selector ─────────────────────
 if (part == "assembly")      assembly();
 else if (part == "compound") compound_gear();
 else if (part == "output")   output_gear();

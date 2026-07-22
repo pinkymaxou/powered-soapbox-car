@@ -1,4 +1,4 @@
-# 1:16 gearbox — motor pinion identification and gear train design
+# 1:17 gearbox — motor pinion identification and gear train design
 
 ## Motor pinion (measured)
 
@@ -16,17 +16,17 @@
 **24 DP: 3.33 mm** vs module 1: 3.14 mm; or print a 16T/24 DP test pinion
 and check the tooth-in-tooth meshing with the motor pinion.
 
-## ⭐ REVISION (chosen): 1:12.5 gearbox (16→80, 32→80) + 25T→32T pulleys = **exactly 1:16.0**
+## ⭐ REVISION (chosen): 1:13.33 gearbox (16→80, 30→80) + 25T→32T pulleys = **1:17.07**
 
 | Mesh | Ratio | Center distance | Parts |
 |---|---|---|---|
 | **16T motor → 80T** | 5:1 | `96/48` = 2.0000″ = **50.80 mm** | 80T: pitch Ø 84.7, outside Ø **86.8 mm** |
-| **32T → 80T (output)** | 2.5:1 | `112/48` = 2.3333″ = **59.27 mm** | 32T integral with the 1st 80T (compound gear) |
+| **30T → 80T (output)** | 2.667:1 | `110/48` = 2.2917″ = **58.21 mm** | 30T integral with the 1st 80T (compound gear) |
 | **25T → 32T pulleys** | 1.28:1 | — | 25 and 32 **coprime** (wear spread out) |
 
-- **Total: 12.5 × 1.28 = 16.000** — speed ~3.2 m/s @ 50% PWM (10″ wheel), unchanged.
-- ⚠️ **Higher loads at stage 2**: intermediate torque ×5 (1.8 N·m) → **Ft ≈ 106 N** on
-  the 32T. At 20 mm thickness → ~21 MPa (ASA limit): **increase stage 2 to 25 mm** (~17 MPa).
+- **Total: 13.33 × 1.28 = 17.07** — top speed ~3.4 m/s (10″ wheel), firmware-limited to 3.3 m/s; ~7% more torque than 1:16.
+- ⚠️ **Higher loads at stage 2**: intermediate torque ×5 (1.8 N·m) → **Ft ≈ 113 N** on
+  the 30T. At 20 mm thickness → ~22 MPa (ASA limit): **increase stage 2 to 25 mm** (~18 MPa).
 - Higher belt tension than with the large pulleys (~190 N at max torque on a
   25T HTD 5M) — still comfortable for a 15 mm belt.
 - Firmware: `GEAR_RATIO = 1.28` (magnet at the gearbox output). Calculated alternatives:
@@ -39,7 +39,7 @@ and check the tooth-in-tooth meshing with the motor pinion.
 
 **Parametric 3D model**: [`doc/cad/gearbox.scad`](cad/gearbox.scad) (OpenSCAD, standalone —
 involute gear-tooth generator included, revision dimensions as parameters).
-`part` selector: `assembly` / `compound` (80T+32T) / `output` / `back` / `front` /
+`part` selector: `assembly` / `compound` (80T+30T) / `output` / `back` / `front` /
 `pinion_test` (16T test pinion to validate the 24 DP) → direct STL export.
 
 ![OpenSCAD render](cad/gearbox_scad.png)
@@ -109,7 +109,7 @@ module 2 (15T→30T, center distance 45 mm) — ruled out in favor of reusing th
 30T Ø47.7 → wheel pulley 60T Ø95.5, screwed onto the 12″ rim). Useful tension ≈ 100 N at max
 torque — very comfortable for a 15 mm belt.
 
-> ✅ **Firmware aligned (1:12.5 revision + 1.28 pulleys)**: `hw::GEAR_RATIO = 1.28` (AS5600
+> ✅ **Firmware aligned (1:13.33 revision + 1.28 pulleys)**: `hw::GEAR_RATIO = 1.28` (AS5600
 > magnet on the **gearbox output**) and `WHEEL_DIAM_M = 0.254` (**10″** wheel) applied in
 > config.hpp; vehicle speed in **m/s** (signed average of the 2 wheels — pivot → 0).
 > If the magnet is moved **onto the wheel**, set `GEAR_RATIO` back to 1.

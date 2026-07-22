@@ -43,7 +43,7 @@ struct VehicleParams
     // capped everywhere at kt·i_max: the simulation can NEVER exceed the theoretical
     // capacity of the motors (real stall 85 A and plugging ~150 A are therefore clamped).
     float i_max_a   = 19.6f;
-    float gear      = 16.f;     // total motor → wheel reduction (1:16.0)
+    float gear      = 17.07f;   // total motor → wheel reduction (1:17.07)
     float eta       = 0.85f;    // gearbox + belt efficiency
     float wheel_r_m = hw::WHEEL_DIAM_M / 2.f;
 

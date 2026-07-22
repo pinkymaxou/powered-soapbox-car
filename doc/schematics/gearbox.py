@@ -1,4 +1,4 @@
-# gearbox.py — Printed 1:12.5 gearbox schematic (plan view + axial section).
+# gearbox.py — Printed 1:13.33 gearbox schematic (plan view + axial section).
 # Actual dimensions (24 DP) — see doc/reducteur.md. Regenerate:
 #   . .venv-schem/bin/activate && python doc/schematics/gearbox.py
 import matplotlib
@@ -15,14 +15,14 @@ def outer_d(z): return (z + 2) / DP * IN    # outer Ø
 # Axes (plan view, aligned layout like the prototype)
 A_MOT = (0.0, 0.0)                # motor axis (16T pinion)
 E1 = (16 + 80) / (2 * DP) * IN    # 50.80
-E2 = (32 + 80) / (2 * DP) * IN    # 59.27
-A_INT = (E1, 0.0)                 # intermediate axis (80T + 32T)
+E2 = (30 + 80) / (2 * DP) * IN    # 58.21
+A_INT = (E1, 0.0)                 # intermediate axis (80T + 30T)
 A_OUT = (E1 + E2, 0.0)            # output axis (64T + pulley)
 
 C_PIN, C_64, C_32 = '#888888', '#e6b800', '#e6b800'
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 6.2))
-fig.suptitle("Gearbox 1:12.5 — 16T→80T (5:1) then 32T→80T (2.5:1), 24 DP teeth",
+fig.suptitle("Gearbox 1:13.33 — 16T→80T (5:1) then 30T→80T (2.667:1), 24 DP teeth",
              fontsize=13, fontweight='bold')
 
 # ───────────────────────── Plan view─────────────────────────
@@ -38,12 +38,12 @@ def gear_plan(ax, center, z, color, label, label_dy):
 
 gear_plan(ax1, A_MOT, 16, C_PIN, "16T motor\nØp 16.9", -34)
 gear_plan(ax1, A_INT, 80, C_64, "80T (thk 10)\nØp 84.7", 50)
-gear_plan(ax1, A_INT, 32, C_32, "32T (thk 20)\nØp 33.9", -8)
+gear_plan(ax1, A_INT, 30, C_32, "30T (thk 20)\nØp 31.8", -8)
 gear_plan(ax1, A_OUT, 80, C_64, "80T output\nØp 84.7", 50)
 
 # Dimensioned center distances
 for (x0, x1, txt) in [(A_MOT[0], A_INT[0], "50.80 (2.0000″)"),
-                      (A_INT[0], A_OUT[0], "59.27 (2.3333″)")]:
+                      (A_INT[0], A_OUT[0], "58.21 (2.2917″)")]:
     y = -46
     ax1.annotate('', xy=(x1, y), xytext=(x0, y), arrowprops=dict(arrowstyle='<->', lw=1))
     ax1.text((x0 + x1) / 2, y - 5, txt, ha='center', fontsize=8.5)
@@ -87,7 +87,7 @@ for zb in (Z0 - BRG_T, zfront - 0.001):                                         
 rect(ax2, x - BRG_D / 2, Z0 - BRG_T, BRG_D, BRG_T, facecolor='#88aadd', edgecolor='black', alpha=0.6)
 rect(ax2, x - BRG_D / 2, zfront - BRG_T, BRG_D, BRG_T, facecolor='#88aadd', edgecolor='black', alpha=0.6)
 ax2.text(x, Z0 + T64 / 2, "80T", ha='center', fontsize=8)
-ax2.text(x, Z0 + T64 + T32 / 2, "32T", ha='center', fontsize=8)
+ax2.text(x, Z0 + T64 + T32 / 2, "30T", ha='center', fontsize=8)
 
 # output 64T: at the 32T level (offset by GAP above stage-1 64T)
 xo = A_OUT[0]

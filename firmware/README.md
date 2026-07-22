@@ -290,7 +290,7 @@ Web parameters: **`turn_gain`**, **`turn_full_ms`**, **`turn_hi`**,
 ## ⚠️ To adjust before first startup
 
 - **Speed sensors**: kinematics **hardcoded** in `config.hpp` (`namespace hw`) —
-  `AS5600_CPR = 4096`, `GEAR_RATIO = 1.28` (magnet at the output of the 1:12.5 gearbox, 25T→32T pulleys),
+  `AS5600_CPR = 4096`, `GEAR_RATIO = 1.28` (magnet at the output of the 1:13.33 gearbox, 25T→32T pulleys),
   `WHEEL_DIAM_M = 0.254` (10″ wheel). **2 AS5600**,
   **one per I²C bus** (fixed address `0x36` → a single sensor per bus). To be **verified on the bench**.
 - **Gamepad**: pair (Gamepad tab) then **calibrate** — mandatory to drive.
