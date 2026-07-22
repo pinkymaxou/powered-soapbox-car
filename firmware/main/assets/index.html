@@ -42,6 +42,32 @@
 
  <section id="faults" class="panel" hidden>
   <div class="chart-title">🚨 Currently active faults</div>
+  <svg id="faultdiag" viewBox="0 0 320 285" role="img" aria-label="Fault location on the vehicle (top view)">
+   <text class="diagfront" x="160" y="13" text-anchor="middle">FRONT</text>
+   <g class="fz" id="fz-batt">
+    <rect class="zsh" x="118" y="20" width="84" height="34" rx="7"/>
+    <text class="zlab" x="160" y="41" text-anchor="middle">Battery</text>
+   </g>
+   <rect class="body" x="90" y="60" width="140" height="125" rx="14"/>
+   <text class="ctxlab" x="160" y="96" text-anchor="middle">seat / frame</text>
+   <circle class="ctx" cx="160" cy="150" r="15"/>
+   <text class="ctxlab" x="160" y="200" text-anchor="middle">rear caster (free)</text>
+   <g class="fz" id="fz-wl">
+    <rect class="zsh" x="50" y="76" width="30" height="80" rx="7"/>
+    <text class="zlab" x="65" y="121" text-anchor="middle">L</text>
+   </g>
+   <g class="fz" id="fz-wr">
+    <rect class="zsh" x="240" y="76" width="30" height="80" rx="7"/>
+    <text class="zlab" x="255" y="121" text-anchor="middle">R</text>
+   </g>
+   <g class="fz" id="fz-pad">
+    <rect class="zsh" x="103" y="228" width="114" height="42" rx="13"/>
+    <circle class="stick" cx="128" cy="254" r="5"/>
+    <circle class="stick" cx="192" cy="254" r="5"/>
+    <text class="zlab" x="160" y="244" text-anchor="middle">Gamepad</text>
+   </g>
+  </svg>
+  <div class="diagcap">Red highlights the area affected by an active fault.</div>
   <div id="faultlist" class="faultlist"></div>
   <p class="note">A fault <b>disarms</b> the kart and engages dynamic braking. Encoder
   faults (stuck / reversed / erratic) stay <b>locked until reboot</b>; the
@@ -406,22 +432,32 @@ function setBattType(bt,lo,hi){
  if(chBatt&&hi>lo){const y=chBatt.options.scales.y;y.min=battLow;y.max=battFull;y.ticks.stepSize=(battFull-battLow)/4;chBatt.update('none');}
 }
 // Bits of the "faults" mask (see controller.cpp): all conditions ACTIVE at the same time.
+// z = area(s) highlighted on the vehicle diagram (see updateFaultDiag).
 const FAULTS_DESC=[
- {b:0, t:'Gamepad emergency stop (button B)', d:'Button B is/was pressed. Release it, then rearm with START.', grave:true},
- {b:1, t:'Low battery (LVC)',                     d:'Voltage below the cutoff threshold of the detected battery type (12/24 V). Recharge the battery; automatic power cutoff if the condition persists.', grave:true},
- {b:2, t:'Gamepad not calibrated',               d:'Start the stick calibration (Gamepad tab).', grave:true},
- {b:3, t:'Encoder: wheel stuck',                 d:'PWM applied but no rotation measured. Jammed wheel, broken belt or AS5600 sensor unplugged. Locked until reboot.', grave:true},
- {b:4, t:'Gamepad disconnected',                 d:'No Bluetooth gamepad connected. Turn on/pair the gamepad.', grave:true},
- {b:5, t:'Voltage sensor absent (info)',         d:'ADS1115 not detected: no LVC and no automatic PWM cap. OK on the bench; to be wired before driving.', grave:false},
- {b:6, t:'Encoder: direction reversed',          d:'The wheel turns clearly opposite to the command: sensor or motor wired backwards. FULL STOP, locked until reboot.', grave:true},
- {b:8, t:'LEFT encoder absent (AS5600)',         d:'No response from the left sensor on the I2C bus. Check wiring and magnet — or set use_encoders to 0 to drive without control loop.', grave:true},
- {b:9, t:'RIGHT encoder absent (AS5600)',        d:'No response from the right sensor on the I2C bus. Check wiring and magnet — or set use_encoders to 0 to drive without control loop.', grave:true},
- {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 250 ms: communication lost. Immediate disarm and braking.', grave:true},
- {b:7, t:'Encoder: erratic reading',             d:'Measured speed physically impossible for the kart. Faulty sensor or magnet. FULL STOP, locked until reboot.', grave:true},
+ {b:0, t:'Gamepad emergency stop (button B)', d:'Button B is/was pressed. Release it, then rearm with START.', grave:true, z:['pad']},
+ {b:1, t:'Low battery (LVC)',                     d:'Voltage below the cutoff threshold of the detected battery type (12/24 V). Recharge the battery; automatic power cutoff if the condition persists.', grave:true, z:['batt']},
+ {b:2, t:'Gamepad not calibrated',               d:'Start the stick calibration (Gamepad tab).', grave:true, z:['pad']},
+ {b:3, t:'Encoder: wheel stuck',                 d:'PWM applied but no rotation measured. Jammed wheel, broken belt or AS5600 sensor unplugged. Locked until reboot.', grave:true, z:['wl','wr']},
+ {b:4, t:'Gamepad disconnected',                 d:'No Bluetooth gamepad connected. Turn on/pair the gamepad.', grave:true, z:['pad']},
+ {b:5, t:'Voltage sensor absent (info)',         d:'ADS1115 not detected: no LVC and no automatic PWM cap. OK on the bench; to be wired before driving.', grave:false, z:['batt']},
+ {b:6, t:'Encoder: direction reversed',          d:'The wheel turns clearly opposite to the command: sensor or motor wired backwards. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
+ {b:8, t:'LEFT encoder absent (AS5600)',         d:'No response from the left sensor on the I2C bus. Check wiring and magnet — or set use_encoders to 0 to drive without control loop.', grave:true, z:['wl']},
+ {b:9, t:'RIGHT encoder absent (AS5600)',        d:'No response from the right sensor on the I2C bus. Check wiring and magnet — or set use_encoders to 0 to drive without control loop.', grave:true, z:['wr']},
+ {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 250 ms: communication lost. Immediate disarm and braking.', grave:true, z:['pad']},
+ {b:7, t:'Encoder: erratic reading',             d:'Measured speed physically impossible for the kart. Faulty sensor or magnet. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
 ];
+// Light up the vehicle-diagram zones concerned by the active faults (left/right wheel,
+// battery, gamepad). Side-specific encoder faults (bits 8/9) hit one wheel; the
+// non-sided ones (stuck/reversed/erratic) light up both.
+function updateFaultDiag(mask){
+ const on={wl:0,wr:0,batt:0,pad:0};
+ FAULTS_DESC.forEach(f=>{ if(mask>>>f.b&1)(f.z||[]).forEach(z=>{on[z]=1;}); });
+ for(const z in on){const g=document.getElementById('fz-'+z); if(g)g.classList.toggle('on',!!on[z]);}
+}
 let lastFaults=-1;
 function showFaults(mask){
  if(mask===lastFaults)return; lastFaults=mask;
+ updateFaultDiag(mask);
  const n=FAULTS_DESC.filter(f=>mask>>>f.b&1).length;
  const tab=document.getElementById('faultstab');
  tab.textContent=n?`Faults (${n})`:'Faults';

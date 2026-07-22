@@ -10,18 +10,18 @@ header{
  padding:12px 20px;font-size:22px;font-weight:700;letter-spacing:.3px;
  border-bottom:1px solid var(--line);
  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
- position:sticky;top:0;z-index:50;   /* pastilles d'état TOUJOURS visibles en défilant */
+ position:sticky;top:0;z-index:50;   /* status pills ALWAYS visible while scrolling */
 }
-header .brakemode{margin-left:auto}   /* état courant : frein/traction + armé, à droite */
+header .brakemode{margin-left:auto}   /* current state: brake/traction + armed, on the right */
 .hdr-state{font-size:14px;font-weight:700;padding:5px 12px;border-radius:999px;
  background:#333;color:#fff;white-space:nowrap}
-.hdr-state.s0{background:#64748b}                       /* IDLE (désarmé) */
+.hdr-state.s0{background:#64748b}                       /* IDLE (disarmed) */
 .hdr-state.s1{background:var(--accent);color:#06121f}   /* calibration */
-.hdr-state.s2{background:var(--green);color:#04210f}    /* armé */
-.hdr-state.s3{background:var(--red);animation:blink 1s steps(2,start) infinite} /* défaut */
+.hdr-state.s2{background:var(--green);color:#04210f}    /* armed */
+.hdr-state.s3{background:var(--red);animation:blink 1s steps(2,start) infinite} /* fault */
 @keyframes blink{50%{opacity:.35}}
 
-/* Onglets */
+/* Tabs */
 .tabs{display:flex;gap:4px;padding:10px 16px 0;background:var(--bg);
  position:sticky;top:0;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .tab{background:transparent;color:var(--muted);border:0;border-bottom:3px solid transparent;
@@ -33,29 +33,29 @@ header .brakemode{margin-left:auto}   /* état courant : frein/traction + armé,
 .panel{animation:fade .2s ease}
 @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
 
-/* Graphiques */
+/* Charts */
 #chart,#spdchart,#battchart{width:100%;height:auto;background:#000;border:1px solid var(--line);border-radius:10px}
 .chart-title{font-size:13px;color:var(--muted);font-weight:600;margin:10px 0 4px}
 .legend{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:8px 0;font-size:13px}
 .legend span{font-weight:600}
 
-/* Barres de progression (accél / PWM / vitesse / batterie) */
+/* Progress bars (accel / PWM / speed / battery) */
 #bars{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0}
 .bar{margin:9px 0}
 .bar .lbl{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:4px}
 .bar .lbl span:last-child{color:var(--txt);font-family:ui-monospace,Menlo,Consolas,monospace}
 .bar .track{position:relative;height:16px;background:var(--card2);border:1px solid var(--line);border-radius:9px;overflow:hidden}
 .bar .fill{position:absolute;top:0;left:0;height:100%;width:0;transition:left .15s ease,width .15s ease}
-/* Barre bipolaire : repère central (0) ; le remplissage part du centre vers la droite (+) ou la gauche (−) */
+/* Bipolar bar: center mark (0); the fill grows from the center to the right (+) or left (-) */
 .bar .track.bip::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--muted);opacity:.6}
 
-/* Indicateurs (boutons / sorties) */
+/* Indicators (buttons / outputs) */
 #ind{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
 .pill{font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;
  background:var(--card2);color:var(--muted);border:1px solid var(--line);transition:.15s}
 .pill.on{background:var(--green);color:#04210f;border-color:transparent}
 
-/* Manette : pavé joystick + boutons */
+/* Gamepad: joystick pad + buttons */
 .padlive{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;margin:8px 0}
 #padview{background:var(--card);border:1px solid var(--line);border-radius:12px}
 .padbtns{display:flex;flex-wrap:wrap;gap:8px;max-width:240px}
@@ -67,34 +67,46 @@ header .brakemode{margin-left:auto}   /* état courant : frein/traction + armé,
 .padtrig .fill{position:absolute;left:0;top:0;height:100%;width:0;background:#8cf;transition:width .12s ease}
 .padraw{font-size:11px;color:var(--muted);margin-top:8px;font-family:ui-monospace,Menlo,Consolas,monospace}
 
-/* Bandeau « pourquoi le véhicule ne peut pas bouger » */
+/* Banner "why the vehicle cannot move" */
 .why{background:#3a1212;border:1px solid #a33;color:#ffd9d9;border-radius:12px;padding:10px 14px;margin:0 0 12px;font-size:14px}
 .why ul{margin:6px 0 0;padding-left:20px}
 .why li{margin:2px 0}
 
-/* Bloc d'état */
+/* Status block */
 .status{background:var(--card);border:1px solid var(--line);border-radius:12px;
  padding:14px 16px;font-family:ui-monospace,Menlo,Consolas,monospace;
  font-size:13px;line-height:1.55;white-space:pre-wrap;margin:12px 0}
 
-/* Formulaire de configuration */
+/* Configuration form */
 form{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 14px;margin:12px 0}
 label{display:flex;justify-content:space-between;align-items:center;gap:12px;
  padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px;color:var(--muted)}
 label:last-child{border-bottom:0}
-/* Catégories du formulaire de config (bandeaux pleine largeur dans la carte) */
+/* Config-form categories (full-width headers inside the card) */
 .cfgcat{margin:10px -14px 2px;padding:6px 14px;background:var(--card2);
  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
  font-weight:600;font-size:13px;color:var(--accent);letter-spacing:.4px}
 .cfgcat:first-child{margin-top:-8px;border-top:0;border-radius:12px 12px 0 0}
 label[title]{cursor:help}
-/* Page Défauts */
+/* Faults page */
 .faultlist{display:flex;flex-direction:column;gap:8px;margin:10px 0}
 .faultcard{background:#3a1212;border:1px solid #a33;color:#ffd9d9;border-radius:10px;padding:10px 14px;font-size:14px}
 .faultcard.info{background:#33301a;border-color:#aa3;color:#f5edc2}
 .faultok{background:#12351b;border:1px solid #3a5;color:#c9f5d4;border-radius:10px;padding:12px 14px;font-size:15px}
 .tab.tabalert{color:#fff;background:var(--red)}
-/* Badge permanent du mode de freinage (traction / dynamique / actif) */
+/* Fault-location diagram (top view of the tricycle) */
+#faultdiag{width:100%;max-width:300px;display:block;margin:6px auto 2px}
+#faultdiag .body,#faultdiag .ctx,#faultdiag .zsh{fill:var(--card2);stroke:var(--line);stroke-width:2}
+#faultdiag .diagfront{fill:var(--muted);font:10px system-ui,sans-serif;letter-spacing:2px}
+#faultdiag .ctxlab{fill:var(--muted);font:11px system-ui,sans-serif}
+#faultdiag .zlab{fill:var(--muted);font:600 13px system-ui,sans-serif}
+#faultdiag .stick{fill:var(--line)}
+#faultdiag .fz.on .zsh{fill:#4a1414;stroke:var(--red);stroke-width:2.5;animation:fpulse 1.1s ease-in-out infinite}
+#faultdiag .fz.on .zlab,#faultdiag .fz.on .stick{fill:#ffd9d9}
+#faultdiag .fz.on .stick{fill:#ffd9d9}
+@keyframes fpulse{50%{stroke-opacity:.35}}
+.diagcap{color:var(--muted);font-size:12px;text-align:center;margin:0 0 6px}
+/* Persistent brake-mode badge (traction / dynamic / active) */
 .pill.brakemode{font-weight:600}
 .pill.bm0{background:#2a3550;color:#cfe2ff}
 .pill.bm1{background:#4a3410;color:#ffd9a0;border:1px solid var(--amber)}
@@ -104,7 +116,7 @@ input{width:120px;background:var(--card2);color:var(--txt);border:1px solid var(
  border-radius:8px;padding:7px 9px;font-size:14px;text-align:right}
 input:focus{outline:none;border-color:var(--accent)}
 
-/* Boutons */
+/* Buttons */
 .row{display:flex;gap:10px;flex-wrap:wrap}
 button{background:var(--accent);color:#06121f;border:0;border-radius:10px;
  padding:11px 18px;font-size:15px;font-weight:700;margin:6px 0;cursor:pointer;transition:filter .15s}
@@ -113,7 +125,7 @@ button.alt{background:var(--card2);color:var(--txt);border:1px solid var(--line)
 button.warn{background:var(--amber);color:#241a00}
 button.danger{background:var(--red);color:#2a0606}
 
-/* Tableau de brochage */
+/* Pinout table */
 table.pins{width:100%;border-collapse:collapse;background:var(--card);
  border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:14px}
 table.pins th,table.pins td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line)}
