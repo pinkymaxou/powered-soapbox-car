@@ -44,6 +44,28 @@ involute gear-tooth generator included, revision dimensions as parameters).
 
 ![OpenSCAD render](cad/gearbox_scad.png)
 
+### PETG print profile — gears (validated)
+
+Settings that finally printed the gears cleanly after chasing a recurring extruder jam
+(all-metal hotend):
+
+- **Nozzle 260 °C.** Do **not** lower the first-layer temperature — a cooler, more viscous
+  first layer raises back-pressure and jams. A little stringing at 260 °C is purely cosmetic
+  on a gear; peel it off / clean the tooth flanks.
+- **Heatsink (hotend) fan at 100%** the whole time.
+- **Enclosure open.** PETG needs no chamber, and a warm enclosure made the jamming worse
+  (heat creep + hotter extruder motor).
+- **≥ 5 perimeters** (solid teeth), **40–60% infill**, printed **flat** (gear face on the
+  bed) so the tooth-bending load runs in-plane with the layers, not across them.
+- **One gear per plate** — fewer travel moves = fewer retractions (a heat-creep contributor).
+- **Retraction short and slow** for all-metal PETG: ≈1 mm @ 25–30 mm/s (direct drive) or
+  ≈4 mm @ 25–35 mm/s (Bowden); keep ≤ 35 mm/s so the soft PETG is pulled, not ground.
+- **Filament dry** (PETG is hygroscopic) and at the correct 1.75 mm diameter.
+
+> Diagnostic note: the jam was **thermal/flow**, not mechanical. Ruled out along the way —
+> moisture (fresh vacuum-sealed spool), a nozzle clog (clean cold pull), and oversized
+> filament (measured). It was cured by **more heat (260 °C) + maximum heat-break cooling +
+> an open chamber**, not by lowering the temperature.
 
 ---
 
