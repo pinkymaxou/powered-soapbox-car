@@ -53,8 +53,8 @@ Settings that finally printed the gears cleanly after chasing a recurring extrud
   first layer raises back-pressure and jams. A little stringing at 260 °C is purely cosmetic
   on a gear; peel it off / clean the tooth flanks.
 - **Heatsink (hotend) fan at 100%** the whole time.
-- **Enclosure open.** PETG needs no chamber, and a warm enclosure made the jamming worse
-  (heat creep + hotter extruder motor).
+- **Enclosure open** (validated on an enclosed printer with the lid removed). PETG needs no
+  chamber, and a warm enclosure made the jamming worse (heat creep + hotter extruder motor).
 - **≥ 5 perimeters** (solid teeth), **40–60% infill**, printed **flat** (gear face on the
   bed) so the tooth-bending load runs in-plane with the layers, not across them.
 - **One gear per plate** — fewer travel moves = fewer retractions (a heat-creep contributor).
