@@ -49,17 +49,18 @@ involute gear-tooth generator included, revision dimensions as parameters).
 Settings that finally printed the gears cleanly after chasing a recurring extruder jam
 (all-metal hotend):
 
-- **Nozzle 260 °C.** Do **not** lower the first-layer temperature — a cooler, more viscous
-  first layer raises back-pressure and jams. A little stringing at 260 °C is purely cosmetic
-  on a gear; peel it off / clean the tooth flanks.
+- **Nozzle 260 °C, first layer also 260 °C** (0.4 mm nozzle, 0.12 mm layers). Do **not**
+  lower the first-layer temperature — a cooler, more viscous first layer raises back-pressure
+  and jams. A little stringing at 260 °C is purely cosmetic on a gear; peel it off / clean
+  the tooth flanks.
 - **Heatsink (hotend) fan at 100%** the whole time.
 - **Enclosure open** (validated on an enclosed printer with the lid removed). PETG needs no
   chamber, and a warm enclosure made the jamming worse (heat creep + hotter extruder motor).
-- **≥ 5 perimeters** (solid teeth), **40–60% infill**, printed **flat** (gear face on the
+- **≥ 5 perimeters** (solid teeth), **gyroid infill**, printed **flat** (gear face on the
   bed) so the tooth-bending load runs in-plane with the layers, not across them.
 - **One gear per plate** — fewer travel moves = fewer retractions (a heat-creep contributor).
-- **Retraction short and slow** for all-metal PETG: ≈1 mm @ 25–30 mm/s (direct drive) or
-  ≈4 mm @ 25–35 mm/s (Bowden); keep ≤ 35 mm/s so the soft PETG is pulled, not ground.
+- **Retraction 1 mm @ 35 mm/s** (validated, direct-drive extruder) — short and slow so the
+  soft PETG is pulled, not ground; Bowden setups need more (~4 mm).
 - **Filament dry** (PETG is hygroscopic) and at the correct 1.75 mm diameter.
 
 > Diagnostic note: the jam was **thermal/flow**, not mechanical. Ruled out along the way —
