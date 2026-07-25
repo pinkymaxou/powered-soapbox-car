@@ -137,15 +137,19 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     // Count rate (counts/s), smoothed by EMA (attenuates the quantization of the Δangle per
     // tick at low speed) then converted by the CONFIG RATIOS (enc_mps_per_cps /
     // enc_rpm_per_cps) — the core knows neither the CPR, nor the reduction, nor the wheel.
-    const float cps_l = use_enc ? static_cast<float>(in.sensors.enc_delta_l) * hw::CTRL_HZ : 0.f;
-    const float cps_r = use_enc ? static_cast<float>(in.sensors.enc_delta_r) * hw::CTRL_HZ : 0.f;
+    // The encoders are ALWAYS read and published (bench gearbox testing: watch the rpm even
+    // disarmed or with use_encoders=0). use_encoders only decides whether the CONTROL loop
+    // TRUSTS them (speed limiter, brake PID, rollover limit, encoder faults) — not the display.
+    const float cps_l = static_cast<float>(in.sensors.enc_delta_l) * hw::CTRL_HZ;
+    const float cps_r = static_cast<float>(in.sensors.enc_delta_r) * hw::CTRL_HZ;
     m_cps_l += hw::SPEED_EMA_ALPHA * (cps_l - m_cps_l);
     m_cps_r += hw::SPEED_EMA_ALPHA * (cps_r - m_cps_r);
-    const float sl = m_cps_l * m_cfg.enc_mps_per_cps;   // SIGNED wheel speeds (m/s)
+    const float sl = m_cps_l * m_cfg.enc_mps_per_cps;   // SIGNED wheel speeds (m/s), measured
     const float sr = m_cps_r * m_cfg.enc_mps_per_cps;
-    // VEHICLE speed (m/s) = signed average of the two wheels: two wheels equal in opposite
-    // directions (pivot in place) → 0 m/s. It is what drives the driving adjustments.
-    const float v_veh = 0.5f * (sl + sr);
+    const float v_meas = 0.5f * (sl + sr);   // measured vehicle speed (m/s) — for telemetry
+    // CONTROL speed: forced to 0 without encoders so nothing (limiter / brake / rollover
+    // limit) trusts them. Pivot in place (two opposite wheels) also averages to ~0.
+    const float v_veh = use_enc ? v_meas : 0.f;
     if (!use_enc)
     {
         m_enc_fault = false;   // no encoders → no "sensor" fault
@@ -348,7 +352,7 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     m_tel.speed_r    = sr;
     m_tel.rpm_l      = m_cps_l * m_cfg.enc_rpm_per_cps;
     m_tel.rpm_r      = m_cps_r * m_cfg.enc_rpm_per_cps;
-    m_tel.speed_ms   = v_veh;
+    m_tel.speed_ms   = v_meas;   // measured (display); control uses v_veh (0 if !use_encoders)
     m_tel.fwd        = fwd;
     m_tel.turn       = turn;
     m_tel.out_l      = out_l;
