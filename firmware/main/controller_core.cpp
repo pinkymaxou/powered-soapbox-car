@@ -354,11 +354,19 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     m_tel.faults     = fmask;
     m_tel.vbat       = vbat;
     m_tel.batt_type  = m_batt_det.volts;
-    m_tel.speed_l    = sl;
-    m_tel.speed_r    = sr;
-    m_tel.rpm_l      = m_cps_l * m_cfg.enc_rpm_per_cps;
-    m_tel.rpm_r      = m_cps_r * m_cfg.enc_rpm_per_cps;
-    m_tel.speed_ms   = v_meas;   // measured (display); control uses v_veh (0 if !use_encoders)
+    // Don't publish a speed/rpm for a wheel whose encoder is IN ERROR — absent, magnet out of
+    // field, or a latched encoder fault (stuck/reversed/erratic): the reading is meaningless →
+    // 0 as fallback. (Control above still uses the RAW sl/sr so its sanity checks can fault.)
+    const bool enc_faulted = m_enc_fault || m_enc_rev_fault || m_enc_mad_fault;
+    const bool enc_l_valid = in.sensors.enc_ok_l && in.sensors.mag_ok_l && !enc_faulted;
+    const bool enc_r_valid = in.sensors.enc_ok_r && in.sensors.mag_ok_r && !enc_faulted;
+    const float sl_disp = enc_l_valid ? sl : 0.f;
+    const float sr_disp = enc_r_valid ? sr : 0.f;
+    m_tel.speed_l    = sl_disp;
+    m_tel.speed_r    = sr_disp;
+    m_tel.rpm_l      = enc_l_valid ? m_cps_l * m_cfg.enc_rpm_per_cps : 0.f;
+    m_tel.rpm_r      = enc_r_valid ? m_cps_r * m_cfg.enc_rpm_per_cps : 0.f;
+    m_tel.speed_ms   = 0.5f * (sl_disp + sr_disp);   // display; 0 for any wheel in error
     m_tel.fwd        = fwd;
     m_tel.turn       = turn;
     m_tel.out_l      = out_l;
