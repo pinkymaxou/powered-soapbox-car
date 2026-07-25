@@ -177,6 +177,11 @@ void initEncoders()
 // control loop via angleDelta → feeds the "encoder absent" faults per wheel).
 std::atomic<bool> m_enc_present[2] = {false, false};
 
+// Magnet-in-field per AS5600 (STATUS register MD/ML/MH), polled at ~10 Hz. Default true so a
+// transient/missing read never phantom-faults; a truly absent chip is caught by m_enc_present.
+std::atomic<bool> m_mag_ok[2] = {true, true};
+int m_mag_tick = 0;
+
 // Raw 12-bit angle (0..4095) of sensor `i`. Returns -1 if absent/error.
 int readAngleRaw(int i)
 {
@@ -323,6 +328,23 @@ int board::encLeftDelta()  { return angleDelta(0); }
 int board::encRightDelta() { return angleDelta(1); }
 bool board::encLeftPresent()  { return m_enc_present[0].load(); }
 bool board::encRightPresent() { return m_enc_present[1].load(); }
+bool board::encLeftMagOk()  { return m_mag_ok[0].load(); }
+bool board::encRightMagOk() { return m_mag_ok[1].load(); }
+
+// Poll the AS5600 STATUS register (0x0B) for both buses at ~10 Hz (MAG_READ_TICKS). Magnet OK
+// = MD set AND not too weak (ML) AND not too strong (MH). On read failure, keep the last value.
+void board::refreshMagStatus()
+{
+    if (0 != (m_mag_tick++ % hw::MAG_READ_TICKS)) return;
+    for (int i = 0; i < 2; ++i)
+    {
+        if (!m_as[i]) { m_mag_ok[i].store(false); continue; }
+        const uint8_t reg = hw::AS5600_REG_STATUS;
+        uint8_t s = 0;
+        if (ESP_OK == i2c_master_transmit_receive(m_as[i], &reg, 1, &s, 1, 20))
+            m_mag_ok[i].store((s & hw::AS5600_MD) && !(s & hw::AS5600_ML) && !(s & hw::AS5600_MH));
+    }
+}
 
 void board::pollButtons()
 {

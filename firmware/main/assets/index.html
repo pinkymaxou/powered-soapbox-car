@@ -163,7 +163,7 @@
 const STATE={LOCKOUT:0,CALIBRATE:1,RUN:2,FAULT:3};
 const FAULT={NONE:0,ESTOP:1,LVC:2,NOT_CALIBRATED:3,ENCODER:4,ENCODER_DIR:5,ENCODER_MAD:6,ENCODER_ABSENT:7};
 const ST=["IDLE","CALIBRATION","ARMED","FAULT"];                       // labels per STATE
-const FA=["—","E-STOP","LOW BATTERY","NOT CALIBRATED","ENCODER STUCK","ENCODER REVERSED","ENCODER ERRATIC","ENCODER ABSENT"];  // labels per FAULT
+const FA=["—","E-STOP","LOW BATTERY","NOT CALIBRATED","ENCODER STUCK","ENCODER REVERSED","ENCODER ERRATIC","ENCODER ABSENT","MAGNET OUT OF RANGE"];  // labels per FAULT
 // ── BINARY protocol (Protocol Buffers) ──
 // Descriptor = exact mirror of firmware/main/proto/kart.proto (same names, same numbers).
 // Decoded by the protobuf.js runtime (/pb.js, embedded). The frames are ~3× smaller
@@ -459,6 +459,8 @@ const FAULTS_DESC=[
  {b:9, t:'RIGHT encoder absent (AS5600)',        d:'No response from the right sensor on the I2C bus. Check wiring and magnet — or set use_encoders to 0 to drive without control loop.', grave:true, z:['wr']},
  {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 250 ms: communication lost. Immediate disarm and braking.', grave:true, z:['pad']},
  {b:7, t:'Encoder: erratic reading',             d:'Measured speed physically impossible for the kart. Faulty sensor or magnet. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
+ {b:11,t:'LEFT encoder: magnet out of range',    d:'The left AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wl']},
+ {b:12,t:'RIGHT encoder: magnet out of range',   d:'The right AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wr']},
 ];
 // Light up the vehicle-diagram zones concerned by the active faults (left/right wheel,
 // battery, gamepad). Side-specific encoder faults (bits 8/9) hit one wheel; the

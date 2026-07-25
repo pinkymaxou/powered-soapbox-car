@@ -189,6 +189,10 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     // the limiter would think the wheel is stopped. With use_encoders=0 (bench): simply ignored.
     const bool enc_l_abs = use_enc && !in.sensors.enc_ok_l;
     const bool enc_r_abs = use_enc && !in.sensors.enc_ok_r;
+    // Magnet out of field (AS5600 STATUS): the chip responds but MD=0 / too weak / too strong.
+    // ALWAYS reported (bench alignment, even with use_encoders=0); BLOCKING only when use_enc.
+    const bool mag_l_out = in.sensors.enc_ok_l && !in.sensors.mag_ok_l;
+    const bool mag_r_out = in.sensors.enc_ok_r && !in.sensors.mag_ok_r;
 
     // BITSET of ALL active errors/conditions — the sole representation of the
     // core's faults. fb::BLOCKING forbids driving; the priority fault for
@@ -205,8 +209,10 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     if (m_enc_mad_fault)                         fmask |= fb::ENC_MAD;
     if (enc_l_abs)                               fmask |= fb::ENC_L_ABS;
     if (enc_r_abs)                               fmask |= fb::ENC_R_ABS;
+    if (mag_l_out)                               fmask |= fb::MAG_L;
+    if (mag_r_out)                               fmask |= fb::MAG_R;
 
-    const bool blocking = (0 != (fmask & fb::BLOCKING));
+    const bool blocking = (0 != (fmask & fb::BLOCKING)) || (use_enc && (mag_l_out || mag_r_out));
 
     // Gamepad absent / gamepad e-stop / BLOCKING FAULT → we disarm and brake (absolute
     // safety). A fault forces disarming: re-arm (START held) once resolved.

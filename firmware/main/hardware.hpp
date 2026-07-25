@@ -29,6 +29,9 @@ int encRightDelta();   // front right wheel  (I2C bus 1)
 uint32_t ledcClkFixCount();   // number of LEDC clock-gate repairs (DPORT anti-race sentinel)
 bool encLeftPresent();   // last I2C read of the left AS5600 succeeded
 bool encRightPresent();  // same, right
+bool encLeftMagOk();     // AS5600 STATUS: left magnet properly in field (MD, not too weak/strong)
+bool encRightMagOk();    // same, right
+void refreshMagStatus(); // poll the AS5600 STATUS register (rate-limited); call once per control tick
 
 // START button: pollButtons() once per tick (debounce), then btnStart().
 void pollButtons();

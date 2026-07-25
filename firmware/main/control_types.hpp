@@ -53,6 +53,11 @@ constexpr float WHEEL_DIAM_M  = 0.254f;   // 10" wheel
 constexpr int     I2C_FREQ_HZ       = 400000;  // Fast-mode (the sensor supports up to 1 MHz)
 constexpr uint8_t AS5600_ADDR       = 0x36;    // fixed I2C address (a single sensor per bus)
 constexpr uint8_t AS5600_REG_RAWANG = 0x0C;    // RAW ANGLE 12-bit (bytes 0x0C MSB / 0x0D LSB)
+constexpr uint8_t AS5600_REG_STATUS = 0x0B;    // magnet detection register
+constexpr uint8_t AS5600_MD         = 0x20;    // STATUS bit 5: magnet detected (in field)
+constexpr uint8_t AS5600_ML         = 0x10;    // STATUS bit 4: AGC max → magnet too WEAK / too far
+constexpr uint8_t AS5600_MH         = 0x08;    // STATUS bit 3: AGC min → magnet too STRONG / too close
+constexpr int     MAG_READ_TICKS    = 50;      // poll STATUS at CTRL_HZ/50 ≈ 10 Hz (not every tick)
 
 constexpr int   VBAT_SAG_DEBOUNCE_MS = 500;
 constexpr int   LVC_POWEROFF_MS      = 30000;  // auto power cutoff (powerOff) after 30 s below the threshold
@@ -163,7 +168,7 @@ enum class State : int { Lockout = 0, Calibrate = 1, Run = 2, Fault = 3 };
 // Dynamic = phase short-circuit (default state, disarmed, or fallback without encoders);
 // Active  = PID braking (speed command 0) — requires encoders present AND brk_pid_enable=1.
 enum class BrakeMode : int { None = 0, Dynamic = 1, Active = 2 };
-enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4, EncoderDir = 5, EncoderMad = 6, EncoderAbsent = 7 };
+enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4, EncoderDir = 5, EncoderMad = 6, EncoderAbsent = 7, EncoderMagnet = 8 };
 
 // Bits of the m_faults mask: ALL conditions active simultaneously (m_fault keeps only
 // the highest-priority one). Single source on the firmware side; presentation mirror on the
@@ -181,6 +186,8 @@ constexpr unsigned ENC_MAD   = 1u << 7;   // aberrant speed measurement
 constexpr unsigned ENC_L_ABS = 1u << 8;   // left AS5600 absent (I2C silent) — if use_encoders=1
 constexpr unsigned ENC_R_ABS = 1u << 9;   // right AS5600 absent — if use_encoders=1
 constexpr unsigned PAD_STALE = 1u << 10;  // gamepad "connected" but silent > 250 ms (heartbeat)
+constexpr unsigned MAG_L     = 1u << 11;  // left AS5600 magnet out of field (absent/too far/too close)
+constexpr unsigned MAG_R     = 1u << 12;  // right AS5600 magnet out of field
 
 // Aggregates: BLOCKING forbids driving (disarm + State::Fault);
 // HARD deserves the strong rumble (every blocking fault except the missing calibration).
@@ -195,6 +202,7 @@ inline Fault primaryFault(unsigned faults)
 {
     if (faults & fb::LVC)                         return Fault::Lvc;
     if (faults & (fb::ENC_L_ABS | fb::ENC_R_ABS)) return Fault::EncoderAbsent;
+    if (faults & (fb::MAG_L | fb::MAG_R))         return Fault::EncoderMagnet;
     if (faults & fb::ENC_MAD)                     return Fault::EncoderMad;
     if (faults & fb::ENC_REV)                     return Fault::EncoderDir;
     if (faults & fb::ENC_STUCK)                   return Fault::Encoder;

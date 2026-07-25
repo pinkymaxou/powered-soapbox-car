@@ -20,6 +20,9 @@ SensorReadings EspController::readSensors()
     s.enc_delta_r = board::encRightDelta();
     s.enc_ok_l = board::encLeftPresent();
     s.enc_ok_r = board::encRightPresent();
+    board::refreshMagStatus();                 // poll AS5600 STATUS (rate-limited internally)
+    s.mag_ok_l = board::encLeftMagOk();
+    s.mag_ok_r = board::encRightMagOk();
     const float pin_v = board::vbatVolts(hw::ADC_OVERSAMPLE);
     s.vbat_ok = (pin_v >= 0.f);
     s.vbat_v = s.vbat_ok ? pin_v * m_ctrl.config().vbat_div_ratio : -1.f;

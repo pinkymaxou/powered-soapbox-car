@@ -25,6 +25,8 @@ struct SensorReadings
     int   enc_delta_r = 0;
     bool  enc_ok_l = false;   // I2C read succeeded (false = sensor absent/silent)
     bool  enc_ok_r = false;
+    bool  mag_ok_l = true;    // AS5600 STATUS: magnet properly in field (MD, not too weak/strong)
+    bool  mag_ok_r = true;    // default true = assume OK if a host does not populate it
     float vbat_v = -1.f;      // BATTERY voltage in VOLTS — the ADC pin →
                               // battery conversion (divider ratio) is done ON THE HOST
     bool  vbat_ok = false;    // false = ADS1115 absent or read in error
