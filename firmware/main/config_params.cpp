@@ -107,7 +107,7 @@ void KartConfig::setDefaults()
     }
     // Encoder ratios (outside PARAMS — see control_types.hpp): 10" wheel via AS5600 + reduction gear.
     enc_mps_per_cps = 3.14159265f * hw::WHEEL_DIAM_M / (hw::AS5600_CPR * hw::GEAR_RATIO);
-    enc_rpm_per_cps = 60.f / (hw::AS5600_CPR * hw::GEAR_RATIO);
+    enc_rpm_per_cps = 60.f / hw::AS5600_CPR;   // ENCODER-SHAFT rpm (raw, ratio-independent)
 }
 
 void KartConfig::clampAll()

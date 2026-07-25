@@ -72,6 +72,11 @@
     <line class="tread" x1="231" y1="96" x2="231" y2="146"/>
     <text class="zlab" x="231" y="126" text-anchor="middle">R</text>
    </g>
+   <!-- live readouts (from status): per-wheel encoder rpm + final vehicle speed -->
+   <text class="ctxlab" x="150" y="102" text-anchor="middle">vehicle speed</text>
+   <text class="fdms"  id="fd-ms"   x="150" y="121" text-anchor="middle">— m/s</text>
+   <text class="fdrpm" id="fd-rpml" x="69"  y="176" text-anchor="middle">— rpm</text>
+   <text class="fdrpm" id="fd-rpmr" x="231" y="176" text-anchor="middle">— rpm</text>
    <!-- gamepad (wireless remote) -->
    <path class="wave" d="M138 356 q12 -9 24 0 M132 350 q18 -14 36 0"/>
    <g class="fz" id="fz-pad">
@@ -273,8 +278,8 @@ function applyHist(m){
  if(Array.isArray(m.accel))setSeries(chMain,0,m.accel);   // %
  if(Array.isArray(m.pwml)) setSeries(chMain,1,m.pwml);
  if(Array.isArray(m.pwmr)) setSeries(chMain,2,m.pwmr);
- if(Array.isArray(m.rpml)) setSeries(chMain,3,m.rpml);   // rpm left wheel (right axis)
- if(Array.isArray(m.rpmr)) setSeries(chMain,4,m.rpmr);   // rpm right wheel (right axis)
+ if(Array.isArray(m.rpml)) setSeries(chMain,3,m.rpml);   // encoder rpm left (right axis)
+ if(Array.isArray(m.rpmr)) setSeries(chMain,4,m.rpmr);   // encoder rpm right (right axis)
  chMain.update('none');
  if(Array.isArray(m.spd)){ setSeries(chSpd,0,m.spd.map(v=>v/10)); chSpd.update('none'); }   // ×10 → m/s
  if(Array.isArray(m.batt)){ setSeries(chBatt,0,m.batt.map(v=>v/10)); chBatt.update('none'); } // ×10 → V
@@ -293,8 +298,8 @@ const BARS=[
  {id:'pwml', label:'PWM motor L',   color:'#6f6', bip:1, sv:s=>s.out_l*100,      t:s=>(s.out_l*100).toFixed(0)+'% '+dirTxt(s.out_l)},
  {id:'pwmr', label:'PWM motor R',   color:'#fa0', bip:1, sv:s=>s.out_r*100,      t:s=>(s.out_r*100).toFixed(0)+'% '+dirTxt(s.out_r)},
  {id:'spdv', label:'Vehicle speed', color:'#f6f', bip:1, sv:s=>s.speed_ms/5*100, t:s=>s.speed_ms.toFixed(2)+' m/s '+dirTxt(s.speed_ms)},
- {id:'spdl', label:'Left wheel (rpm)', color:'#9e9', bip:1, sv:s=>s.rpm_l/250*100, t:s=>s.rpm_l.toFixed(0)+' rpm '+dirTxt(s.rpm_l)},
- {id:'spdr', label:'Right wheel (rpm)', color:'#fc6', bip:1, sv:s=>s.rpm_r/250*100, t:s=>s.rpm_r.toFixed(0)+' rpm '+dirTxt(s.rpm_r)},
+ {id:'spdl', label:'Left encoder (rpm)', color:'#9e9', bip:1, sv:s=>s.rpm_l/500*100, t:s=>s.rpm_l.toFixed(0)+' rpm '+dirTxt(s.rpm_l)},
+ {id:'spdr', label:'Right encoder (rpm)', color:'#fc6', bip:1, sv:s=>s.rpm_r/500*100, t:s=>s.rpm_r.toFixed(0)+' rpm '+dirTxt(s.rpm_r)},
  {id:'batt', label:'Battery',       color:'#3d9',        v:s=>battPct(s.vbat),    t:s=>s.vbat.toFixed(2)+' V'},
 ];
 function buildBars(){
@@ -423,6 +428,9 @@ function showStatus(s){
  }
  setBattType(s.batt_type||0,s.batt_lo||0,s.batt_hi||0);
  showFaults(s.faults>>>0);
+ const _rl=document.getElementById('fd-rpml'); if(_rl)_rl.textContent=s.rpm_l.toFixed(0)+' rpm';
+ const _rr=document.getElementById('fd-rpmr'); if(_rr)_rr.textContent=s.rpm_r.toFixed(0)+' rpm';
+ const _vm=document.getElementById('fd-ms');   if(_vm)_vm.textContent=s.speed_ms.toFixed(2)+' m/s';
  document.getElementById('status').textContent=
   `State: ${st}${s.fault?('  ·  fault: '+(FA[s.fault]||s.fault)):''}\n`+
   `Gamepad: ${s.pad_conn?'connected':'disconnected'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}\n`+

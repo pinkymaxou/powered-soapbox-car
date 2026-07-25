@@ -82,7 +82,7 @@ struct CtrlTelemetry
     int       batt_type = 0;         // 0 = detecting, 12 or 24
     float     speed_l = 0.f;         // SIGNED left wheel speed (m/s) — enc_mps_per_cps ratio
     float     speed_r = 0.f;
-    float     rpm_l = 0.f;           // SIGNED left wheel (rpm) — enc_rpm_per_cps ratio
+    float     rpm_l = 0.f;           // SIGNED left ENCODER-SHAFT rpm (raw) — enc_rpm_per_cps ratio
     float     rpm_r = 0.f;
     float     speed_ms = 0.f;        // SIGNED VEHICLE speed (m/s), 0 when pivoting
     float     fwd = 0.f;             // forward command after limits [-1..1]

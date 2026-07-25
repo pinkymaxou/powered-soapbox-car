@@ -140,7 +140,7 @@ struct KartConfig
     // change it: different sensor/reduction/wheel). Outside PARAMS: neither NVS nor web page —
     // it's hardware, not tuning. Defaults (setDefaults): real AS5600 + reduction gear.
     float enc_mps_per_cps;   // (m/s wheel) per (count/s) — i.e.: meters per count
-    float enc_rpm_per_cps;   // (rpm wheel) per (count/s)
+    float enc_rpm_per_cps;   // (encoder-SHAFT rpm) per (count/s) — raw, independent of the gear ratio
 
     void setDefaults();
     void clampAll();
