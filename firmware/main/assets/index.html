@@ -74,9 +74,9 @@
    </g>
    <!-- live readouts (from status): per-wheel encoder rpm + final vehicle speed -->
    <text class="ctxlab" x="150" y="102" text-anchor="middle">vehicle speed</text>
-   <text class="fdms"  id="fd-ms"   x="150" y="121" text-anchor="middle">— m/s</text>
-   <text class="fdrpm" id="fd-rpml" x="69"  y="176" text-anchor="middle">— rpm</text>
-   <text class="fdrpm" id="fd-rpmr" x="231" y="176" text-anchor="middle">— rpm</text>
+   <g><title>Final vehicle speed — gear ratio applied (m/s)</title><text class="fdms"  id="fd-ms"   x="150" y="121" text-anchor="middle">— m/s</text></g>
+   <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpml" x="69"  y="176" text-anchor="middle">— rpm</text></g>
+   <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpmr" x="231" y="176" text-anchor="middle">— rpm</text></g>
    <!-- gamepad (wireless remote) -->
    <path class="wave" d="M138 356 q12 -9 24 0 M132 350 q18 -14 36 0"/>
    <g class="fz" id="fz-pad">
@@ -298,13 +298,13 @@ const BARS=[
  {id:'pwml', label:'PWM motor L',   color:'#6f6', bip:1, sv:s=>s.out_l*100,      t:s=>(s.out_l*100).toFixed(0)+'% '+dirTxt(s.out_l)},
  {id:'pwmr', label:'PWM motor R',   color:'#fa0', bip:1, sv:s=>s.out_r*100,      t:s=>(s.out_r*100).toFixed(0)+'% '+dirTxt(s.out_r)},
  {id:'spdv', label:'Vehicle speed', color:'#f6f', bip:1, sv:s=>s.speed_ms/5*100, t:s=>s.speed_ms.toFixed(2)+' m/s '+dirTxt(s.speed_ms)},
- {id:'spdl', label:'Left encoder (rpm)', color:'#9e9', bip:1, sv:s=>s.rpm_l/500*100, t:s=>s.rpm_l.toFixed(0)+' rpm '+dirTxt(s.rpm_l)},
- {id:'spdr', label:'Right encoder (rpm)', color:'#fc6', bip:1, sv:s=>s.rpm_r/500*100, t:s=>s.rpm_r.toFixed(0)+' rpm '+dirTxt(s.rpm_r)},
+ {id:'spdl', label:'Left encoder (rpm)', tip:'Raw encoder-shaft speed — no gear ratio applied', color:'#9e9', bip:1, sv:s=>s.rpm_l/500*100, t:s=>s.rpm_l.toFixed(0)+' rpm '+dirTxt(s.rpm_l)},
+ {id:'spdr', label:'Right encoder (rpm)', tip:'Raw encoder-shaft speed — no gear ratio applied', color:'#fc6', bip:1, sv:s=>s.rpm_r/500*100, t:s=>s.rpm_r.toFixed(0)+' rpm '+dirTxt(s.rpm_r)},
  {id:'batt', label:'Battery',       color:'#3d9',        v:s=>battPct(s.vbat),    t:s=>s.vbat.toFixed(2)+' V'},
 ];
 function buildBars(){
  document.getElementById('bars').innerHTML=BARS.map(b=>
-  `<div class="bar"><div class="lbl"><span>${b.label}</span><span id="${b.id}t">—</span></div>`+
+  `<div class="bar"${b.tip?` title="${b.tip}"`:''}><div class="lbl"><span>${b.label}</span><span id="${b.id}t">—</span></div>`+
   `<div class="track${b.bip?' bip':''}"><div class="fill" id="${b.id}f" style="background:${b.color}"></div></div></div>`).join('');
 }
 // Indicators (pills): buttons + boolean outputs
