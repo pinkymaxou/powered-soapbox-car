@@ -77,6 +77,8 @@
    <g><title>Final vehicle speed — gear ratio applied (m/s)</title><text class="fdms"  id="fd-ms"   x="150" y="121" text-anchor="middle">— m/s</text></g>
    <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpml" x="69"  y="176" text-anchor="middle">— rpm</text></g>
    <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpmr" x="231" y="176" text-anchor="middle">— rpm</text></g>
+   <g><title>5 s filtered average (low-pass, τ=5 s)</title><text class="fdrpm5" id="fd-rpml5" x="69"  y="192" text-anchor="middle">—</text></g>
+   <g><title>5 s filtered average (low-pass, τ=5 s)</title><text class="fdrpm5" id="fd-rpmr5" x="231" y="192" text-anchor="middle">—</text></g>
    <!-- gamepad (wireless remote) -->
    <path class="wave" d="M138 356 q12 -9 24 0 M132 350 q18 -14 36 0"/>
    <g class="fz" id="fz-pad">
@@ -232,6 +234,7 @@ function pbDecode(buf){
 }
 let ws,timer,histTimer,built=false;
 let speedScale=3.3;  // m/s ≙ 100 % (speed bars), set from the config
+let rpm5={l:null,r:null,t:0};   // 5 s low-pass (EMA, τ=5 s) of the encoder rpm, wall-clock dt
 let battLow=0, battFull=1, battType=-1;   // scale received from the FIRMWARE (batt_lo/batt_hi of the status)
 
 // Tabs
@@ -431,6 +434,12 @@ function showStatus(s){
  const _rl=document.getElementById('fd-rpml'); if(_rl)_rl.textContent=s.rpm_l.toFixed(0)+' rpm';
  const _rr=document.getElementById('fd-rpmr'); if(_rr)_rr.textContent=s.rpm_r.toFixed(0)+' rpm';
  const _vm=document.getElementById('fd-ms');   if(_vm)_vm.textContent=s.speed_ms.toFixed(2)+' m/s';
+ // 5 s low-pass (EMA, τ=5 s) of the encoder rpm — wall-clock dt so it's robust to frame rate.
+ const _now=performance.now(), _dt=rpm5.t?Math.min((_now-rpm5.t)/1000,5):0, _a=1-Math.exp(-_dt/5); rpm5.t=_now;
+ rpm5.l = rpm5.l===null ? s.rpm_l : rpm5.l+_a*(s.rpm_l-rpm5.l);
+ rpm5.r = rpm5.r===null ? s.rpm_r : rpm5.r+_a*(s.rpm_r-rpm5.r);
+ const _l5=document.getElementById('fd-rpml5'); if(_l5)_l5.textContent='5 s: '+rpm5.l.toFixed(0);
+ const _r5=document.getElementById('fd-rpmr5'); if(_r5)_r5.textContent='5 s: '+rpm5.r.toFixed(0);
  document.getElementById('status').textContent=
   `State: ${st}${s.fault?('  ·  fault: '+(FA[s.fault]||s.fault)):''}\n`+
   `Gamepad: ${s.pad_conn?'connected':'disconnected'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}\n`+

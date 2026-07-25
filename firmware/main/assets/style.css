@@ -113,6 +113,7 @@ label[title]{cursor:help}
 @keyframes fpulse{50%{stroke-opacity:.35}}
 #faultdiag .fdrpm{fill:var(--txt);font:600 12px ui-monospace,Menlo,Consolas,monospace}
 #faultdiag .fdms{fill:var(--accent);font:700 15px ui-monospace,Menlo,Consolas,monospace}
+#faultdiag .fdrpm5{fill:var(--muted);font:11px ui-monospace,Menlo,Consolas,monospace}
 .diagcap{color:var(--muted);font-size:12px;text-align:center;margin:0 0 6px}
 /* Persistent brake-mode badge (traction / dynamic / active) */
 .pill.brakemode{font-weight:600}
