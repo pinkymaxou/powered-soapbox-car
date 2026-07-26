@@ -187,11 +187,11 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     // ── Faults / non-driving conditions ──
     // ABSENT encoders (I2C silent): with use_encoders=1 it is blocking — PID braking and
     // the limiter would think the wheel is stopped. With use_encoders=0 (bench): simply ignored.
-    const bool enc_l_abs = use_enc && !in.sensors.enc_ok_l;
-    const bool enc_r_abs = use_enc && !in.sensors.enc_ok_r;
-    // Magnet out of field (AS5600 STATUS): the chip responds but MD=0 / too weak / too strong.
-    // ALWAYS reported (bench alignment, even with use_encoders=0); BLOCKING only when use_enc.
-    const bool mag_l_out = in.sensors.enc_ok_l && !in.sensors.mag_ok_l;
+    // Encoder SENSOR status — REPORTED regardless of use_encoders (so the bench sees it with
+    // use_encoders=0); only BLOCKS driving when use_encoders=1 (see `blocking` below).
+    const bool enc_l_abs = !in.sensors.enc_ok_l;   // I2C silent (chip absent/unplugged)
+    const bool enc_r_abs = !in.sensors.enc_ok_r;
+    const bool mag_l_out = in.sensors.enc_ok_l && !in.sensors.mag_ok_l;  // chip present, magnet out of field
     const bool mag_r_out = in.sensors.enc_ok_r && !in.sensors.mag_ok_r;
 
     // BITSET of ALL active errors/conditions — the sole representation of the
@@ -212,7 +212,8 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     if (mag_l_out)                               fmask |= fb::MAG_L;
     if (mag_r_out)                               fmask |= fb::MAG_R;
 
-    const bool blocking = (0 != (fmask & fb::BLOCKING)) || (use_enc && (mag_l_out || mag_r_out));
+    const bool blocking = (0 != (fmask & fb::BLOCKING)) ||
+                          (use_enc && (enc_l_abs || enc_r_abs || mag_l_out || mag_r_out));
 
     // Gamepad absent / gamepad e-stop / BLOCKING FAULT → we disarm and brake (absolute
     // safety). A fault forces disarming: re-arm (START held) once resolved.

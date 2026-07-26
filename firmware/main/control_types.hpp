@@ -192,7 +192,10 @@ constexpr unsigned MAG_R     = 1u << 12;  // right AS5600 magnet out of field
 
 // Aggregates: BLOCKING forbids driving (disarm + State::Fault);
 // HARD deserves the strong rumble (every blocking fault except the missing calibration).
-constexpr unsigned BLOCKING = LVC | NOCAL | ENC_STUCK | ENC_REV | ENC_MAD | ENC_L_ABS | ENC_R_ABS;
+// The encoder-SENSOR conditions (ENC_L_ABS/ENC_R_ABS absence, MAG_L/MAG_R magnet-out) are
+// NOT here: they are reported regardless of use_encoders (so the bench sees the encoder
+// status with use_encoders=0) and only block when use_encoders=1 (handled in step()).
+constexpr unsigned BLOCKING = LVC | NOCAL | ENC_STUCK | ENC_REV | ENC_MAD;
 constexpr unsigned HARD     = BLOCKING & ~NOCAL;
 } // namespace fb
 
