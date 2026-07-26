@@ -81,6 +81,9 @@ const ParamDesc PARAMS[] =
     {"use_encoders",    "Use encoders (0/1)", "Behavior",
      "1 = the AS5600 sensors are used for the speed limiter, PID braking, rollover protection and the blocking sensor fault. 0 = test bench without wired encoders.",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::use_encoders},
+    {"enc_per_wheel",   "Enc turns / wheel turn", "Behavior",
+     "Encoder-shaft turns per wheel turn — set it to match where the magnet sits: gearbox output = 1.28, 1:5 intermediate shaft = 3.41. Converts encoder counts to WHEEL speed (limiter, rollover protection, sanity check). The raw rpm readout is unaffected.",
+     PType::Float, 1.f,   1.28f,  10.f,   &KartConfig::enc_per_wheel},
     {"allow_reverse",   "Reverse (0/1)",    "Behavior",
      "Allow reverse (held by its own speed limit, rev_speed_ms).",
      PType::Bool,  0.f,   1.f,    1.f,    &KartConfig::allow_reverse},
@@ -105,8 +108,9 @@ void KartConfig::setDefaults()
     {
         this->*(PARAMS[i].field) = PARAMS[i].def;
     }
-    // Encoder ratios (outside PARAMS — see control_types.hpp): 10" wheel via AS5600 + reduction gear.
-    enc_mps_per_cps = 3.14159265f * hw::WHEEL_DIAM_M / (hw::AS5600_CPR * hw::GEAR_RATIO);
+    // Derived encoder ratios (see control_types.hpp). enc_mps_per_cps depends on the
+    // enc_per_wheel mount ratio (set by the loop above); enc_rpm_per_cps is the raw shaft rpm.
+    enc_mps_per_cps = 3.14159265f * hw::WHEEL_DIAM_M / (hw::AS5600_CPR * enc_per_wheel);
     enc_rpm_per_cps = 60.f / hw::AS5600_CPR;   // ENCODER-SHAFT rpm (raw, ratio-independent)
 }
 
@@ -117,6 +121,9 @@ void KartConfig::clampAll()
         float& f = this->*(PARAMS[i].field);
         f = std::clamp(f, PARAMS[i].min, PARAMS[i].max);
     }
+    // enc_mps_per_cps depends on enc_per_wheel — recompute after any change so the wheel
+    // speed (limiter / rollover / sanity) matches the encoder mount.
+    enc_mps_per_cps = 3.14159265f * hw::WHEEL_DIAM_M / (hw::AS5600_CPR * enc_per_wheel);
     // (The LVC thresholds are no longer parameters: hard-coded according to the battery
     // 12/24 V detected at startup — hw::VBAT12_*/VBAT24_*, consistency guaranteed.)
 }

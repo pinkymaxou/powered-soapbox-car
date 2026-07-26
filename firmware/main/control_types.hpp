@@ -130,17 +130,18 @@ struct KartConfig
     float vlim_enable;   // 1 = PID speed limiter active; 0 = disabled (testing)
     float brk_pid_enable;// 1 = PID braking active when stopped; 0 = dynamic braking only (testing)
     float use_encoders;  // 1 = speed/brake/fault control via AS5600; 0 = ignore the encoders
+    float enc_per_wheel; // encoder-shaft turns per WHEEL turn (mount: gearbox output 1.28, 1:5 shaft 3.41)
     float allow_reverse;
     float arm_hold_ms;
     float disarm_s;
     float led_count;
     float led_brightness;
 
-    // Encoder tick conversion — GIVEN TO THE CONTROLLER BY CONFIGURATION (the host can
-    // change it: different sensor/reduction/wheel). Outside PARAMS: neither NVS nor web page —
-    // it's hardware, not tuning. Defaults (setDefaults): real AS5600 + reduction gear.
-    float enc_mps_per_cps;   // (m/s wheel) per (count/s) — i.e.: meters per count
-    float enc_rpm_per_cps;   // (encoder-SHAFT rpm) per (count/s) — raw, independent of the gear ratio
+    // Encoder tick conversion — DERIVED (not stored as params): enc_mps_per_cps from
+    // enc_per_wheel (see PARAMS) + the fixed AS5600 CPR and wheel diameter; recomputed by
+    // setDefaults()/clampAll() on any config change. enc_rpm_per_cps is the raw shaft rpm.
+    float enc_mps_per_cps;   // (m/s wheel) per (count/s) — depends on enc_per_wheel (the mount)
+    float enc_rpm_per_cps;   // (encoder-SHAFT rpm) per (count/s) — raw, independent of the ratio
 
     void setDefaults();
     void clampAll();
