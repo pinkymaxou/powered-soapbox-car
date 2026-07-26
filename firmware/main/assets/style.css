@@ -50,7 +50,7 @@ header .brakemode{margin-left:auto}   /* current state: brake/traction + armed, 
 .bar .track.bip::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--muted);opacity:.6}
 
 /* Indicators (buttons / outputs) */
-#ind{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+#ind{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;justify-content:center}
 .pill{font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;
  background:var(--card2);color:var(--muted);border:1px solid var(--line);transition:.15s}
 .pill.on{background:var(--green);color:#04210f;border-color:transparent}
@@ -116,6 +116,13 @@ label[title]{cursor:help}
 #faultdiag .fdrpm{fill:var(--txt);font:600 12px ui-monospace,Menlo,Consolas,monospace}
 #faultdiag .fdms{fill:var(--accent);font:700 15px ui-monospace,Menlo,Consolas,monospace}
 #faultdiag .fdrpm5{fill:var(--muted);font:11px ui-monospace,Menlo,Consolas,monospace}
+#faultdiag .fdpwm{font:600 11px ui-monospace,Menlo,Consolas,monospace}
+#faultdiag .fdpwml{fill:#8f8}
+#faultdiag .fdpwmr{fill:#fb6}
+#faultdiag .pwmtrack{fill:rgba(255,255,255,.06);stroke:var(--line);stroke-width:1}
+#faultdiag .pwmfill{transition:y .1s linear,height .1s linear}
+#faultdiag .pwmzero{stroke:var(--muted);stroke-width:1;opacity:.7}
+#faultdiag .fdmix{fill:var(--green);font:700 13px ui-monospace,Menlo,Consolas,monospace}
 .diagcap{color:var(--muted);font-size:12px;text-align:center;margin:0 0 6px}
 /* Persistent brake-mode badge (traction / dynamic / active) */
 .pill.brakemode{font-weight:600}

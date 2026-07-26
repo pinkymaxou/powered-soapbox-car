@@ -8,17 +8,17 @@
 </head><body>
 <header>🛞 Electric kart<span class="pill brakemode" id="i_brakemode">—</span><span class="hdr-state" id="hdrstate">…</span></header>
 <nav class="tabs">
- <button class="tab active" data-tab="dash">Dashboard</button>
+ <button class="tab active" data-tab="faults" id="faultstab">Dashboard</button>
+ <button class="tab" data-tab="dash">Graph</button>
  <button class="tab" data-tab="cfg">Configuration</button>
  <button class="tab" data-tab="pad">Gamepad</button>
- <button class="tab" data-tab="faults" id="faultstab">Faults</button>
  <button class="tab" data-tab="wifi">Wi-Fi</button>
  <button class="tab" data-tab="pins">Pinout</button>
  <button class="tab" data-tab="sys">System</button>
 </nav>
 <div class="wrap">
 
- <section id="dash" class="panel">
+ <section id="dash" class="panel" hidden>
   <div id="why" class="why" hidden></div>
   <div class="chart-title">Forward · PWM (%) · Wheel RPM — 10 min</div>
   <canvas id="chart" width="520" height="180"></canvas>
@@ -27,7 +27,6 @@
   <div class="chart-title" id="batttitle">🔋 Battery — 30 min</div>
   <canvas id="battchart" width="520" height="90"></canvas>
   <div id="bars"></div>
-  <div id="ind"></div>
   <div class="status" id="status">Connecting…</div>
   <div class="row">
    <button class="danger" onclick="reboot()">⟳ Reboot</button>
@@ -40,7 +39,7 @@
   <button type="button" onclick="save()">💾 Save</button>
  </section>
 
- <section id="faults" class="panel" hidden>
+ <section id="faults" class="panel">
   <div class="chart-title">🚨 Currently active faults</div>
   <svg id="faultdiag" viewBox="0 0 300 392" role="img" aria-label="Fault location on the vehicle (top view)">
    <text class="diagfront" x="150" y="15" text-anchor="middle">▲ FRONT</text>
@@ -79,6 +78,20 @@
    <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpmr" x="231" y="176" text-anchor="middle">— rpm</text></g>
    <g><title>5 s filtered average (low-pass, τ=5 s)</title><text class="fdrpm5" id="fd-rpml5" x="69"  y="192" text-anchor="middle">—</text></g>
    <g><title>5 s filtered average (low-pass, τ=5 s)</title><text class="fdrpm5" id="fd-rpmr5" x="231" y="192" text-anchor="middle">—</text></g>
+   <!-- per-wheel motor PWM as a vertical gauge (fills up = forward, down = reverse) + % label -->
+   <g class="pwmg"><title>Motor PWM (signed) — fills up for forward, down for reverse</title>
+    <rect class="pwmtrack" x="44"  y="88" width="8" height="66" rx="4"/>
+    <rect class="pwmfill fdpwml" id="fd-pwml-bar" x="44"  y="121" width="8" height="0"/>
+    <line class="pwmzero" x1="42"  y1="121" x2="54"  y2="121"/>
+   </g>
+   <g class="pwmg"><title>Motor PWM (signed) — fills up for forward, down for reverse</title>
+    <rect class="pwmtrack" x="248" y="88" width="8" height="66" rx="4"/>
+    <rect class="pwmfill fdpwmr" id="fd-pwmr-bar" x="248" y="121" width="8" height="0"/>
+    <line class="pwmzero" x1="246" y1="121" x2="258" y2="121"/>
+   </g>
+   <g><title>Motor PWM (signed): ▲ forward, ▼ reverse</title><text class="fdpwm fdpwml" id="fd-pwml" x="69"  y="208" text-anchor="middle">PWM —</text></g>
+   <g><title>Motor PWM (signed): ▲ forward, ▼ reverse</title><text class="fdpwm fdpwmr" id="fd-pwmr" x="231" y="208" text-anchor="middle">PWM —</text></g>
+   <g><title>Drive command: forward/reverse/stop + turn (after mixing)</title><text class="fdmix" id="fd-mix" x="150" y="264" text-anchor="middle">—</text></g>
    <!-- gamepad (wireless remote) -->
    <path class="wave" d="M138 356 q12 -9 24 0 M132 350 q18 -14 36 0"/>
    <g class="fz" id="fz-pad">
@@ -89,6 +102,7 @@
    </g>
   </svg>
   <div class="diagcap">Red highlights the area affected by an active fault.</div>
+  <div id="ind"></div>
   <div id="faultlist" class="faultlist"></div>
   <p class="note">A fault <b>disarms</b> the kart and engages dynamic braking. Encoder
   faults (stuck / reversed / erratic) stay <b>locked until reboot</b>; the
@@ -146,7 +160,7 @@
    <tr><td>27 / 14</td><td>I²C bus 1 (SDA/SCL) — AS5600 right wheel (0x36)</td><td>I/O</td></tr>
    <tr><td>16</td><td>Arming button (START)</td><td>input (pull-up)</td></tr>
    <tr><td>13</td><td>POWER_HOLD (power latch, active low)</td><td>output</td></tr>
-   <tr><td>17</td><td>WS2812B LED strip (data)</td><td>output</td></tr>
+   <tr><td>4</td><td>WS2812B LED strip (data)</td><td>output</td></tr>
    <tr><td>2</td><td>Status LED (onboard)</td><td>output</td></tr>
    <tr><th colspan="3">External ADS1115 ADC (I²C bus 0, 3.3 V)</th></tr>
    <tr><td>A0</td><td>Battery voltage (100k/15k divider) — continuous</td><td>ADC input</td></tr>
@@ -243,6 +257,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
  t.classList.add('active');
  document.querySelectorAll('.panel').forEach(p=>p.hidden=(p.id!==t.dataset.tab));
+ if(t.dataset.tab==='dash'){[chMain,chSpd,chBatt].forEach(c=>{if(c){c.resize();c.update('none');}});}  // was hidden → size now
  if(t.dataset.tab==='wifi') loadWifi();
  if(t.dataset.tab==='sys') loadSys();
  if(t.dataset.tab==='pad') loadPad();
@@ -441,6 +456,19 @@ function showStatus(s){
  rpm5.r = rpm5.r===null ? s.rpm_r : rpm5.r+_a*(s.rpm_r-rpm5.r);
  const _l5=document.getElementById('fd-rpml5'); if(_l5)_l5.textContent='5 s: '+rpm5.l.toFixed(0);
  const _r5=document.getElementById('fd-rpmr5'); if(_r5)_r5.textContent='5 s: '+rpm5.r.toFixed(0);
+ // Mix outputs on the schematic: drive (fwd/rev/stop) + turn, and per-motor PWM.
+ const _sv=(id,t)=>{const e=document.getElementById(id); if(e)e.textContent=t;};
+ const _pct=v=>(Math.abs(v)*100).toFixed(0), _arw=v=>v>0.02?'▲':(v<-0.02?'▼':'■');
+ const _drv=s.fwd>0.02?('▲ FWD '+_pct(s.fwd)+'%'):(s.fwd<-0.02?('▼ REV '+_pct(s.fwd)+'%'):'■ STOP');
+ const _trn=s.turn>0.02?(' · ▶ '+_pct(s.turn)+'%'):(s.turn<-0.02?(' · ◀ '+_pct(s.turn)+'%'):'');
+ _sv('fd-mix',_drv+_trn);
+ // PWM gauge: 33 px = half of the 66 px track; fill grows up (forward) or down (reverse) from centre y=121.
+ const _pwm=(id,v)=>{const b=document.getElementById(id); if(!b)return;
+   const h=Math.min(Math.abs(v),1)*33;
+   b.setAttribute('y',(v>=0?121-h:121).toFixed(1)); b.setAttribute('height',h.toFixed(1));};
+ _pwm('fd-pwml-bar',s.out_l); _pwm('fd-pwmr-bar',s.out_r);
+ _sv('fd-pwml','PWM '+_arw(s.out_l)+_pct(s.out_l)+'%');
+ _sv('fd-pwmr','PWM '+_arw(s.out_r)+_pct(s.out_r)+'%');
  document.getElementById('status').textContent=
   `State: ${st}${s.fault?('  ·  fault: '+(FA[s.fault]||s.fault)):''}\n`+
   `Gamepad: ${s.pad_conn?'connected':'disconnected'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}\n`+
@@ -498,7 +526,7 @@ function showFaults(mask){
  updateFaultDiag(mask);
  const n=FAULTS_DESC.filter(f=>mask>>>f.b&1).length;
  const tab=document.getElementById('faultstab');
- tab.textContent=n?`Faults (${n})`:'Faults';
+ tab.textContent=n?`Dashboard (${n})`:'Dashboard';
  tab.classList.toggle('tabalert',!!FAULTS_DESC.some(f=>isGrave(f)&&(mask>>>f.b&1)));
  const el=document.getElementById('faultlist');
  if(!n){el.innerHTML='<div class="faultok">✅ No active fault</div>';return;}
