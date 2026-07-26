@@ -15,6 +15,10 @@ using ctl::deadzone;
 using ctl::mixArcade;
 using ctl::slew;
 using ctl::turnLimit;
+
+// Median of 5 — rejects isolated outliers (a corrupted I2C read, or an aliased Δ when the loop
+// was delayed and the shaft moved > half a turn between reads) without averaging lag.
+float median5(const float w[5]) { float a[5]; std::copy(w, w + 5, a); std::sort(a, a + 5); return a[2]; }
 } // namespace
 
 void KartController::updateLVC(float vbat, int64_t now)
@@ -140,8 +144,13 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     // The encoders are ALWAYS read and published (bench gearbox testing: watch the rpm even
     // disarmed or with use_encoders=0). use_encoders only decides whether the CONTROL loop
     // TRUSTS them (speed limiter, brake PID, rollover limit, encoder faults) — not the display.
-    const float cps_l = static_cast<float>(in.sensors.enc_delta_l) * hw::CTRL_HZ;
-    const float cps_r = static_cast<float>(in.sensors.enc_delta_r) * hw::CTRL_HZ;
+    // Raw per-tick count rate → 5-sample MEDIAN (spike reject: corrupted read, or aliased Δ
+    // when the loop was delayed) → light EMA. Median of clean data = clean, so no normal effect.
+    m_cps_win_l[m_cps_win_i] = static_cast<float>(in.sensors.enc_delta_l) * hw::CTRL_HZ;
+    m_cps_win_r[m_cps_win_i] = static_cast<float>(in.sensors.enc_delta_r) * hw::CTRL_HZ;
+    m_cps_win_i = (m_cps_win_i + 1) % 5;
+    const float cps_l = median5(m_cps_win_l);
+    const float cps_r = median5(m_cps_win_r);
     m_cps_l += hw::SPEED_EMA_ALPHA * (cps_l - m_cps_l);
     m_cps_r += hw::SPEED_EMA_ALPHA * (cps_r - m_cps_r);
     const float sl = m_cps_l * m_cfg.enc_mps_per_cps;   // SIGNED wheel speeds (m/s), measured

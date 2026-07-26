@@ -160,6 +160,9 @@ private:
     ctl::BattDetect m_batt_det;        // 12/24 V type classified at startup (voltage stable 3 s)
     float   m_cps_l = 0.f;             // SMOOTHED encoder count rate (EMA, counts/s)
     float   m_cps_r = 0.f;
+    float   m_cps_win_l[5] = {0, 0, 0, 0, 0};   // 5-sample window for the spike-reject median
+    float   m_cps_win_r[5] = {0, 0, 0, 0, 0};
+    int     m_cps_win_i = 0;
     int     m_vbat_tick = 0;           // Vbat read rate-limit (hw::VBAT_READ_TICKS)
     float   m_vraw = -1.f;             // last raw reading (< 0 = sensor absent)
 };

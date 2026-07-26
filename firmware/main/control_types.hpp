@@ -51,6 +51,8 @@ constexpr float GEAR_RATIO    = 1.28f;    // sensor turns per wheel turn (gearbo
 constexpr float WHEEL_DIAM_M  = 0.254f;   // 10" wheel
 
 constexpr int     I2C_FREQ_HZ       = 400000;  // Fast-mode (the sensor supports up to 1 MHz)
+constexpr int     I2C_XFER_TIMEOUT_MS = 4;     // per-read timeout: small so a bad read can't
+                                               // stall the loop >½-turn and alias the absolute angle
 constexpr uint8_t AS5600_ADDR       = 0x36;    // fixed I2C address (a single sensor per bus)
 constexpr uint8_t AS5600_REG_RAWANG = 0x0C;    // RAW ANGLE 12-bit (bytes 0x0C MSB / 0x0D LSB)
 constexpr uint8_t AS5600_REG_STATUS = 0x0B;    // magnet detection register

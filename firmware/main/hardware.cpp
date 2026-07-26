@@ -188,7 +188,7 @@ int readAngleRaw(int i)
     if (!m_as[i]) return -1;
     const uint8_t reg = hw::AS5600_REG_RAWANG;
     uint8_t buf[2] = {0, 0};
-    if (ESP_OK != i2c_master_transmit_receive(m_as[i], &reg, 1, buf, 2, 20))
+    if (ESP_OK != i2c_master_transmit_receive(m_as[i], &reg, 1, buf, 2, hw::I2C_XFER_TIMEOUT_MS))
     {
         m_enc_present[i].store(false);
         return -1;
@@ -341,7 +341,7 @@ void board::refreshMagStatus()
         if (!m_as[i]) { m_mag_ok[i].store(false); continue; }
         const uint8_t reg = hw::AS5600_REG_STATUS;
         uint8_t s = 0;
-        if (ESP_OK == i2c_master_transmit_receive(m_as[i], &reg, 1, &s, 1, 20))
+        if (ESP_OK == i2c_master_transmit_receive(m_as[i], &reg, 1, &s, 1, hw::I2C_XFER_TIMEOUT_MS))
             m_mag_ok[i].store((s & hw::AS5600_MD) && !(s & hw::AS5600_ML) && !(s & hw::AS5600_MH));
     }
 }
