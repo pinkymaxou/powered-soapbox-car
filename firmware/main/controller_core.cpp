@@ -144,10 +144,15 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     // The encoders are ALWAYS read and published (bench gearbox testing: watch the rpm even
     // disarmed or with use_encoders=0). use_encoders only decides whether the CONTROL loop
     // TRUSTS them (speed limiter, brake PID, rollover limit, encoder faults) — not the display.
-    // Raw per-tick count rate → 5-sample MEDIAN (spike reject: corrupted read, or aliased Δ
-    // when the loop was delayed) → light EMA. Median of clean data = clean, so no normal effect.
-    m_cps_win_l[m_cps_win_i] = static_cast<float>(in.sensors.enc_delta_l) * hw::CTRL_HZ;
-    m_cps_win_r[m_cps_win_i] = static_cast<float>(in.sensors.enc_delta_r) * hw::CTRL_HZ;
+    // Count rate over the REAL elapsed time (esp_timer), not a fixed 2 ms tick: the encoder
+    // read sits after variable per-tick work, so the read spacing jitters — dividing Δcounts
+    // by the actual interval removes that ripple. Then 5-sample MEDIAN (spike reject) → EMA.
+    float dt_s = (m_last_now_us != 0) ? (now - m_last_now_us) * 1e-6f : hw::CTRL_DT_S;
+    m_last_now_us = now;
+    if (dt_s <= 0.f || dt_s > 0.1f) dt_s = hw::CTRL_DT_S;   // first tick / clock glitch → nominal
+    const float inv_dt = 1.f / dt_s;
+    m_cps_win_l[m_cps_win_i] = static_cast<float>(in.sensors.enc_delta_l) * inv_dt;
+    m_cps_win_r[m_cps_win_i] = static_cast<float>(in.sensors.enc_delta_r) * inv_dt;
     m_cps_win_i = (m_cps_win_i + 1) % 5;
     const float cps_l = median5(m_cps_win_l);
     const float cps_r = median5(m_cps_win_r);

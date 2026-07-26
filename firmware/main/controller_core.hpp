@@ -163,6 +163,7 @@ private:
     float   m_cps_win_l[5] = {0, 0, 0, 0, 0};   // 5-sample window for the spike-reject median
     float   m_cps_win_r[5] = {0, 0, 0, 0, 0};
     int     m_cps_win_i = 0;
+    int64_t m_last_now_us = 0;                   // previous tick time → REAL dt for the count rate
     int     m_vbat_tick = 0;           // Vbat read rate-limit (hw::VBAT_READ_TICKS)
     float   m_vraw = -1.f;             // last raw reading (< 0 = sensor absent)
 };
