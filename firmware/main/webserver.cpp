@@ -223,8 +223,8 @@ uint8_t u8x10(float v)   // physical value ×10 (resolution 0.1; clamped 0..25.5
 // Wheel speed (m/s) → rpm, clamped 0..250 (byte; ~3.3 m/s max before saturation on a 10" wheel).
 uint8_t rpmU8(float rpm_in)
 {
-    float rpm = fabsf(rpm_in);
-    if (rpm > 250.f) rpm = 250.f;
+    float rpm = fabsf(rpm_in) / 5.f;   // 1 byte holds 0..255 → 0..1275 rpm (encoder shaft)
+    if (rpm > 255.f) rpm = 255.f;
     return static_cast<uint8_t>(rpm + 0.5f);
 }
 
