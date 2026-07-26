@@ -45,7 +45,7 @@ constexpr uint8_t JOY_Y = 2;  // A2 — forward  (future)
 
 // Status outputs
 constexpr gpio_num_t LED    = GPIO_NUM_2;    // board LED
-constexpr gpio_num_t WS2812 = GPIO_NUM_17;   // status strip
+constexpr gpio_num_t WS2812 = GPIO_NUM_4;   // status strip
 
 // Active levels
 constexpr int BTN_ACTIVE = 0;   // button pressed = low level
