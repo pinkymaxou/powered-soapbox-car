@@ -110,6 +110,8 @@ label[title]{cursor:help}
 #faultdiag .stick{fill:var(--line)}
 #faultdiag .fz.on .zsh{fill:#4a1414;stroke:var(--red);stroke-width:2.5;animation:fpulse 1.1s ease-in-out infinite}
 #faultdiag .fz.on .zlab,#faultdiag .fz.on .stick,#faultdiag .fz.on .tread{stroke:#ffd9d9;fill:#ffd9d9}
+#faultdiag .fz.warn .zsh{fill:#3a2f10;stroke:var(--amber);stroke-width:2.5}
+#faultdiag .fz.warn .zlab,#faultdiag .fz.warn .stick,#faultdiag .fz.warn .tread{stroke:#ffe6a0;fill:#ffe6a0}
 @keyframes fpulse{50%{stroke-opacity:.35}}
 #faultdiag .fdrpm{fill:var(--txt);font:600 12px ui-monospace,Menlo,Consolas,monospace}
 #faultdiag .fdms{fill:var(--accent);font:700 15px ui-monospace,Menlo,Consolas,monospace}

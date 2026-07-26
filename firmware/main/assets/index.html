@@ -234,6 +234,7 @@ function pbDecode(buf){
 }
 let ws,timer,histTimer,built=false;
 let speedScale=3.3;  // m/s ≙ 100 % (speed bars), set from the config
+let useEnc=1;   // use_encoders (from config): when 0, encoder-sensor faults are warnings, not errors
 let rpm5={l:null,r:null,t:0};   // 5 s low-pass (EMA, τ=5 s) of the encoder rpm, wall-clock dt
 let battLow=0, battFull=1, battType=-1;   // scale received from the FIRMWARE (batt_lo/batt_hi of the status)
 
@@ -405,7 +406,7 @@ function drawDpad(s){
 function whyBlocked(s){
  // A single source of truth: the active serious faults from the mask (FAULTS_DESC),
  // plus the "nothing blocks except arming" case.
- const b=FAULTS_DESC.filter(f=>f.grave&&(s.faults>>>f.b&1)).map(f=>f.t);
+ const b=FAULTS_DESC.filter(f=>isGrave(f)&&(s.faults>>>f.b&1)).map(f=>f.t);
  if(!b.length && !s.arming) b.push("Not armed: hold START ~1 s (stick centered)");
  return b;
 }
@@ -451,6 +452,7 @@ let dzVal=0.06;   // stick deadzone (thr_deadzone), for the pad display
 function deriveFromCfg(p){
  if(p.name==='speed_limit_ms') speedScale=Math.max(0.3,p.val);
  if(p.name==='thr_deadzone') dzVal=p.val;
+ if(p.name==='use_encoders'){const u=(p.val!=0); if(u!==useEnc){useEnc=u; lastFaults=-1;}}  // re-render fault severity
 }
 // Battery gauge scale: ENTIRELY decided by the firmware (detected type, thresholds
 // hard-coded on the micro side) — the client only applies batt_lo/batt_hi received from the status.
@@ -472,20 +474,23 @@ const FAULTS_DESC=[
  {b:4, t:'Gamepad disconnected',                 d:'No Bluetooth gamepad connected. Turn on/pair the gamepad.', grave:true, z:['pad']},
  {b:5, t:'Voltage sensor absent (info)',         d:'ADS1115 not detected: no LVC and no automatic PWM cap. OK on the bench; to be wired before driving.', grave:false, z:['batt']},
  {b:6, t:'Encoder: direction reversed',          d:'The wheel turns clearly opposite to the command: sensor or motor wired backwards. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
- {b:8, t:'LEFT encoder absent (AS5600)',         d:'No response from the left sensor on the I2C bus (chip unplugged/miswired). Shown regardless of use_encoders; blocks driving only when use_encoders=1.', grave:true, z:['wl']},
- {b:9, t:'RIGHT encoder absent (AS5600)',        d:'No response from the right sensor on the I2C bus (chip unplugged/miswired). Shown regardless of use_encoders; blocks driving only when use_encoders=1.', grave:true, z:['wr']},
+ {b:8, t:'LEFT encoder absent (AS5600)',         d:'No response from the left sensor on the I2C bus (chip unplugged/miswired). Shown regardless of use_encoders; blocks driving only when use_encoders=1.', grave:true, z:['wl'], cond:true},
+ {b:9, t:'RIGHT encoder absent (AS5600)',        d:'No response from the right sensor on the I2C bus (chip unplugged/miswired). Shown regardless of use_encoders; blocks driving only when use_encoders=1.', grave:true, z:['wr'], cond:true},
  {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 250 ms: communication lost. Immediate disarm and braking.', grave:true, z:['pad']},
  {b:7, t:'Encoder: erratic reading',             d:'Measured speed physically impossible for the kart. Faulty sensor or magnet. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
- {b:11,t:'LEFT encoder: magnet out of range',    d:'The left AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wl']},
- {b:12,t:'RIGHT encoder: magnet out of range',   d:'The right AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wr']},
+ {b:11,t:'LEFT encoder: magnet out of range',    d:'The left AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wl'], cond:true},
+ {b:12,t:'RIGHT encoder: magnet out of range',   d:'The right AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wr'], cond:true},
 ];
+// cond:true faults (encoder sensor) are only GRAVE when the encoders are actually used;
+// with use_encoders=0 they are informational WARNINGS (amber), not blocking errors.
+const isGrave=f=>f.grave&&(useEnc||!f.cond);
 // Light up the vehicle-diagram zones concerned by the active faults (left/right wheel,
 // battery, gamepad). Side-specific encoder faults (bits 8/9) hit one wheel; the
 // non-sided ones (stuck/reversed/erratic) light up both.
 function updateFaultDiag(mask){
- const on={wl:0,wr:0,batt:0,pad:0};
- FAULTS_DESC.forEach(f=>{ if(mask>>>f.b&1)(f.z||[]).forEach(z=>{on[z]=1;}); });
- for(const z in on){const g=document.getElementById('fz-'+z); if(g)g.classList.toggle('on',!!on[z]);}
+ const lvl={wl:0,wr:0,batt:0,pad:0};   // 0 none · 1 warning (amber) · 2 grave (red)
+ FAULTS_DESC.forEach(f=>{ if(mask>>>f.b&1){const l=isGrave(f)?2:1; (f.z||[]).forEach(z=>{if(l>lvl[z])lvl[z]=l;});} });
+ for(const z in lvl){const g=document.getElementById('fz-'+z); if(g){g.classList.toggle('on',lvl[z]===2);g.classList.toggle('warn',lvl[z]===1);}}
 }
 let lastFaults=-1;
 function showFaults(mask){
@@ -494,11 +499,11 @@ function showFaults(mask){
  const n=FAULTS_DESC.filter(f=>mask>>>f.b&1).length;
  const tab=document.getElementById('faultstab');
  tab.textContent=n?`Faults (${n})`:'Faults';
- tab.classList.toggle('tabalert',!!FAULTS_DESC.some(f=>f.grave&&(mask>>>f.b&1)));
+ tab.classList.toggle('tabalert',!!FAULTS_DESC.some(f=>isGrave(f)&&(mask>>>f.b&1)));
  const el=document.getElementById('faultlist');
  if(!n){el.innerHTML='<div class="faultok">✅ No active fault</div>';return;}
  el.innerHTML=FAULTS_DESC.filter(f=>mask>>>f.b&1)
-  .map(f=>`<div class="faultcard${f.grave?'':' info'}"><b>${f.grave?'⛔':'ℹ️'} ${f.t}</b><br>${f.d}</div>`).join('');
+  .map(f=>`<div class="faultcard${isGrave(f)?'':' info'}"><b>${isGrave(f)?'⛔':'ℹ️'} ${f.t}</b><br>${f.d}</div>`).join('');
 }
 
 function buildForm(params){
