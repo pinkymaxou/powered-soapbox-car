@@ -23,9 +23,12 @@ SensorReadings EspController::readSensors()
     board::refreshMagStatus();                 // poll AS5600 STATUS (rate-limited internally)
     s.mag_ok_l = board::encLeftMagOk();
     s.mag_ok_r = board::encRightMagOk();
-    const float pin_v = board::vbatVolts(hw::ADC_OVERSAMPLE);
-    s.vbat_ok = (pin_v >= 0.f);
-    s.vbat_v = s.vbat_ok ? pin_v * m_ctrl.config().vbat_div_ratio : -1.f;
+    // Read Vbat only at ~20 Hz (VBAT_READ_TICKS), not every tick: the ADS1115 shares I2C bus 0
+    // with the LEFT AS5600, and polling it (×ADC_OVERSAMPLE) every tick jittered the left
+    // encoder's read timing → RPM dips. The control loop only consumes Vbat at 20 Hz anyway.
+    if (0 == (m_vbat_tick++ % hw::VBAT_READ_TICKS)) m_pin_v = board::vbatVolts(hw::ADC_OVERSAMPLE);
+    s.vbat_ok = (m_pin_v >= 0.f);
+    s.vbat_v = s.vbat_ok ? m_pin_v * m_ctrl.config().vbat_div_ratio : -1.f;
     return s;
 }
 
