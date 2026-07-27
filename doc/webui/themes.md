@@ -54,8 +54,6 @@ header{background:linear-gradient(90deg,#1a1400,#0b0d0a);border-bottom:2px solid
 button{background:var(--accent);color:#1a1200;text-transform:uppercase;letter-spacing:1px}
 button.alt{background:var(--card2);color:var(--accent);border:1px solid var(--accent)}
 #faultdiag .fdms{fill:var(--accent);font:800 16px ui-monospace,monospace}
-#faultdiag .fdpwml{fill:#a6e04f}
-#faultdiag .fdpwmr{fill:#ffb000}
 #faultdiag .fdmix{fill:var(--green)}
 ```
 
@@ -93,8 +91,6 @@ header::after{content:"";position:absolute;left:0;right:0;bottom:-2px;height:5px
 button{border-radius:4px;text-transform:uppercase;letter-spacing:1px;font-style:italic}
 input{border-radius:3px}
 #faultdiag .fdms{fill:#ff5a5a;font:800 18px ui-monospace,monospace;filter:drop-shadow(0 0 5px rgba(255,45,45,.9))}
-#faultdiag .fdpwml{fill:#59f39a}
-#faultdiag .fdpwmr{fill:#ffb020}
 #faultdiag .fdmix{fill:#ff9a9a}
 ```
 
@@ -134,8 +130,6 @@ button.alt{background:transparent;color:var(--accent);border:1px solid var(--acc
 input:focus{border-color:var(--accent);box-shadow:0 0 8px rgba(0,229,255,.5)}
 #faultdiag .fdms{fill:#00e5ff;font:800 17px ui-monospace,monospace;filter:drop-shadow(0 0 7px rgba(0,229,255,1))}
 #faultdiag .fdmix{fill:#ff2bd6;filter:drop-shadow(0 0 4px rgba(255,43,214,.8))}
-#faultdiag .fdpwml{fill:#39ffb0}
-#faultdiag .fdpwmr{fill:#ff2bd6}
 #faultdiag .body{stroke:var(--accent);stroke-opacity:.55}
 ```
 
@@ -150,6 +144,10 @@ input:focus{border-color:var(--accent);box-shadow:0 0 8px rgba(0,229,255,.5)}
 - The fault-diagram wheel/battery/gamepad **highlight** colours (red = fault,
   amber = warning) are intentionally left in the structural section — they mean
   the same thing in every skin.
+- Same for the **left/right convention** (nautical port/starboard): LEFT = red
+  (`--port`), RIGHT = green (`--starboard`) — used by the per-wheel PWM
+  gauges/labels and the chart traces. Kept structural so it never changes per
+  skin; a theme *could* override `--port` / `--starboard` if it really needed to.
 - Regenerate the preview images with the mockup generator kept alongside this
   project's scratch tooling (base `style.css` + the theme block, rendered
   headless at ~460 px wide).

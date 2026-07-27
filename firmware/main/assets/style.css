@@ -2,6 +2,9 @@
  --bg:#0e1116; --card:#171c24; --card2:#1f2630; --line:#2c333f;
  --txt:#e7ecf3; --muted:#9aa7b8; --accent:#3da9fc; --green:#34d399;
  --amber:#f59e0b; --red:#ef4444;
+ /* Left/right convention (nautical port/starboard): LEFT = red, RIGHT = green.
+    Semantic + theme-agnostic, like the fault red/amber — kept out of the skins. */
+ --port:#ff5252; --starboard:#3ddc84;
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
@@ -118,8 +121,10 @@ label[title]{cursor:help}
 #faultdiag .fdms{fill:var(--accent);font:700 15px ui-monospace,Menlo,Consolas,monospace}
 #faultdiag .fdrpm5{fill:var(--muted);font:11px ui-monospace,Menlo,Consolas,monospace}
 #faultdiag .fdpwm{font:600 11px ui-monospace,Menlo,Consolas,monospace}
-#faultdiag .fdpwml{fill:#8f8}
-#faultdiag .fdpwmr{fill:#fb6}
+#faultdiag .fdpwml{fill:var(--port)}       /* LEFT motor = red (port) */
+#faultdiag .fdpwmr{fill:var(--starboard)}  /* RIGHT motor = green (starboard) */
+#faultdiag .zlab.lab-l{fill:var(--port)}       /* LEFT wheel label = red */
+#faultdiag .zlab.lab-r{fill:var(--starboard)}  /* RIGHT wheel label = green */
 #faultdiag .pwmtrack{fill:rgba(255,255,255,.06);stroke:var(--line);stroke-width:1}
 #faultdiag .pwmfill{transition:y .1s linear,height .1s linear}
 #faultdiag .pwmzero{stroke:var(--muted);stroke-width:1;opacity:.7}
@@ -183,6 +188,7 @@ header{background:linear-gradient(90deg,#1a1400,#0b0d0a);border-bottom:2px solid
 button{background:var(--accent);color:#1a1200;text-transform:uppercase;letter-spacing:1px}
 button.alt{background:var(--card2);color:var(--accent);border:1px solid var(--accent)}
 #faultdiag .fdms{fill:var(--accent);font:800 16px ui-monospace,monospace}
-#faultdiag .fdpwml{fill:#a6e04f}
-#faultdiag .fdpwmr{fill:#ffb000}
 #faultdiag .fdmix{fill:var(--green)}
+/* PWM gauge/label + wheel-label colours follow the structural port/starboard
+   convention (--port / --starboard); no skin override so LEFT stays red,
+   RIGHT stays green in every theme. */
