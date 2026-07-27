@@ -154,7 +154,7 @@ private:
     int64_t m_mad_us = 0;              // start of persistent aberrant measurement
     bool    m_enc_rev_fault = false;   // encoder/motor wired backwards (latched)
     bool    m_enc_mad_fault = false;   // measurement without physical meaning (latched)
-    float   m_fwd_cmd = 0.f;           // forward command AFTER slope limiter
+    float   m_fwd_cmd = 0.f;           // forward command (no smoothing — stick maps straight through)
     float   m_turn_cmd = 0.f;
     float   m_vbat_ema = 0.f;          // smoothed Vbat (τ ≈ 1 s) for the PWM cap — 0 = unknown
     ctl::BattDetect m_batt_det;        // 12/24 V type classified at startup (voltage stable 3 s)

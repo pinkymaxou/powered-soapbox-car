@@ -1,4 +1,4 @@
-// config.cpp — PARAMS table (pointer-to-member) + NVS persistence + thread-safe access.
+// config.cpp — NVS persistence + thread-safe config/status access (PARAMS table: config_params.cpp).
 #include "config.hpp"
 
 #include <algorithm>

@@ -65,6 +65,6 @@ constexpr gpio_num_t ENC_R_B = GPIO_NUM_39;   // RIGHT wheel encoder — channel
 // Index (X, 1 pulse/turn) optional: wire to 22/23 if needed later.
 } // namespace future
 
-// Other free GPIOs: 4, 21, 22, 23.
+// Other free GPIOs: 21, 22, 23.
 
 } // namespace pins

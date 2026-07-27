@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-// Float → int rounding (integer/bool fields are stored as float).
+// Round a float to the nearest int (half away from zero).
 inline int iround(float v)
 {
     return static_cast<int>(v < 0 ? v - 0.5f : v + 0.5f);
@@ -109,7 +109,8 @@ constexpr int64_t PAD_HB_TIMEOUT_US  = 250000;
 } // namespace hw
 
 // ───────────────────────── Configuration (named fields, persisted) ─────────────────────────
-// Everything is stored as float (integers/bool too) → homogeneous pointer-to-member.
+// Named, persisted settings. Each field is a float, or an int32 for integer/bool params
+// (accessed through the typed CfgVal/CfgField union — see cfgGet/cfgSet in config_params.cpp).
 struct KartConfig
 {
     float speed_limit_ms;   // VEHICLE speed limit in FORWARD (m/s)
@@ -126,7 +127,7 @@ struct KartConfig
     float   turn_gain;      // share of the differential at full X stick (0..1)
     int32_t turn_limit_en;  // 1 = rollover protection active (speed→turn ramp); 0 = disabled (testing)
     float   turn_full_ms;   // below this speed (m/s), turn ±100% (pivot allowed) — rollover protection
-    float   turn_hi;        // turn limit (0..1) reached at speed_limit_ms (linear ramp)
+    float   turn_hi;        // turn limit (0..1) reached at speed_limit_ms (1/v iso-a_lat curve)
     float   turn_rate;      // max turn slope (Δ/s) — smooths abrupt stick moves
     int32_t vlim_enable;    // 1 = PID speed limiter active; 0 = disabled (testing)
     int32_t brk_pid_enable; // 1 = PID braking active when stopped; 0 = dynamic braking only (testing)

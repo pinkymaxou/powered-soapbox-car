@@ -2,7 +2,7 @@
 // depend on the backend (Bluepad32 / other). Normalized axes [-1..1], + connection state.
 //
 // Arcade convention: y = forward (+1 = ahead), x = steering (+1 = to the right).
-// The differential mixing is done in controller.cpp.
+// The differential mixing is done in controller_core.cpp.
 #pragma once
 
 #include <cstdint>

@@ -91,7 +91,7 @@ static void test_square_map()
 
 static void test_turn_limit()
 {
-    // Rollover protection ramp: ±100% below v_full, linear decrease down to hi at v_max.
+    // Rollover protection: ±100% below v_full, then a 1/v (iso-a_lat) decrease toward hi at v_max.
     CHECK(near(ctl::turnLimit(0.0f, 0.5f, 3.3f, 0.5f), 1.f));    // pivot in place → 100%
     CHECK(near(ctl::turnLimit(0.5f, 0.5f, 3.3f, 0.5f), 1.f));    // at the threshold → still 100%
     CHECK(near(ctl::turnLimit(1.0f, 0.5f, 3.3f, 0.5f), 1.f));    // 1/v > 100% → still full

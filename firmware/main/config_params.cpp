@@ -52,7 +52,7 @@ const ParamDesc PARAMS[] =
     {"vbat_div_ratio",  "Vbat divider ratio",     "Battery",
      "Ratio of the voltage-measurement divider bridge: Vbat = voltage read by the ADS1115 x this ratio. To calibrate with a multimeter. The battery type (12 or 24 V) and the cutoff thresholds are detected automatically at startup.",
      PType::Float, {.f = 1.f}, {.f = 7.667f}, {.f = 20.f}, {.f = &KartConfig::vbat_div_ratio}},
-    // PID in m/s (the error is in m/s since the km/h→m/s switch).
+    // PID gains operate on an error in m/s.
     {"brk_kp",          "PID brake Kp (m/s)",      "Control loops (PID)",
      "Proportional gain of the active electric brake (speed command 0). Encoders required.",
      PType::Float, {.f = 0.f}, {.f = 0.43f}, {.f = 5.f}, {.f = &KartConfig::brk_kp}},

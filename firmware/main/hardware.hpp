@@ -11,14 +11,12 @@ void init();   // initializes LED, motors (LEDC+DIR), 2× AS5600 (I2C), ADS1115 
 
 // Status LED (onboard)
 void led(bool on);
-void ledToggle();
 
 // Analog reading (via external ADS1115 ADC) — voltage at pin A0 (BEFORE the divider ratio).
 float vbatVolts(int oversample);     // oversample = number of readings averaged
 
 // Motors (l, r ∈ [-1..1], independent; cap = max duty = PWM ceiling)
 void motorsSet(float l, float r, uint32_t cap);
-void motorsStop();
 // Dynamic braking: short-circuits the motors (low outputs) → resists movement.
 // DEFAULT state of the controller at rest (rather than coasting).
 void motorsBrake();

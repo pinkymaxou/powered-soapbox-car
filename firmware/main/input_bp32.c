@@ -1,8 +1,8 @@
-// input_bp32.c — Backend manette Bluetooth via Bluepad32/BTstack (plateforme « custom »).
-// Tourne dans une tâche dédiée (boucle BTstack). Les données manette sont transmises au
-// reste du firmware par des hooks C (implémentés dans input.cpp) :
-//   inputbp_on_data(x, y, estop)  et  inputbp_on_conn(connected, name, batt).
-// Appairage / désappairage exposés via inputbp_pair() / inputbp_unpair().
+// input_bp32.c — Bluetooth gamepad backend via Bluepad32/BTstack (a "custom" platform).
+// Runs in a dedicated task (the BTstack run loop). Gamepad data is handed to the rest of the
+// firmware through C hooks (implemented in input.cpp): inputbp_on_data(x, y, estop, start,
+// buttons, zl, zr, rx2, ry2) and inputbp_on_conn(connected, name, batt).
+// Pairing / unpairing are exposed via inputbp_pair() / inputbp_unpair().
 #include <string.h>
 
 #include <btstack.h>
@@ -13,15 +13,15 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-// Hooks implémentés côté C++ (input.cpp).
+// Hooks implemented on the C++ side (input.cpp).
 void inputbp_on_data(float x, float y, int estop, int start, uint32_t buttons, float zl, float zr,
                      float rx2, float ry2);
 void inputbp_on_conn(int connected, const char* name, int batt);
-int  inputbp_take_rumble(uint8_t* strong, uint8_t* weak, uint16_t* dur);   // vibration en attente ?
+int  inputbp_take_rumble(uint8_t* strong, uint8_t* weak, uint16_t* dur);   // rumble pending?
 
-static uni_hid_device_t* s_dev = NULL;   // manette active (pour déconnexion ciblée)
+static uni_hid_device_t* s_dev = NULL;   // active gamepad (for a targeted disconnect)
 
-// ── Callbacks plateforme ──
+// ── Platform callbacks ──
 static void plat_init(int argc, const char** argv) { (void)argc; (void)argv; }
 
 static void plat_on_init_complete(void)
@@ -69,17 +69,17 @@ static void plat_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl)
 {
     if (ctl->klass != UNI_CONTROLLER_CLASS_GAMEPAD) return;
     uni_gamepad_t* gp = &ctl->gamepad;
-    const float x = gp->axis_x / 512.0f;     // stick gauche, ~[-1..1]
-    const float y = -gp->axis_y / 512.0f;    // inversé : pousser = avancer
+    const float x = gp->axis_x / 512.0f;     // left stick, ~[-1..1]
+    const float y = -gp->axis_y / 512.0f;    // inverted: push = forward
     const int estop = (gp->buttons & BUTTON_B) ? 1 : 0;
     const int start = (gp->misc_buttons & MISC_BUTTON_START) ? 1 : 0;
-    // Masque affichage : boutons (bits 0-15) | misc (bits 16-19) | dpad (bits 24-27).
+    // Display mask: buttons (bits 0-15) | misc (bits 16-19) | dpad (bits 24-27).
     const uint32_t mask = (uint32_t)gp->buttons | ((uint32_t)gp->misc_buttons << 16)
                           | ((uint32_t)gp->dpad << 24);
-    const float rx2 = gp->axis_rx / 512.0f;     // stick DROIT (affichage seulement)
-    const float ry2 = -gp->axis_ry / 512.0f;    // inversé : haut = +
-    // Gâchettes ZL/ZR : analogiques si la manette les expose (brake/throttle). Certaines
-    // manettes (mode « Switch Pro ») ne renvoient que le bit tout-ou-rien → repli à 0/100 %.
+    const float rx2 = gp->axis_rx / 512.0f;     // RIGHT stick (display only)
+    const float ry2 = -gp->axis_ry / 512.0f;    // inverted: up = +
+    // ZL/ZR triggers: analog if the gamepad exposes them (brake/throttle). Some gamepads
+    // ("Switch Pro" mode) report only the on/off bit → fall back to 0/100 %.
     float zl = gp->brake / 1023.0f;
     float zr = gp->throttle / 1023.0f;
     if (zl < 0.01f && (gp->buttons & BUTTON_TRIGGER_L)) zl = 1.0f;
@@ -88,7 +88,7 @@ static void plat_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl)
     inputbp_on_data(x, y, estop, start, mask, zl, zr, rx2, ry2);
     inputbp_on_conn(1, d->name, batt);
 
-    // Retour haptique : si une vibration est en attente, la jouer (thread BT = contexte sûr).
+    // Haptics: if a rumble is pending, play it (BT thread = safe context).
     uint8_t rs, rw; uint16_t rd;
     if (d->report_parser.play_dual_rumble && inputbp_take_rumble(&rs, &rw, &rd))
     {
@@ -117,20 +117,20 @@ static struct uni_platform* get_platform(void)
     return &plat;
 }
 
-// ── Tâche BTstack (boucle bloquante) ──
+// ── BTstack task (blocking run loop) ──
 static void bt_task(void* arg)
 {
     (void)arg;
     btstack_init();
     uni_platform_set_custom(get_platform());
     uni_init(0, NULL);
-    btstack_run_loop_execute();   // ne revient pas
+    btstack_run_loop_execute();   // does not return
     vTaskDelete(NULL);
 }
 
 void inputbp_start(void)
 {
-    // Cœur 0 (réseau/BT), à l'écart de la boucle de contrôle (cœur 1).
+    // Core 0 (network/BT), away from the control loop (core 1).
     xTaskCreatePinnedToCore(bt_task, "bt", 8192, NULL, 5, NULL, 0);
 }
 

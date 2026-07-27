@@ -37,7 +37,6 @@ i2c_master_bus_handle_t   m_bus[2] = {nullptr, nullptr};   // bus 0 = L wheel, b
 i2c_master_dev_handle_t   m_as[2]  = {nullptr, nullptr};   // AS5600 per bus
 int                       m_angle_last[2] = {-1, -1};      // last raw angle per sensor
 Ads1115                   m_ads;                           // external ADC (bus 0), Vbat on A0
-bool                      m_led_on = false;
 
 // LEDC clock SENTINEL — diagnostic + auto-repair of the suspected race:
 // recurring "Interrupt WDT" crash with the PC frozen on a LEDC register WRITE, under
@@ -267,12 +266,6 @@ void board::init()
 void board::led(bool on)
 {
     gpio_set_level(pins::LED, on ? 1 : 0);
-    m_led_on = on;
-}
-
-void board::ledToggle()
-{
-    board::led(!m_led_on);
 }
 
 float board::vbatVolts(int n)
@@ -304,12 +297,6 @@ void board::motorsSet(float l, float r, uint32_t cap)
 {
     motorApply(LEDC_CHANNEL_0, pins::DIR_L, l, cap);
     motorApply(LEDC_CHANNEL_1, pins::DIR_R, r, cap);
-}
-
-void board::motorsStop()
-{
-    setDuty(LEDC_CHANNEL_0, 0);
-    setDuty(LEDC_CHANNEL_1, 0);
 }
 
 void board::motorsBrake()
