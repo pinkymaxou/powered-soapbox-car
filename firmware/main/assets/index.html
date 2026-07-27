@@ -41,6 +41,7 @@
 
  <section id="faults" class="panel">
   <div class="chart-title">🚨 Currently active faults</div>
+  <div class="hudcard">
   <svg id="faultdiag" viewBox="0 0 300 392" role="img" aria-label="Fault location on the vehicle (top view)">
    <text class="diagfront" x="150" y="15" text-anchor="middle">▲ FRONT</text>
    <!-- chassis deck (tapers to the rear caster) -->
@@ -102,6 +103,7 @@
    </g>
   </svg>
   <div class="diagcap">Red highlights the area affected by an active fault.</div>
+  </div>
   <div id="ind"></div>
   <div id="faultlist" class="faultlist"></div>
   <p class="note">A fault <b>disarms</b> the kart and engages dynamic braking. Encoder

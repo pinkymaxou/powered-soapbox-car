@@ -95,6 +95,7 @@ label[title]{cursor:help}
 .faultok{background:#12351b;border:1px solid #3a5;color:#c9f5d4;border-radius:10px;padding:12px 14px;font-size:15px}
 .tab.tabalert{color:#fff;background:var(--red)}
 /* Fault-location diagram (top view of the tricycle) */
+.hudcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 8px 6px;margin:10px 0}
 #faultdiag{width:100%;max-width:250px;display:block;margin:6px auto 2px}
 #faultdiag .body,#faultdiag .zsh{fill:var(--card2);stroke:var(--line);stroke-width:2}
 #faultdiag .tire{fill:#0c0f14}
@@ -151,3 +152,37 @@ table.pins th{background:var(--card2);color:var(--accent);font-weight:700}
 table.pins tr:last-child td{border-bottom:0}
 table.pins td:first-child{font-family:ui-monospace,monospace;color:var(--green);width:60px;text-align:center}
 .note{color:var(--muted);font-size:13px;line-height:1.5;margin-top:12px}
+
+/* ============================================================================
+   THEME: TACTICAL / MIL-SPEC  (active skin — everything above is structure)
+   To switch skins, replace this whole block with another from
+   doc/webui/themes.md (Racing HUD, Cyberpunk neon, …). Only colours and a few
+   flourishes live here; the layout and JS hooks never change.
+   ========================================================================== */
+:root{
+ --bg:#0b0d0a; --card:#12150e; --card2:#1a1e13; --line:#2f3722;
+ --txt:#e9efdd; --muted:#8f9c78; --accent:#ffb000; --green:#8fe04f;
+ --amber:#ffb000; --red:#ff5a3c;
+}
+body{font-family:ui-monospace,Menlo,Consolas,monospace;background:
+ repeating-linear-gradient(0deg,rgba(255,176,0,.045) 0 1px,transparent 1px 26px),
+ repeating-linear-gradient(90deg,rgba(255,176,0,.045) 0 1px,transparent 1px 26px),#0b0d0a}
+*{border-radius:0 !important}
+header{background:linear-gradient(90deg,#1a1400,#0b0d0a);border-bottom:2px solid var(--accent);
+ text-transform:uppercase;letter-spacing:3px}
+.hdr-state.s2{background:var(--accent);color:#1a1200}
+.pill.brakemode.bm2{background:var(--card2);color:var(--accent);border:1px solid var(--accent)}
+.tab{text-transform:uppercase;letter-spacing:1px}
+.tab.active{border-bottom-color:var(--accent);color:var(--accent)}
+.chart-title{text-transform:uppercase;letter-spacing:2px;color:var(--accent);
+ border-left:3px solid var(--accent);padding-left:8px}
+.cfgcat{color:var(--accent);text-transform:uppercase;letter-spacing:2px}
+.hudcard,form,.status,#bars,.faultok{box-shadow:inset 0 0 0 1px rgba(255,176,0,.06)}
+.pill{text-transform:uppercase;letter-spacing:1px}
+.pill.on{background:var(--accent);color:#1a1200}
+button{background:var(--accent);color:#1a1200;text-transform:uppercase;letter-spacing:1px}
+button.alt{background:var(--card2);color:var(--accent);border:1px solid var(--accent)}
+#faultdiag .fdms{fill:var(--accent);font:800 16px ui-monospace,monospace}
+#faultdiag .fdpwml{fill:#a6e04f}
+#faultdiag .fdpwmr{fill:#ffb000}
+#faultdiag .fdmix{fill:var(--green)}
