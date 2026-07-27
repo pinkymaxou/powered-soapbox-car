@@ -17,7 +17,17 @@ void Ws2812::init(gpio_num_t pin, int count, uint8_t brightness)
     chan_cfg.gpio_num = pin;
     chan_cfg.clk_src = RMT_CLK_SRC_DEFAULT;
     chan_cfg.resolution_hz = RES_HZ;
-    chan_cfg.mem_block_symbols = 64;
+    // RMT memory: the original ESP32 has NO RMT DMA, so the frame is streamed out of a small
+    // per-channel memory block that the RMT ISR must REFILL mid-transmission. If a Wi-Fi/BT
+    // interrupt starves a refill the stream underruns and the LEDs past that point latch
+    // garbage — which is why 2 LEDs (48 symbols, fits in one 64-symbol block) are clean but
+    // 10+ glitch. Size the block to hold the WHOLE frame when it fits (≤ ~10 LEDs → a single
+    // burst, no refill at all), capped at 256 symbols = 4 of the 8 RMT blocks. Longer strips
+    // still refill, but in far larger chunks with much more slack for the ISR.
+    int mem = 64;                             // ESP32 block granularity (SOC_RMT_MEM_WORDS_PER_CHANNEL)
+    const int need = m_count * 24;            // 24 bits (symbols) per LED
+    while (mem < need && mem < 256) mem *= 2; // 64 → 128 → 256
+    chan_cfg.mem_block_symbols = static_cast<size_t>(mem);
     chan_cfg.trans_queue_depth = 4;
     ESP_ERROR_CHECK(rmt_new_tx_channel(&chan_cfg, &m_chan));
 
