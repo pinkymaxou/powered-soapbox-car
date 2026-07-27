@@ -293,17 +293,27 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         if (m_cfg.open_loop != 0)
         {
             // OPEN-LOOP TEST MODE: the mixed stick goes straight to the motors — NO forward/
-            // turn smoothing, NO rollover limit, NO speed-limiter PID, NO active braking. The
-            // output PWM cap (battery-voltage / manual duty) still bounds the drive, and every
-            // safety gate (arming, heartbeat, e-stop, blocking faults) is unchanged upstream.
-            // Centered stick → 0 output (coast); disarm or e-stop to brake.
+            // turn smoothing, NO rollover limit, NO speed-limiter PID, NO active (PID) braking.
+            // The output PWM cap (battery-voltage / manual duty) still bounds the drive, and
+            // every safety gate (arming, heartbeat, e-stop, blocking faults) is unchanged
+            // upstream. Releasing the stick engages DYNAMIC braking (motor short-circuit) — a
+            // passive resting state, not a control loop — so it stops like every other mode
+            // instead of coasting away.
             fwd = fwd_t;
             turn = turn_t;
             m_fwd_cmd = fwd;
             m_turn_cmd = turn;
-            mixArcade(fwd, turn, m_cfg.turn_gain, out_l, out_r);
             m_speed_pid.reset();
-            if (std::fabs(fwd) > 1e-3f || std::fabs(turn) > 1e-3f) m_last_act_us = now;
+            if (std::fabs(fwd) < 1e-3f && std::fabs(turn) < 1e-3f)
+            {
+                // Released: dynamic brake (short-circuit) if enabled, else FREEWHEEL (coast).
+                if (m_cfg.dyn_brake_en != 0) { braking = true; dyn_brake = true; }
+            }
+            else
+            {
+                mixArcade(fwd, turn, m_cfg.turn_gain, out_l, out_r);
+                m_last_act_us = now;
+            }
         }
         else
         {
@@ -351,17 +361,20 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
             if (std::fabs(fwd) < 1e-3f && std::fabs(turn) < 1e-3f)
             {
                 // ARMED + centered stick → ACTIVE BRAKING (plugging PID) if encoders present
-                // AND PID braking enabled; otherwise fallback to dynamic braking (short-circuit).
-                braking = true;
+                // AND PID braking enabled; else dynamic braking (short-circuit) if enabled;
+                // else FREEWHEEL (coast). The disarmed/fault resting brake is separate (above).
                 if (use_enc && m_cfg.brk_pid_enable != 0)
                 {
+                    braking = true;
                     out_l = brakeWheel(m_brake_l, sl, m_cfg, hw::CTRL_DT_S);
                     out_r = brakeWheel(m_brake_r, sr, m_cfg, hw::CTRL_DT_S);
                 }
-                else
+                else if (m_cfg.dyn_brake_en != 0)
                 {
+                    braking = true;
                     dyn_brake = true;
                 }
+                // else: freewheel — out stays 0, no braking.
             }
             else
             {
