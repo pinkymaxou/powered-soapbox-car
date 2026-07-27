@@ -19,13 +19,25 @@ message Req {
 
 message ParamVal {
   string name = 1;
-  float  val = 2;
+  oneof value {                 // typed value: bool / int32 / float (matches the param's type)
+    bool  bval = 2;
+    int32 ival = 3;
+    float fval = 4;
+  }
 }
 
 // ── Responses (kart → client) ──
 message Status {
-  int32  state = 1;
-  int32  fault = 2;
+  // Nested so the generated C types are Status_State / Status_Fault / Status_BrakeMode —
+  // they must NOT collide with the C++ enum class State/Fault/BrakeMode in control_types.hpp.
+  enum State     { LOCKOUT = 0; CALIBRATE = 1; RUN = 2; FAULT = 3; }
+  enum BrakeMode { NONE = 0; DYNAMIC = 1; ACTIVE = 2; }
+  enum Fault {
+    NO_FAULT = 0; ESTOP = 1; LVC = 2; NOT_CALIBRATED = 3; ENCODER = 4;
+    ENCODER_DIR = 5; ENCODER_MAD = 6; ENCODER_ABSENT = 7; ENCODER_MAGNET = 8;
+  }
+  State  state = 1;
+  Fault  fault = 2;
   uint32 faults = 3;            // mask of active conditions (fb:: bits)
   float  vbat = 4;
   int32  batt_type = 5;         // 0 while detecting, 12 or 24
@@ -38,7 +50,7 @@ message Status {
   float  turn = 12;
   float  out_l = 13;
   float  out_r = 14;
-  int32  brake_mode = 15;       // 0 traction, 1 dynamic, 2 active (PID)
+  BrakeMode brake_mode = 15;    // NONE (traction/freewheel) · DYNAMIC · ACTIVE (PID)
   bool   arming = 16;
   bool   btn_start = 17;
   bool   pad_conn = 18;
@@ -60,10 +72,13 @@ message ParamMeta {
   string desc = 2;
   string cat = 3;
   string help = 4;
-  string type = 5;              // "float" | "int" | "bool"
-  float  min = 6;
-  float  max = 7;
-  float  val = 8;
+  // Field 5 was a "type" string and 6/7 were float min/max — all replaced by the typed
+  // oneofs below, so value / min / max / default each carry the parameter's real type
+  // (the client renders a checkbox for a bool, an integer input for an int, etc.).
+  oneof value { bool bval = 8;  int32 ival = 9;  float fval = 10; }  // current value
+  oneof minv  { bool bmin = 11; int32 imin = 12; float fmin = 13; }  // minimum
+  oneof maxv  { bool bmax = 14; int32 imax = 15; float fmax = 16; }  // maximum
+  oneof defv  { bool bdef = 17; int32 idef = 18; float fdef = 19; }  // default
 }
 
 message Config { repeated ParamMeta params = 1; }

@@ -245,7 +245,8 @@ const FA=["—","E-STOP","LOW BATTERY","NOT CALIBRATED","ENCODER STUCK","ENCODER
 // Decoded by the protobuf.js runtime (/pb.js, embedded). The frames are ~3× smaller
 // than JSON and the ESP32 encodes them without any allocation (nanopb + callbacks).
 const PB_ROOT=protobuf.Root.fromJSON({nested:{
- ParamVal:{fields:{name:{type:"string",id:1},val:{type:"float",id:2}}},
+ ParamVal:{oneofs:{value:{oneof:["bval","ival","fval"]}},fields:{name:{type:"string",id:1},
+  bval:{type:"bool",id:2},ival:{type:"int32",id:3},fval:{type:"float",id:4}}},
  Req:{fields:{type:{type:"string",id:1},ssid:{type:"string",id:2},pass:{type:"string",id:3},
       enabled:{type:"bool",id:4},set:{rule:"repeated",type:"ParamVal",id:5}}},
  Status:{fields:{state:{type:"int32",id:1},fault:{type:"int32",id:2},faults:{type:"uint32",id:3},
@@ -258,9 +259,13 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
   pad_cx:{type:"float",id:22},pad_cy:{type:"float",id:23},pad_zl:{type:"float",id:24},
   pad_zr:{type:"float",id:25},pad_rx2:{type:"float",id:26},pad_ry2:{type:"float",id:27},
   pad_btns:{type:"uint32",id:28},pad_age_ms:{type:"int32",id:29}}},
- ParamMeta:{fields:{name:{type:"string",id:1},desc:{type:"string",id:2},cat:{type:"string",id:3},
-  help:{type:"string",id:4},type:{type:"string",id:5},min:{type:"float",id:6},
-  max:{type:"float",id:7},val:{type:"float",id:8}}},
+ ParamMeta:{oneofs:{value:{oneof:["bval","ival","fval"]},minv:{oneof:["bmin","imin","fmin"]},
+   maxv:{oneof:["bmax","imax","fmax"]},defv:{oneof:["bdef","idef","fdef"]}},
+  fields:{name:{type:"string",id:1},desc:{type:"string",id:2},cat:{type:"string",id:3},help:{type:"string",id:4},
+   bval:{type:"bool",id:8},ival:{type:"int32",id:9},fval:{type:"float",id:10},
+   bmin:{type:"bool",id:11},imin:{type:"int32",id:12},fmin:{type:"float",id:13},
+   bmax:{type:"bool",id:14},imax:{type:"int32",id:15},fmax:{type:"float",id:16},
+   bdef:{type:"bool",id:17},idef:{type:"int32",id:18},fdef:{type:"float",id:19}}},
  Config:{fields:{params:{rule:"repeated",type:"ParamMeta",id:1}}},
  Vals:{fields:{params:{rule:"repeated",type:"ParamVal",id:1}}},
  Hist:{fields:{dt_fast:{type:"uint32",id:1},dt_spd:{type:"uint32",id:2},dt_batt:{type:"uint32",id:3},
@@ -543,10 +548,16 @@ function showStatus(s){
 
 // ── Configuration form (auto-generated from the schema) ──
 let dzVal=0.06;   // stick deadzone (thr_deadzone), for the pad display
+// A ParamMeta/ParamVal value is a TYPED oneof (bool/int32/float). Read group g
+// ('val'|'min'|'max'|'def') as a number; the bool/int/float kind of the value:
+const pmv=(p,g)=>{const b=p['b'+g],i=p['i'+g],f=p['f'+g];
+  return b!==undefined?(b?1:0):(i!==undefined?i:(f!==undefined?f:0));};
+const pmIsBool=p=>p.bval!==undefined, pmIsInt=p=>p.ival!==undefined;
 function deriveFromCfg(p){
- if(p.name==='speed_limit_ms') speedScale=Math.max(0.3,p.val);
- if(p.name==='thr_deadzone') dzVal=p.val;
- if(p.name==='use_encoders'){const u=(p.val!=0); if(u!==useEnc){useEnc=u; lastFaults=-1;}}  // re-render fault severity
+ const v=pmv(p,'val');
+ if(p.name==='speed_limit_ms') speedScale=Math.max(0.3,v);
+ if(p.name==='thr_deadzone') dzVal=v;
+ if(p.name==='use_encoders'){const u=(v!=0); if(u!==useEnc){useEnc=u; lastFaults=-1;}}  // re-render fault severity
 }
 // Battery gauge scale: ENTIRELY decided by the firmware (detected type, thresholds
 // hard-coded on the micro side) — the client only applies batt_lo/batt_hi received from the status.
@@ -608,9 +619,15 @@ function buildForm(params){
      const h=document.createElement('div');h.className='cfgcat';h.textContent=cat;f.appendChild(h);}
    const lab=document.createElement('label');lab.textContent=p.desc;
    if(p.help){lab.title=p.help;}                           // tooltip on hover (label + field)
-   const inp=document.createElement('input');inp.type='number';inp.name=p.name;
+   const inp=document.createElement('input');inp.name=p.name;
    if(p.help){inp.title=p.help;}
-   inp.step=(p.type==='float')?'any':'1';inp.min=p.min;inp.max=p.max;inp.value=p.val;
+   if(pmIsBool(p)){                                        // bool → checkbox
+     inp.type='checkbox';inp.checked=pmv(p,'val')!=0;inp.dataset.k='b';
+   }else{                                                  // int/float → number input
+     const isI=pmIsInt(p);
+     inp.type='number';inp.step=isI?'1':'any';inp.min=pmv(p,'min');inp.max=pmv(p,'max');
+     inp.value=pmv(p,'val');inp.dataset.k=isI?'i':'f';
+   }
    lab.appendChild(inp);f.appendChild(lab);
    deriveFromCfg(p);
  });
@@ -619,7 +636,7 @@ function buildForm(params){
 function fillForm(params){
  if(!built)buildForm(params);
  params.forEach(p=>{const e=document.querySelector(`[name="${p.name}"]`);
-   if(e&&document.activeElement!==e)e.value=p.val;
+   if(e&&document.activeElement!==e){if(e.type==='checkbox')e.checked=pmv(p,'val')!=0;else e.value=pmv(p,'val');}
    deriveFromCfg(p);});
 }
 
@@ -646,7 +663,11 @@ function connect(){
 }
 function reload(){sendReq({type:'vals'});}   // metadata already in hand
 function save(){const set=[];
- document.querySelectorAll('#f input').forEach(i=>set.push({name:i.name,val:parseFloat(i.value)}));
+ document.querySelectorAll('#f input').forEach(i=>{const o={name:i.name},k=i.dataset.k;
+   if(k==='b')o.bval=i.checked;
+   else if(k==='i')o.ival=Math.round(parseFloat(i.value)||0);
+   else o.fval=parseFloat(i.value)||0;
+   set.push(o);});
  sendReq({type:'set',set:set});}
 function sendPad(cmd){sendReq({type:cmd});}
 function loadPad(){sendPad('padinfo');}

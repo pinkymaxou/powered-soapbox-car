@@ -3,14 +3,13 @@
 // Connection: Wi-Fi "Kart-Config" (password "kart12345"), then
 // open http://192.168.4.1 in a browser.
 //
-// The page (HTML/CSS) comes from main/assets/ (EMBED_TXTFILES). Comm over WebSocket /ws:
-//   the client POLLS at 4 Hz and the server replies synchronously:
-//     {"type":"status"}     → {"type":"status",...}
-//     {"type":"get"}        → {"type":"config",...}
-//     {"type":"set",...}    → applies + {"type":"config",...}
-//     {"type":"calibrate"}  → triggers calibration
-//     {"type":"reboot"}     → reboots the ESP32 (disarmed)
-// In-house JSON (flat key/value) — no external dependency.
+// The page (HTML/CSS/JS) comes from main/assets/ (EMBED_TXTFILES). Comms over WebSocket /ws
+// use BINARY Protocol Buffers (nanopb; see main/proto/kart.proto): the client sends a Req
+// (a "type" verb + optional payload), the server replies with a Msg envelope. Verbs:
+//   status → Status · get → Config (param schema) · vals → Vals · set → applies params ·
+//   hist → Hist · sysinfo/sysdyn → system · pad*/cal* → gamepad · wifi* → Wi-Fi · reboot.
+// The client polls status at 20 Hz; everything else is on demand. Zero-alloc encode via
+// nanopb callbacks straight from the existing pointers (PARAMS, ring buffers, g_status).
 #include "webserver.hpp"
 
 #include <atomic>
@@ -60,11 +59,6 @@ constexpr char AP_PASS[]  = "kart12345";   // ≥ 8 characters (otherwise open A
 constexpr int  AP_CHANNEL = 1;
 constexpr int  AP_MAX_CONN = 4;
 constexpr int  STA_RETRY_MS = 5000;   // delay before a new STA connection attempt
-
-// Names of the WebSocket commands (client → server) and responses
-constexpr char CMD_SET[]       = "\"set\"";
-constexpr char CMD_VALS[]      = "\"vals\"";  // parameter values (metadata: "get", once on open)
-// Bluetooth gamepad
 
 httpd_handle_t     m_server = nullptr;
 esp_timer_handle_t m_sta_retry = nullptr;
@@ -212,7 +206,7 @@ uint8_t pctU8(float v)   // percentage 0..100 (throttle, PWM)
     return static_cast<uint8_t>(v + 0.5f);
 }
 
-uint8_t u8x10(float v)   // physical value ×10 (resolution 0.1; clamped 0..25.5 → km/h, V)
+uint8_t u8x10(float v)   // physical value ×10 (resolution 0.1; clamped 0..25.5 → m/s, V)
 {
     float s = v * 10.f;
     if (s < 0.f) s = 0.f;
@@ -220,7 +214,7 @@ uint8_t u8x10(float v)   // physical value ×10 (resolution 0.1; clamped 0..25.5
     return static_cast<uint8_t>(s + 0.5f);
 }
 
-// Wheel speed (m/s) → rpm, clamped 0..250 (byte; ~3.3 m/s max before saturation on a 10" wheel).
+// Encoder-shaft rpm → 1 byte: rpm/5, so 0..255 covers 0..1275 rpm (raw, no gear ratio applied).
 uint8_t rpmU8(float rpm_in)
 {
     float rpm = fabsf(rpm_in) / 5.f;   // 1 byte holds 0..255 → 0..1275 rpm (encoder shaft)
@@ -231,7 +225,7 @@ uint8_t rpmU8(float rpm_in)
 void histSample(void*)
 {
     // Runs in the esp_timer task (priority 22, shared with the Wi-Fi/BT timers):
-    // blocking here is FORBIDDEN. Mutex busy (a client is building the JSON) → skip
+    // blocking here is FORBIDDEN. Mutex busy (a client is building the reply) → skip
     // the sample, never mind — the history is indicative.
     if (pdTRUE != xSemaphoreTake(m_hist_mtx, 0)) return;
     KartStatus st;
@@ -312,6 +306,28 @@ const pb_byte_t* buildHistPb(size_t& len)
     return m_hist_bin;
 }
 
+// Fill a typed ParamMeta oneof group (value/minv/maxv/defv) from a float, matching the
+// parameter's real type — so the wire carries bool/int32/float, not a lossy float, and the
+// client can render a checkbox for a bool, an integer input for an int, etc.
+#define PM_ONEOF(M, P, GROUP, SFX, F)                                                  \
+    do {                                                                               \
+        if (PType::Bool == (P).type)      { (M).which_##GROUP = ParamMeta_b##SFX##_tag; \
+                                            (M).GROUP.b##SFX = ((F) != 0.f); }          \
+        else if (PType::Int == (P).type)  { (M).which_##GROUP = ParamMeta_i##SFX##_tag; \
+                                            (M).GROUP.i##SFX = iround(F); }             \
+        else                              { (M).which_##GROUP = ParamMeta_f##SFX##_tag; \
+                                            (M).GROUP.f##SFX = (F); }                   \
+    } while (0)
+#define PV_ONEOF(V, P, F)                                                              \
+    do {                                                                               \
+        if (PType::Bool == (P).type)      { (V).which_value = ParamVal_bval_tag;        \
+                                            (V).value.bval = ((F) != 0.f); }            \
+        else if (PType::Int == (P).type)  { (V).which_value = ParamVal_ival_tag;        \
+                                            (V).value.ival = iround(F); }               \
+        else                              { (V).which_value = ParamVal_fval_tag;        \
+                                            (V).value.fval = (F); }                     \
+    } while (0)
+
 // Callback: encodes the metadata of ALL parameters (repeated ParamMeta) —
 // the strings go directly from the PARAMS table pointers (zero copy).
 bool encParamMetas(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
@@ -325,11 +341,10 @@ bool encParamMetas(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
         m.desc.funcs.encode = encStr; m.desc.arg = const_cast<char*>(p.desc);
         m.cat.funcs.encode  = encStr; m.cat.arg  = const_cast<char*>(p.cat);
         m.help.funcs.encode = encStr; m.help.arg = const_cast<char*>(p.help);
-        const char* type = (PType::Float == p.type) ? "float" : (PType::Int == p.type ? "int" : "bool");
-        m.type.funcs.encode = encStr; m.type.arg = const_cast<char*>(type);
-        m.min = cfgMin(p);
-        m.max = cfgMax(p);
-        m.val = cfgGet(*cfg, p);
+        PM_ONEOF(m, p, value, val, cfgGet(*cfg, p));   // current value (typed)
+        PM_ONEOF(m, p, minv,  min, cfgMin(p));
+        PM_ONEOF(m, p, maxv,  max, cfgMax(p));
+        PM_ONEOF(m, p, defv,  def, cfgDef(p));
         if (!pb_encode_tag_for_field(os, field)) return false;
         if (!pb_encode_submessage(os, ParamMeta_fields, &m)) return false;
     }
@@ -354,7 +369,7 @@ bool encParamVals(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
     {
         ParamVal v = ParamVal_init_zero;
         snprintf(v.name, sizeof(v.name), "%s", PARAMS[i].name);
-        v.val = cfgGet(*cfg, PARAMS[i]);
+        PV_ONEOF(v, PARAMS[i], cfgGet(*cfg, PARAMS[i]));
         if (!pb_encode_tag_for_field(os, field)) return false;
         if (!pb_encode_submessage(os, ParamVal_fields, &v)) return false;
     }
@@ -388,8 +403,8 @@ size_t buildStatusPb()
     msg.which_body = Msg_status_tag;
     const KartStatus s = statusSnapshot();
     Status& st = msg.body.status;
-    st.state      = s.m_state;
-    st.fault      = s.m_fault;
+    st.state      = static_cast<Status_State>(s.m_state);
+    st.fault      = static_cast<Status_Fault>(s.m_fault);
     st.faults     = s.m_faults;
     st.vbat       = s.m_vbat;
     st.batt_type  = s.m_batt_type;
@@ -403,7 +418,7 @@ size_t buildStatusPb()
     st.turn       = s.m_turn;
     st.out_l      = s.m_out_l;
     st.out_r      = s.m_out_r;
-    st.brake_mode = s.m_brake_mode;
+    st.brake_mode = static_cast<Status_BrakeMode>(s.m_brake_mode);
     st.arming     = s.m_arming;
     st.btn_start  = s.m_btn_start;
     st.pad_conn   = s.m_pad_conn;
@@ -582,11 +597,20 @@ bool decSetParam(pb_istream_t* is, const pb_field_t* field, void** arg)
         ctx->cfg = configSnapshot();
         ctx->touched = true;
     }
+    // Typed oneof → a single float; cfgSet narrows it back to the param's stored type.
+    float val;
+    switch (pv.which_value)
+    {
+        case ParamVal_bval_tag: val = pv.value.bval ? 1.f : 0.f;             break;
+        case ParamVal_ival_tag: val = static_cast<float>(pv.value.ival);     break;
+        case ParamVal_fval_tag: val = pv.value.fval;                         break;
+        default:                return true;   // no value set → nothing to apply
+    }
     for (int i = 0; i < PARAM_COUNT; ++i)
     {
         if (0 == strcmp(PARAMS[i].name, pv.name))
         {
-            cfgSet(ctx->cfg, PARAMS[i], pv.val);
+            cfgSet(ctx->cfg, PARAMS[i], val);
             break;
         }
     }

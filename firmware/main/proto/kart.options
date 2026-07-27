@@ -1,8 +1,8 @@
-# Options nanopb — SEULS les champs décodés côté kart ont une taille fixe (tampon statique).
-# Tous les champs string/bytes/repeated ENCODÉS restent des callbacks : zéro copie, zéro tas
-# (une fonction générique encode depuis les pointeurs existants : PARAMS, anneaux, g_status).
+# nanopb options — ONLY the fields DECODED on the kart side get a fixed size (static buffer).
+# All ENCODED string/bytes/repeated fields stay callbacks: zero copy, zero heap (a generic
+# function encodes straight from the existing pointers: PARAMS, ring buffers, g_status).
 Req.type   max_size:16
 Req.ssid   max_size:33
 Req.pass   max_size:65
-# ParamVal sert aussi au DÉCODAGE de « set » : nom en tampon fixe (clés NVS ≤ 15 car.).
+# ParamVal is also used to DECODE "set": name in a fixed buffer (NVS keys <= 15 chars).
 ParamVal.name max_size:16

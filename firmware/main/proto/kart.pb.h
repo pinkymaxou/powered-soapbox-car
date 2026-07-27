@@ -9,9 +9,37 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
+/* Enum definitions */
+/* Nested so the generated C types are Status_State / Status_Fault / Status_BrakeMode —
+ they must NOT collide with the C++ enum class State/Fault/BrakeMode in control_types.hpp. */
+typedef enum _Status_State {
+    Status_State_LOCKOUT = 0,
+    Status_State_CALIBRATE = 1,
+    Status_State_RUN = 2,
+    Status_State_FAULT = 3
+} Status_State;
+
+typedef enum _Status_BrakeMode {
+    Status_BrakeMode_NONE = 0,
+    Status_BrakeMode_DYNAMIC = 1,
+    Status_BrakeMode_ACTIVE = 2
+} Status_BrakeMode;
+
+typedef enum _Status_Fault {
+    Status_Fault_NO_FAULT = 0,
+    Status_Fault_ESTOP = 1,
+    Status_Fault_LVC = 2,
+    Status_Fault_NOT_CALIBRATED = 3,
+    Status_Fault_ENCODER = 4,
+    Status_Fault_ENCODER_DIR = 5,
+    Status_Fault_ENCODER_MAD = 6,
+    Status_Fault_ENCODER_ABSENT = 7,
+    Status_Fault_ENCODER_MAGNET = 8
+} Status_Fault;
+
 /* Struct definitions */
-/* ── Requête (client → kart) ──
- `type` garde les mêmes verbes que l'ancien protocole JSON : status, get, vals, sysdyn,
+/* ── Request (client → kart) ──
+ `type` keeps the same verbs as the old JSON protocol: status, get, vals, sysdyn,
  sysinfo, hist, wifiget, padinfo, reboot, padpair, padunpair, calstart, calfinish,
  calcancel, wifiset, set. */
 typedef struct _Req {
@@ -19,31 +47,36 @@ typedef struct _Req {
     char ssid[33]; /* wifiset */
     char pass[65]; /* wifiset */
     bool enabled; /* wifiset */
-    pb_callback_t set; /* set : paires nom/valeur */
+    pb_callback_t set; /* set: name/value pairs */
 } Req;
 
 typedef struct _ParamVal {
     char name[16];
-    float val;
+    pb_size_t which_value;
+    union {
+        bool bval;
+        int32_t ival;
+        float fval;
+    } value;
 } ParamVal;
 
-/* ── Réponses (kart → client) ── */
+/* ── Responses (kart → client) ── */
 typedef struct _Status {
-    int32_t state;
-    int32_t fault;
-    uint32_t faults; /* masque des conditions actives (bits fb::) */
+    Status_State state;
+    Status_Fault fault;
+    uint32_t faults; /* mask of active conditions (fb:: bits) */
     float vbat;
-    int32_t batt_type; /* 0 en détection, 12 ou 24 */
-    float batt_lo; /* échelle de jauge décidée côté firmware */
+    int32_t batt_type; /* 0 while detecting, 12 or 24 */
+    float batt_lo; /* gauge scale decided on the firmware side */
     float batt_hi;
-    float speed_ms; /* vitesse VÉHICULE (m/s, signée — 0 en pivot) */
-    float rpm_l; /* vitesse roue GAUCHE en tr/min (signée) */
-    float rpm_r; /* vitesse roue DROITE en tr/min (signée) */
+    float speed_ms; /* VEHICLE speed (m/s, signed — 0 while pivoting) */
+    float rpm_l; /* LEFT wheel speed in rpm (signed) */
+    float rpm_r; /* RIGHT wheel speed in rpm (signed) */
     float fwd;
     float turn;
     float out_l;
     float out_r;
-    int32_t brake_mode; /* 0 traction, 1 dynamique, 2 actif (PID) */
+    Status_BrakeMode brake_mode; /* NONE (traction/freewheel) · DYNAMIC · ACTIVE (PID) */
     bool arming;
     bool btn_start;
     bool pad_conn;
@@ -57,7 +90,7 @@ typedef struct _Status {
     float pad_rx2;
     float pad_ry2;
     uint32_t pad_btns;
-    int32_t pad_age_ms; /* heartbeat manette (âge du dernier rapport HID) */
+    int32_t pad_age_ms; /* gamepad heartbeat (age of the last HID report) */
 } Status;
 
 typedef struct _ParamMeta {
@@ -65,10 +98,30 @@ typedef struct _ParamMeta {
     pb_callback_t desc;
     pb_callback_t cat;
     pb_callback_t help;
-    pb_callback_t type; /* "float" | "int" | "bool" */
-    float min;
-    float max;
-    float val;
+    pb_size_t which_value;
+    union {
+        bool bval;
+        int32_t ival;
+        float fval;
+    } value;
+    pb_size_t which_minv;
+    union {
+        bool bmin;
+        int32_t imin;
+        float fmin;
+    } minv;
+    pb_size_t which_maxv;
+    union {
+        bool bmax;
+        int32_t imax;
+        float fmax;
+    } maxv;
+    pb_size_t which_defv;
+    union {
+        bool bdef;
+        int32_t idef;
+        float fdef;
+    } defv;
 } ParamMeta;
 
 typedef struct _Config {
@@ -79,9 +132,9 @@ typedef struct _Vals {
     pb_callback_t params;
 } Vals;
 
-/* Historique : chaque série = octets BRUTS (1 octet/échantillon, plus ancien → plus récent). */
+/* History: each series = RAW bytes (1 byte/sample, oldest → newest). */
 typedef struct _Hist {
-    uint32_t dt_fast; /* s entre échantillons (accel/pwm/rpm) */
+    uint32_t dt_fast; /* s between samples (accel/pwm/rpm) */
     uint32_t dt_spd;
     uint32_t dt_batt;
     pb_callback_t accel;
@@ -143,14 +196,14 @@ typedef struct _SysDyn {
     int64_t uptime_s;
     uint32_t heap_free;
     uint32_t heap_min;
-    uint32_t ledc_fix; /* sentinelle horloge LEDC */
+    uint32_t ledc_fix; /* LEDC clock sentinel */
 } SysDyn;
 
 typedef struct _Ok {
     char dummy_field;
 } Ok;
 
-/* Enveloppe : un seul type de trame sur le WebSocket (binaire), le oneof fait le dispatch. */
+/* Envelope: a single frame type on the WebSocket (binary), the oneof does the dispatch. */
 typedef struct _Msg {
     pb_size_t which_body;
     union {
@@ -171,11 +224,42 @@ typedef struct _Msg {
 extern "C" {
 #endif
 
+/* Helper constants for enums */
+#define _Status_State_MIN Status_State_LOCKOUT
+#define _Status_State_MAX Status_State_FAULT
+#define _Status_State_ARRAYSIZE ((Status_State)(Status_State_FAULT+1))
+
+#define _Status_BrakeMode_MIN Status_BrakeMode_NONE
+#define _Status_BrakeMode_MAX Status_BrakeMode_ACTIVE
+#define _Status_BrakeMode_ARRAYSIZE ((Status_BrakeMode)(Status_BrakeMode_ACTIVE+1))
+
+#define _Status_Fault_MIN Status_Fault_NO_FAULT
+#define _Status_Fault_MAX Status_Fault_ENCODER_MAGNET
+#define _Status_Fault_ARRAYSIZE ((Status_Fault)(Status_Fault_ENCODER_MAGNET+1))
+
+
+
+#define Status_state_ENUMTYPE Status_State
+#define Status_fault_ENUMTYPE Status_Fault
+#define Status_brake_mode_ENUMTYPE Status_BrakeMode
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* Initializer values for message structs */
 #define Req_init_default                         {"", "", "", 0, {{NULL}, NULL}}
-#define ParamVal_init_default                    {"", 0}
-#define Status_init_default                      {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define ParamMeta_init_default                   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0}
+#define ParamVal_init_default                    {"", 0, {0}}
+#define Status_init_default                      {_Status_State_MIN, _Status_Fault_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _Status_BrakeMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define ParamMeta_init_default                   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {0}, 0, {0}, 0, {0}, 0, {0}}
 #define Config_init_default                      {{{NULL}, NULL}}
 #define Vals_init_default                        {{{NULL}, NULL}}
 #define Hist_init_default                        {0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
@@ -187,9 +271,9 @@ extern "C" {
 #define Ok_init_default                          {0}
 #define Msg_init_default                         {0, {Status_init_default}}
 #define Req_init_zero                            {"", "", "", 0, {{NULL}, NULL}}
-#define ParamVal_init_zero                       {"", 0}
-#define Status_init_zero                         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define ParamMeta_init_zero                      {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0}
+#define ParamVal_init_zero                       {"", 0, {0}}
+#define Status_init_zero                         {_Status_State_MIN, _Status_Fault_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _Status_BrakeMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define ParamMeta_init_zero                      {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {0}, 0, {0}, 0, {0}, 0, {0}}
 #define Config_init_zero                         {{{NULL}, NULL}}
 #define Vals_init_zero                           {{{NULL}, NULL}}
 #define Hist_init_zero                           {0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
@@ -208,7 +292,9 @@ extern "C" {
 #define Req_enabled_tag                          4
 #define Req_set_tag                              5
 #define ParamVal_name_tag                        1
-#define ParamVal_val_tag                         2
+#define ParamVal_bval_tag                        2
+#define ParamVal_ival_tag                        3
+#define ParamVal_fval_tag                        4
 #define Status_state_tag                         1
 #define Status_fault_tag                         2
 #define Status_faults_tag                        3
@@ -242,10 +328,18 @@ extern "C" {
 #define ParamMeta_desc_tag                       2
 #define ParamMeta_cat_tag                        3
 #define ParamMeta_help_tag                       4
-#define ParamMeta_type_tag                       5
-#define ParamMeta_min_tag                        6
-#define ParamMeta_max_tag                        7
-#define ParamMeta_val_tag                        8
+#define ParamMeta_bval_tag                       8
+#define ParamMeta_ival_tag                       9
+#define ParamMeta_fval_tag                       10
+#define ParamMeta_bmin_tag                       11
+#define ParamMeta_imin_tag                       12
+#define ParamMeta_fmin_tag                       13
+#define ParamMeta_bmax_tag                       14
+#define ParamMeta_imax_tag                       15
+#define ParamMeta_fmax_tag                       16
+#define ParamMeta_bdef_tag                       17
+#define ParamMeta_idef_tag                       18
+#define ParamMeta_fdef_tag                       19
 #define Config_params_tag                        1
 #define Vals_params_tag                          1
 #define Hist_dt_fast_tag                         1
@@ -319,13 +413,15 @@ X(a, CALLBACK, REPEATED, MESSAGE,  set,               5)
 
 #define ParamVal_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   name,              1) \
-X(a, STATIC,   SINGULAR, FLOAT,    val,               2)
+X(a, STATIC,   ONEOF,    BOOL,     (value,bval,value.bval),   2) \
+X(a, STATIC,   ONEOF,    INT32,    (value,ival,value.ival),   3) \
+X(a, STATIC,   ONEOF,    FLOAT,    (value,fval,value.fval),   4)
 #define ParamVal_CALLBACK NULL
 #define ParamVal_DEFAULT NULL
 
 #define Status_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, INT32,    state,             1) \
-X(a, STATIC,   SINGULAR, INT32,    fault,             2) \
+X(a, STATIC,   SINGULAR, UENUM,    state,             1) \
+X(a, STATIC,   SINGULAR, UENUM,    fault,             2) \
 X(a, STATIC,   SINGULAR, UINT32,   faults,            3) \
 X(a, STATIC,   SINGULAR, FLOAT,    vbat,              4) \
 X(a, STATIC,   SINGULAR, INT32,    batt_type,         5) \
@@ -338,7 +434,7 @@ X(a, STATIC,   SINGULAR, FLOAT,    fwd,              11) \
 X(a, STATIC,   SINGULAR, FLOAT,    turn,             12) \
 X(a, STATIC,   SINGULAR, FLOAT,    out_l,            13) \
 X(a, STATIC,   SINGULAR, FLOAT,    out_r,            14) \
-X(a, STATIC,   SINGULAR, INT32,    brake_mode,       15) \
+X(a, STATIC,   SINGULAR, UENUM,    brake_mode,       15) \
 X(a, STATIC,   SINGULAR, BOOL,     arming,           16) \
 X(a, STATIC,   SINGULAR, BOOL,     btn_start,        17) \
 X(a, STATIC,   SINGULAR, BOOL,     pad_conn,         18) \
@@ -361,10 +457,18 @@ X(a, CALLBACK, SINGULAR, STRING,   name,              1) \
 X(a, CALLBACK, SINGULAR, STRING,   desc,              2) \
 X(a, CALLBACK, SINGULAR, STRING,   cat,               3) \
 X(a, CALLBACK, SINGULAR, STRING,   help,              4) \
-X(a, CALLBACK, SINGULAR, STRING,   type,              5) \
-X(a, STATIC,   SINGULAR, FLOAT,    min,               6) \
-X(a, STATIC,   SINGULAR, FLOAT,    max,               7) \
-X(a, STATIC,   SINGULAR, FLOAT,    val,               8)
+X(a, STATIC,   ONEOF,    BOOL,     (value,bval,value.bval),   8) \
+X(a, STATIC,   ONEOF,    INT32,    (value,ival,value.ival),   9) \
+X(a, STATIC,   ONEOF,    FLOAT,    (value,fval,value.fval),  10) \
+X(a, STATIC,   ONEOF,    BOOL,     (minv,bmin,minv.bmin),  11) \
+X(a, STATIC,   ONEOF,    INT32,    (minv,imin,minv.imin),  12) \
+X(a, STATIC,   ONEOF,    FLOAT,    (minv,fmin,minv.fmin),  13) \
+X(a, STATIC,   ONEOF,    BOOL,     (maxv,bmax,maxv.bmax),  14) \
+X(a, STATIC,   ONEOF,    INT32,    (maxv,imax,maxv.imax),  15) \
+X(a, STATIC,   ONEOF,    FLOAT,    (maxv,fmax,maxv.fmax),  16) \
+X(a, STATIC,   ONEOF,    BOOL,     (defv,bdef,defv.bdef),  17) \
+X(a, STATIC,   ONEOF,    INT32,    (defv,idef,defv.idef),  18) \
+X(a, STATIC,   ONEOF,    FLOAT,    (defv,fdef,defv.fdef),  19)
 #define ParamMeta_CALLBACK pb_default_field_callback
 #define ParamMeta_DEFAULT NULL
 
@@ -525,8 +629,8 @@ extern const pb_msgdesc_t Msg_msg;
 /* Msg_size depends on runtime parameters */
 #define KART_PB_H_MAX_SIZE                       Status_size
 #define Ok_size                                  0
-#define ParamVal_size                            22
-#define Status_size                              188
+#define ParamVal_size                            28
+#define Status_size                              161
 #define SysDyn_size                              29
 
 #ifdef __cplusplus
