@@ -5,6 +5,7 @@
 // Appairage / désappairage exposés via inputbp_pair() / inputbp_unpair().
 #include <string.h>
 
+#include <btstack.h>
 #include <btstack_port_esp32.h>
 #include <btstack_run_loop.h>
 #include <uni.h>
@@ -25,11 +26,20 @@ static void plat_init(int argc, const char** argv) { (void)argc; (void)argv; }
 
 static void plat_on_init_complete(void)
 {
-    // Reconnexion d'une manette déjà appairée après un redémarrage :
-    //  - scan + autoconnect : l'ESP va vers la manette connue (clés de liaison en NVS) ;
-    //  - allow_incoming(true) : ET on accepte que la manette nous recontacte (cas Switch Pro
-    //    & co., qui RAPPELLENT l'hôte quand on les rallume/appuie sur un bouton).
-    // Sans « incoming », une manette appairée ne pouvait pas se reconnecter seule au boot.
+    // Wi-Fi and Bluetooth share one radio (coexistence), so BT scanning only gets a slice
+    // of airtime. With BTstack's default page-scan window (~11 ms listened every 1.28 s) an
+    // already-paired pad switched on after boot can take several seconds to be heard. Widen
+    // the incoming page-scan window so it reconnects in ~1 s. Units of 0.625 ms: interval
+    // 0x0300 = 480 ms, window 0x0048 = 45 ms; page scan is INTERLACED (set in the BR/EDR
+    // setup) so it listens twice per interval → ~19 % duty, a fair balance against Wi-Fi
+    // throughput. Bump the window (2nd arg) toward the interval for even faster reconnect.
+    gap_set_page_scan_activity(0x0300, 0x0048);
+
+    // Reconnect an already-paired pad after a restart:
+    //  - scan + autoconnect: the ESP reaches out to the known pad (link keys in NVS);
+    //  - allow_incoming(true): AND we accept the pad calling us back (Switch Pro & co.
+    //    re-page the host when powered on / a button is pressed).
+    // Without "incoming", a paired pad could not reconnect on its own at boot.
     uni_bt_start_scanning_and_autoconnect_unsafe();
     uni_bt_allow_incoming_connections(true);
 }
