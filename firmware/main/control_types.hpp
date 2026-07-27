@@ -116,7 +116,6 @@ struct KartConfig
     float rev_speed_ms;     // speed limit in REVERSE (m/s) — separate
     float duty_cap_frac;
     float thr_deadzone;   // stick deadzone (forward AND turn)
-    float thr_ramp_per_s; // slope limiter of the FORWARD command (smoothness, Δ/s)
     float vbat_div_ratio;
     float brk_kp;
     float brk_ki;
@@ -124,20 +123,21 @@ struct KartConfig
     float vlim_kp;
     float vlim_ki;
     float vlim_kd;
-    float turn_gain;     // share of the differential at full X stick (0..1)
-    float turn_limit_en; // 1 = rollover protection active (speed→turn ramp); 0 = disabled (testing)
-    float turn_full_ms;  // below this speed (m/s), turn ±100% (pivot allowed) — rollover protection
-    float turn_hi;       // turn limit (0..1) reached at speed_limit_ms (linear ramp)
-    float turn_rate;     // max turn slope (Δ/s) — smooths abrupt stick moves
-    float vlim_enable;   // 1 = PID speed limiter active; 0 = disabled (testing)
-    float brk_pid_enable;// 1 = PID braking active when stopped; 0 = dynamic braking only (testing)
-    float use_encoders;  // 1 = speed/brake/fault control via AS5600; 0 = ignore the encoders
-    float enc_per_wheel; // encoder-shaft turns per WHEEL turn (mount: gearbox output 1.28, 1:5 shaft 3.41)
-    float allow_reverse;
-    float arm_hold_ms;
-    float disarm_s;
-    float led_count;
-    float led_brightness;
+    float   turn_gain;      // share of the differential at full X stick (0..1)
+    int32_t turn_limit_en;  // 1 = rollover protection active (speed→turn ramp); 0 = disabled (testing)
+    float   turn_full_ms;   // below this speed (m/s), turn ±100% (pivot allowed) — rollover protection
+    float   turn_hi;        // turn limit (0..1) reached at speed_limit_ms (linear ramp)
+    float   turn_rate;      // max turn slope (Δ/s) — smooths abrupt stick moves
+    int32_t vlim_enable;    // 1 = PID speed limiter active; 0 = disabled (testing)
+    int32_t brk_pid_enable; // 1 = PID braking active when stopped; 0 = dynamic braking only (testing)
+    int32_t open_loop;      // 1 = TEST: mixed stick → motors, no control loops (limiter/rollover/PID/smoothing)
+    int32_t use_encoders;   // 1 = speed/brake/fault control via AS5600; 0 = ignore the encoders
+    float   enc_per_wheel;  // encoder-shaft turns per WHEEL turn (mount: gearbox output 1.28, 1:5 shaft 3.41)
+    int32_t allow_reverse;
+    int32_t arm_hold_ms;
+    int32_t disarm_s;
+    int32_t led_count;
+    int32_t led_brightness;
 
     // Encoder tick conversion — DERIVED (not stored as params): enc_mps_per_cps from
     // enc_per_wheel (see PARAMS) + the fixed AS5600 CPR and wheel diameter; recomputed by
@@ -151,19 +151,32 @@ struct KartConfig
 
 enum class PType : uint8_t { Float, Int, Bool };
 
+// A 4-byte config scalar: a float, OR an int32 (bools are stored as 0/1 int32). Tagged by
+// PType — only ever read/write the member matching the type (see cfgGet/cfgSet).
+union CfgVal   { float f; int32_t i; };
+union CfgField { float KartConfig::* f; int32_t KartConfig::* i; };
+
 struct ParamDesc
 {
-    const char*        name;   // NVS key + JSON key (≤ 15 characters for NVS)
-    const char*        desc;   // short label for the web page
-    const char*        cat;    // category (visual grouping in the config page)
-    const char*        help;   // long description (tooltip on field hover)
-    PType              type;
-    float              min, def, max;
-    float KartConfig::* field; // pointer to the corresponding field
+    const char* name;   // NVS key + JSON key (≤ 15 characters for NVS)
+    const char* desc;   // short label for the web page
+    const char* cat;    // category (visual grouping in the config page)
+    const char* help;   // long description (tooltip on field hover)
+    PType       type;
+    CfgVal      min, def, max;   // .f for Float, .i for Int/Bool
+    CfgField    field;           // member pointer to the target field (member matching `type`)
 };
 
 extern const ParamDesc PARAMS[];
 extern const int       PARAM_COUNT;
+
+// Typed access to a parameter, widened to / narrowed from float — the config wire
+// (protobuf ParamVal/ParamMeta) stays float; only the internal storage is typed.
+float cfgGet(const KartConfig& c, const ParamDesc& p);
+void  cfgSet(KartConfig& c, const ParamDesc& p, float v);
+float cfgMin(const ParamDesc& p);
+float cfgMax(const ParamDesc& p);
+float cfgDef(const ParamDesc& p);
 
 // ───────────────────────── Telemetry ─────────────────────────
 enum class State : int { Lockout = 0, Calibrate = 1, Run = 2, Fault = 3 };

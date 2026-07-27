@@ -93,7 +93,9 @@ bool configLoad()
     bool any = false;
     for (int i = 0; i < PARAM_COUNT; ++i)
     {
-        any |= readFloat(handle, PARAMS[i].name, cfg.*(PARAMS[i].field));
+        // NVS keeps the historical float-blob format; cfgSet narrows to int for int/bool params.
+        float v;
+        if (readFloat(handle, PARAMS[i].name, v)) { cfgSet(cfg, PARAMS[i], v); any = true; }
     }
     nvs_close(handle);
     cfg.clampAll();
@@ -111,7 +113,7 @@ bool configSave()
     }
     for (int i = 0; i < PARAM_COUNT; ++i)
     {
-        writeFloat(handle, PARAMS[i].name, g_cfg.*(PARAMS[i].field));
+        writeFloat(handle, PARAMS[i].name, cfgGet(g_cfg, PARAMS[i]));
     }
     const esp_err_t err = nvs_commit(handle);
     nvs_close(handle);

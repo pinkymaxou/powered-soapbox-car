@@ -327,9 +327,9 @@ bool encParamMetas(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
         m.help.funcs.encode = encStr; m.help.arg = const_cast<char*>(p.help);
         const char* type = (PType::Float == p.type) ? "float" : (PType::Int == p.type ? "int" : "bool");
         m.type.funcs.encode = encStr; m.type.arg = const_cast<char*>(type);
-        m.min = p.min;
-        m.max = p.max;
-        m.val = cfg->*(p.field);
+        m.min = cfgMin(p);
+        m.max = cfgMax(p);
+        m.val = cfgGet(*cfg, p);
         if (!pb_encode_tag_for_field(os, field)) return false;
         if (!pb_encode_submessage(os, ParamMeta_fields, &m)) return false;
     }
@@ -354,7 +354,7 @@ bool encParamVals(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
     {
         ParamVal v = ParamVal_init_zero;
         snprintf(v.name, sizeof(v.name), "%s", PARAMS[i].name);
-        v.val = cfg->*(PARAMS[i].field);
+        v.val = cfgGet(*cfg, PARAMS[i]);
         if (!pb_encode_tag_for_field(os, field)) return false;
         if (!pb_encode_submessage(os, ParamVal_fields, &v)) return false;
     }
@@ -586,7 +586,7 @@ bool decSetParam(pb_istream_t* is, const pb_field_t* field, void** arg)
     {
         if (0 == strcmp(PARAMS[i].name, pv.name))
         {
-            ctx->cfg.*(PARAMS[i].field) = pv.val;
+            cfgSet(ctx->cfg, PARAMS[i], pv.val);
             break;
         }
     }

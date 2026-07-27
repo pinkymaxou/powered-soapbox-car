@@ -124,7 +124,7 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     CtrlOutputs out;
     const int64_t now = in.now_us;
 
-    const bool use_enc = (m_cfg.use_encoders != 0.f);   // 0 = ignore the AS5600 (bench without encoders)
+    const bool use_enc = (m_cfg.use_encoders != 0);   // 0 = ignore the AS5600 (bench without encoders)
 
     // Heartbeat: "connected" but no HID report for 250 ms → treated as
     // DISCONNECTED (immediate disarm + braking, without waiting for the Bluetooth timeout).
@@ -286,67 +286,87 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         m_brake_r.reset();
         float fwd_t = deadzone(in.pad.y, m_cfg.thr_deadzone);
         const float turn_t = deadzone(in.pad.x, m_cfg.thr_deadzone);
-        if (m_cfg.allow_reverse == 0.f && fwd_t < 0.f) fwd_t = 0.f;   // reverse forbidden?
+        if (m_cfg.allow_reverse == 0 && fwd_t < 0.f) fwd_t = 0.f;   // reverse forbidden?
         // (No PWM limit in reverse: the TOTAL SPEED LIMIT — PID on |v| — holds
         // in both directions, like the rollover protection which works on |v|.)
 
-        // 1) Slope limiter: forbids too ABRUPT a variation (a "sharp" stick move).
-        m_fwd_cmd = slew(fwd_t, m_fwd_cmd, m_cfg.thr_ramp_per_s, hw::CTRL_DT_S);
-        m_turn_cmd = slew(turn_t, m_turn_cmd, m_cfg.turn_rate, hw::CTRL_DT_S);
-        fwd = m_fwd_cmd;
-        turn = m_turn_cmd;
-
-        // 2) "iso-a_lat" rollover protection: the turn limit follows the MEASURED speed
-        //    as 1/v (same lateral acceleration at all speeds — see turnLimit); ±100%
-        //    below turn_full_ms (pivot in place at full power), turn_hi at speed_limit_ms,
-        //    and even tighter beyond. Without encoders, v=0 → no limiting.
-        //    Disableable (turn_limit_en=0) for bench testing.
-        if (m_cfg.turn_limit_en != 0.f)
+        if (m_cfg.open_loop != 0)
         {
-            const float turn_max = turnLimit(std::fabs(v_veh), m_cfg.turn_full_ms, m_cfg.speed_limit_ms, m_cfg.turn_hi);
-            turn = clampf(turn, -turn_max, turn_max);
-            m_turn_cmd = turn;   // keeps the state bounded (no ramp windup beyond the limit)
-        }
-
-        // Differential arcade mixing (pivot in place possible if fwd≈0).
-        mixArcade(fwd, turn, m_cfg.turn_gain, out_l, out_r);
-
-        // Global speed cap (preserves the turn ratio) via PID on the average speed.
-        // Target based on the MEASURED DIRECTION: forward → speed_limit_ms, reverse → rev_speed_ms. On the
-        // measured direction (not the command): in plugging (reverse stick, kart still moving
-        // forward) the target stays the forward one — the braking authority is not cut short.
-        // Without encoders: no speed control loop → we rely on the PWM cap (duty_cap).
-        if (use_enc && m_cfg.vlim_enable != 0.f)
-        {
-            const float v_target = (v_veh < 0.f) ? m_cfg.rev_speed_ms : m_cfg.speed_limit_ms;
-            const float vcap = m_speed_pid.update(v_target, std::fabs(v_veh), hw::CTRL_DT_S,
-                                                  m_cfg.vlim_kp, m_cfg.vlim_ki, m_cfg.vlim_kd, 0.f, 1.f);
-            out_l *= vcap;
-            out_r *= vcap;
+            // OPEN-LOOP TEST MODE: the mixed stick goes straight to the motors — NO forward/
+            // turn smoothing, NO rollover limit, NO speed-limiter PID, NO active braking. The
+            // output PWM cap (battery-voltage / manual duty) still bounds the drive, and every
+            // safety gate (arming, heartbeat, e-stop, blocking faults) is unchanged upstream.
+            // Centered stick → 0 output (coast); disarm or e-stop to brake.
+            fwd = fwd_t;
+            turn = turn_t;
+            m_fwd_cmd = fwd;
+            m_turn_cmd = turn;
+            mixArcade(fwd, turn, m_cfg.turn_gain, out_l, out_r);
+            m_speed_pid.reset();
+            if (std::fabs(fwd) > 1e-3f || std::fabs(turn) > 1e-3f) m_last_act_us = now;
         }
         else
         {
-            m_speed_pid.reset();
-        }
+            // Forward: NO input smoothing — the stick maps straight to the command. Any
+            // acceleration limiting belongs in the control layer (speed PID / duty cap), not
+            // here. Turn keeps its slope limiter (smooths abrupt steering, feeds rollover).
+            m_fwd_cmd = fwd_t;
+            m_turn_cmd = slew(turn_t, m_turn_cmd, m_cfg.turn_rate, hw::CTRL_DT_S);
+            fwd = m_fwd_cmd;
+            turn = m_turn_cmd;
 
-        if (std::fabs(fwd) < 1e-3f && std::fabs(turn) < 1e-3f)
-        {
-            // ARMED + centered stick → ACTIVE BRAKING (plugging PID) if encoders present
-            // AND PID braking enabled; otherwise fallback to dynamic braking (short-circuit).
-            braking = true;
-            if (use_enc && m_cfg.brk_pid_enable != 0.f)
+            // "iso-a_lat" rollover protection: the turn limit follows the MEASURED speed
+            // as 1/v (same lateral acceleration at all speeds — see turnLimit); ±100%
+            // below turn_full_ms (pivot in place at full power), turn_hi at speed_limit_ms,
+            // and even tighter beyond. Without encoders, v=0 → no limiting.
+            // Disableable (turn_limit_en=0) for bench testing.
+            if (m_cfg.turn_limit_en != 0)
             {
-                out_l = brakeWheel(m_brake_l, sl, m_cfg, hw::CTRL_DT_S);
-                out_r = brakeWheel(m_brake_r, sr, m_cfg, hw::CTRL_DT_S);
+                const float turn_max = turnLimit(std::fabs(v_veh), m_cfg.turn_full_ms, m_cfg.speed_limit_ms, m_cfg.turn_hi);
+                turn = clampf(turn, -turn_max, turn_max);
+                m_turn_cmd = turn;   // keeps the state bounded (no ramp windup beyond the limit)
+            }
+
+            // Differential arcade mixing (pivot in place possible if fwd≈0).
+            mixArcade(fwd, turn, m_cfg.turn_gain, out_l, out_r);
+
+            // Global speed cap (preserves the turn ratio) via PID on the average speed.
+            // Target based on the MEASURED DIRECTION: forward → speed_limit_ms, reverse → rev_speed_ms. On the
+            // measured direction (not the command): in plugging (reverse stick, kart still moving
+            // forward) the target stays the forward one — the braking authority is not cut short.
+            // Without encoders: no speed control loop → we rely on the PWM cap (duty_cap).
+            if (use_enc && m_cfg.vlim_enable != 0)
+            {
+                const float v_target = (v_veh < 0.f) ? m_cfg.rev_speed_ms : m_cfg.speed_limit_ms;
+                const float vcap = m_speed_pid.update(v_target, std::fabs(v_veh), hw::CTRL_DT_S,
+                                                      m_cfg.vlim_kp, m_cfg.vlim_ki, m_cfg.vlim_kd, 0.f, 1.f);
+                out_l *= vcap;
+                out_r *= vcap;
             }
             else
             {
-                dyn_brake = true;
+                m_speed_pid.reset();
             }
-        }
-        else
-        {
-            m_last_act_us = now;
+
+            if (std::fabs(fwd) < 1e-3f && std::fabs(turn) < 1e-3f)
+            {
+                // ARMED + centered stick → ACTIVE BRAKING (plugging PID) if encoders present
+                // AND PID braking enabled; otherwise fallback to dynamic braking (short-circuit).
+                braking = true;
+                if (use_enc && m_cfg.brk_pid_enable != 0)
+                {
+                    out_l = brakeWheel(m_brake_l, sl, m_cfg, hw::CTRL_DT_S);
+                    out_r = brakeWheel(m_brake_r, sr, m_cfg, hw::CTRL_DT_S);
+                }
+                else
+                {
+                    dyn_brake = true;
+                }
+            }
+            else
+            {
+                m_last_act_us = now;
+            }
         }
         state = State::Run;
     }
