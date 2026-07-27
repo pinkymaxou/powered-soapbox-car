@@ -431,7 +431,14 @@ int driveInteractive()
             const size_t p = line.find("\"tl\":");
             if (p != std::string::npos)
             {
-                cfg.turn_limit_en = (std::atof(line.c_str() + p + 5) != 0.0) ? 1.f : 0.f;
+                cfg.turn_limit_en = (std::atof(line.c_str() + p + 5) != 0.0) ? 1 : 0;
+            }
+            // Open-loop test mode switch (viewer checkbox): same parameter as on the
+            // real kart (open_loop) — mixed stick straight to the motors, no control loops.
+            const size_t po = line.find("\"ol\":");
+            if (po != std::string::npos)
+            {
+                cfg.open_loop = (std::atof(line.c_str() + po + 5) != 0.0) ? 1 : 0;
             }
             acc.erase(0, nl + 1);
         }

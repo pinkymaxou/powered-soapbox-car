@@ -129,7 +129,7 @@ inline std::vector<Scenario> allScenarios()
         "virage_sans_protection",
         "Same maneuver with turn_limit_en=0: demonstrates the avoided rollover",
         10.f,
-        [](KartConfig& c) { c.turn_limit_en = 0.f; },
+        [](KartConfig& c) { c.turn_limit_en = 0; },
         nullptr,
         [](float t) {
             PadCmd c;
@@ -330,7 +330,7 @@ inline std::vector<Scenario> allScenarios()
         "descente_frein_dynamique",
         "Slope 8%, dynamic braking ONLY (without PID): bounded terminal speed expected",
         18.f,
-        [](KartConfig& c) { c.brk_pid_enable = 0.f; },
+        [](KartConfig& c) { c.brk_pid_enable = 0; },
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.08f); },
         [](float t) {
             PadCmd c;
@@ -357,7 +357,7 @@ inline std::vector<Scenario> allScenarios()
         "descente16_frein_dynamique",
         "Slope 16%, dynamic braking ONLY: terminal speed ~1 m/s expected",
         18.f,
-        [](KartConfig& c) { c.brk_pid_enable = 0.f; },
+        [](KartConfig& c) { c.brk_pid_enable = 0; },
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.16f); },
         [](float t) {
             PadCmd c;

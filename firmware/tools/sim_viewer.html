@@ -53,6 +53,8 @@
  <button onclick="document.getElementById('hypo').style.display='block'">ℹ️ Assumptions</button>
  <label id="tlwrap" style="display:none;gap:6px;align-items:center;cursor:pointer">
   <input type="checkbox" id="tl" checked> 🛡️ rollover protection</label>
+ <label id="olwrap" style="display:none;gap:6px;align-items:center;cursor:pointer">
+  <input type="checkbox" id="ol"> 🔧 open-loop</label>
  <span class="badge" id="bstate">—</span>
  <span class="badge" id="bbrake">—</span>
  <span class="badge" id="bfault" style="display:none">—</span>
@@ -454,6 +456,7 @@ function sendInput(){
     start: keys.start || (gp && gp.start) ? 1 : 0,
     estop: keys.estop || (gp && gp.estop) ? 1 : 0,
     tl: document.getElementById('tl').checked ? 1 : 0,   // 🛡️ rollover protection (turn_limit_en)
+    ol: document.getElementById('ol').checked ? 1 : 0,   // 🔧 open-loop test mode (open_loop)
   };
   fetch('/input', {method:'POST', body: JSON.stringify(cmd)}).catch(() => {});
 }
@@ -536,6 +539,7 @@ function play(){
       terrain.visible = !!m.terrain;
       trees.visible = !!m.terrain;
       document.getElementById('tlwrap').style.display = m.terrain ? 'flex' : 'none';
+      document.getElementById('olwrap').style.display = m.terrain ? 'flex' : 'none';
       grid.visible = !m.terrain;
       flatGround.visible = !m.terrain;
       document.getElementById('desc').textContent = m.desc +
