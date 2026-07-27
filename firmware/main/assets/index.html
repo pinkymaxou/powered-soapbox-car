@@ -14,6 +14,7 @@
  <button class="tab" data-tab="pad">Gamepad</button>
  <button class="tab" data-tab="wifi">Wi-Fi</button>
  <button class="tab" data-tab="pins">Pinout</button>
+ <button class="tab" data-tab="doc">Documentation</button>
  <button class="tab" data-tab="sys">System</button>
 </nav>
 <div class="wrap">
@@ -173,6 +174,58 @@
   </table>
   <p class="note">Control = <b>Bluetooth gamepad</b> (Gamepad tab). Tricycle: 2 driven front wheels + rear caster wheel.<br>
   Disconnected or uncalibrated gamepad → <b>braking / refuses to drive</b>. Emergency stop = hardware kill switch.</p>
+ </section>
+
+ <section id="doc" class="panel" hidden>
+  <div class="chart-title">🎓 Control modes</div>
+  <p class="note">The kart turns the stick into a left/right motor command (arcade mixing:
+   forward drives both wheels, turn adds a left/right difference). What sits <b>between the
+   stick and the motors</b> is what changes between the two modes.</p>
+
+  <div class="dochead">🔒 Closed loop <span class="docsub">— normal driving</span></div>
+  <p class="note">Every safety and comfort layer is active; the encoders measure wheel speed.</p>
+  <div class="pipe">
+   <span class="blk in">Stick</span><span class="arr">→</span>
+   <span class="blk">Deadzone</span><span class="arr">→</span>
+   <span class="blk">Turn slew</span><span class="arr">→</span>
+   <span class="blk">Rollover limit</span><span class="arr">→</span>
+   <span class="blk">Arcade mix</span><span class="arr">→</span>
+   <span class="blk">Speed PID <small>(enc)</small></span><span class="arr">→</span>
+   <span class="blk">PWM cap</span><span class="arr">→</span>
+   <span class="blk out">Motors</span>
+  </div>
+
+  <div class="dochead">🔧 Open loop <span class="docsub">— bench / stand testing</span></div>
+  <p class="note">Raw passthrough: only the PWM cap and the safety gates remain — no speed
+   limit, no rollover protection, no smoothing, no PID braking.</p>
+  <div class="pipe">
+   <span class="blk in">Stick</span><span class="arr">→</span>
+   <span class="blk">Deadzone</span><span class="arr">→</span>
+   <span class="blk">Arcade mix</span><span class="arr">→</span>
+   <span class="blk">PWM cap</span><span class="arr">→</span>
+   <span class="blk out">Motors</span>
+  </div>
+
+  <div class="dochead">🕹️ What the stick does</div>
+  <table class="doctbl">
+   <tr><th>Stick</th><th>Closed loop</th><th>Open loop</th></tr>
+   <tr><td>▲ / ▼ pushed</td>
+       <td>Drives; speed held at the limit by the PID (separate forward &amp; reverse limits).</td>
+       <td>Raw duty straight to the motors, bounded only by the PWM cap.</td></tr>
+   <tr><td>◀ / ▶ turn</td>
+       <td>Differential steering, tightened as speed rises (rollover protection).</td>
+       <td>Raw differential — no rollover limit.</td></tr>
+   <tr><td>■ centered<br>(released)</td>
+       <td>Active PID brake if enabled, else dynamic brake, else freewheel.</td>
+       <td>Dynamic brake, else freewheel. (No PID braking.)</td></tr>
+  </table>
+
+  <div class="dochead">🛑 Always on — every mode</div>
+  <p class="note"><b>Disarmed, fault, e-stop or gamepad lost → dynamic braking</b> (motor
+   windings shorted): the safe resting state, independent of every setting above.<br>
+   On release, <b>Dynamic brake</b> shorts the windings to hold the kart; <b>Freewheel</b>
+   (dynamic brake turned off) lets the wheels spin free. The Dashboard centre readout shows
+   which one is active right now.</p>
  </section>
 
  <section id="sys" class="panel" hidden>
@@ -343,7 +396,9 @@ function buildInds(){
 function updateInds(s){
  INDS.forEach(i=>document.getElementById('i_'+i.k).classList.toggle('on', !!s[i.k]));
  const b=document.getElementById('i_brakemode'), m=s.brake_mode||0;
- b.textContent=BRAKE_MODES[m]||m;
+ // brake_mode 0 = no brake: TRACTION while driving, FREEWHEEL while coasting (stick centered).
+ const coasting = (m===0 && Math.abs(s.fwd)<0.02 && Math.abs(s.turn)<0.02);
+ b.textContent = coasting ? '⚪ FREEWHEEL' : (BRAKE_MODES[m]||m);
  b.className='pill brakemode bm'+m;
 }
 function updateBars(s){
@@ -464,7 +519,15 @@ function showStatus(s){
  const _pct=v=>(Math.abs(v)*100).toFixed(0), _arw=v=>v>0.02?'▲':(v<-0.02?'▼':'■');
  const _drv=s.fwd>0.02?('▲ FWD '+_pct(s.fwd)+'%'):(s.fwd<-0.02?('▼ REV '+_pct(s.fwd)+'%'):'■ STOP');
  const _trn=s.turn>0.02?(' · ▶ '+_pct(s.turn)+'%'):(s.turn<-0.02?(' · ◀ '+_pct(s.turn)+'%'):'');
- _sv('fd-mix',_drv+_trn);
+ // Centre readout: brake mode when a brake is engaged (2 = active PID, 1 = dynamic
+ // short-circuit), otherwise the drive command. Coasting (open-loop centred) = STOP, no brake.
+ const _fm=document.getElementById('fd-mix'), _bm=s.brake_mode||0;
+ if(_fm){
+   if(_bm===2){ _fm.textContent='⏹ ACTIVE BRAKE';  _fm.setAttribute('class','fdmix act'); }
+   else if(_bm===1){ _fm.textContent='⏹ DYNAMIC BRAKE'; _fm.setAttribute('class','fdmix dyn'); }
+   else if(Math.abs(s.fwd)<0.02 && Math.abs(s.turn)<0.02){ _fm.textContent='○ FREEWHEEL'; _fm.setAttribute('class','fdmix free'); }
+   else { _fm.textContent=_drv+_trn; _fm.setAttribute('class','fdmix'); }
+ }
  // PWM gauge: 33 px = half of the 66 px track; fill grows up (forward) or down (reverse) from centre y=121.
  const _pwm=(id,v)=>{const b=document.getElementById(id); if(!b)return;
    const h=Math.min(Math.abs(v),1)*33;

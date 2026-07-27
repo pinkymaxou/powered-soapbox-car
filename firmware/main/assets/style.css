@@ -129,6 +129,9 @@ label[title]{cursor:help}
 #faultdiag .pwmfill{transition:y .1s linear,height .1s linear}
 #faultdiag .pwmzero{stroke:var(--muted);stroke-width:1;opacity:.7}
 #faultdiag .fdmix{fill:var(--green);font:700 13px ui-monospace,Menlo,Consolas,monospace}
+#faultdiag .fdmix.act{fill:var(--green)}   /* active PID braking */
+#faultdiag .fdmix.dyn{fill:var(--amber)}   /* dynamic (short-circuit) braking */
+#faultdiag .fdmix.free{fill:var(--muted)}  /* freewheel (coast, no brake) */
 .diagcap{color:var(--muted);font-size:12px;text-align:center;margin:0 0 6px}
 /* Persistent brake-mode badge (traction / dynamic / active) */
 .pill.brakemode{font-weight:600}
@@ -157,6 +160,23 @@ table.pins th{background:var(--card2);color:var(--accent);font-weight:700}
 table.pins tr:last-child td{border-bottom:0}
 table.pins td:first-child{font-family:ui-monospace,monospace;color:var(--green);width:60px;text-align:center}
 .note{color:var(--muted);font-size:13px;line-height:1.5;margin-top:12px}
+
+/* Documentation tab */
+.dochead{font-size:15px;font-weight:700;margin:18px 0 2px;color:var(--txt)}
+.docsub{font-weight:400;font-size:13px;color:var(--muted)}
+.pipe{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 4px}
+.pipe .blk{background:var(--card2);border:1px solid var(--line);border-radius:8px;
+ padding:6px 10px;font-size:12px;white-space:nowrap}
+.pipe .blk small{color:var(--muted)}
+.pipe .blk.in{border-color:var(--accent);color:var(--accent)}
+.pipe .blk.out{border-color:var(--green);color:var(--green)}
+.pipe .arr{color:var(--muted);font-weight:700}
+table.doctbl{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
+ border-radius:12px;overflow:hidden;font-size:13px;margin:6px 0}
+table.doctbl th,table.doctbl td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+table.doctbl th{background:var(--card2);color:var(--accent);font-weight:700}
+table.doctbl tr:last-child td{border-bottom:0}
+table.doctbl td:first-child{white-space:nowrap;font-weight:600;color:var(--txt)}
 
 /* ============================================================================
    THEME: TACTICAL / MIL-SPEC  (active skin — everything above is structure)
