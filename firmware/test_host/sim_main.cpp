@@ -171,6 +171,16 @@ void testScenarios()
         CHECK(r.t_first_fault > 5.4f);      // load at 5 s + 500 ms debounce
     }
 
+    // A healthy half-charged pack must NOT be cut by its own acceleration sag.
+    {
+        const RunResult r = run(get("sag_acceleration"));
+        CHECK(12 == r.batt_type);
+        CHECK(Fault::Lvc != r.final_fault);
+        CHECK(!r.ever_fault);
+        CHECK(r.max_v > 1.0f);
+        printf("  sag_acceleration : healthy 12.0 V pack survives full throttle, max v=%.2f m/s\n", r.max_v);
+    }
+
     // Same battery, voltage check DISABLED: nothing must trip, and it must still drive.
     {
         const RunResult r = run(get("lvc_desactive"));

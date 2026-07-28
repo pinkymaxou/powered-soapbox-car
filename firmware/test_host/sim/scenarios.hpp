@@ -297,6 +297,26 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
+    // REGRESSION: a healthy half-charged pack must survive full throttle. At 12.0 V
+    // open-circuit and 0.05 Ω the terminals dip to ~10.0 V for ~0.6 s while the kart
+    // accelerates — under the 10.5 V cutoff for longer than the 500 ms debounce. Thresholding
+    // the RAW voltage cut the kart dead 0.55 s after the throttle opened; the LVC now judges
+    // a 2 s EMA (hw::VBAT_LVC_EMA_*), which is what makes this scenario pass.
+    v.push_back({
+        "sag_acceleration",
+        "Healthy 12.0 V pack, full throttle: the acceleration sag must NOT trip the LVC",
+        12.f, nullptr,
+        [](Vehicle& v) {
+            v.params().batt_v0 = 12.0f;     // half charge, perfectly serviceable
+            v.params().batt_rint = 0.05f;   // healthy internal resistance
+        },
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = (t > 5.f) ? 1.f : 0.f;    // rest for type detection, then full throttle
+            return c;
+        }});
+
     // SAME worn battery, but the voltage check is switched off (bench option): the sag must
     // no longer trip anything — no LVC, no disarm, no power cutoff. The pack's own BMS
     // becomes the only protection, which is the documented trade-off of vbat_check_en=0.

@@ -30,6 +30,18 @@ constexpr int PWM_MAX     = 4095;   // 12 bits (the LEDC resolution lives in har
 constexpr float MOTOR_V_NOM        = 12.0f;
 constexpr float VBAT_CAP_EMA_ALPHA = 0.002f;
 
+// LVC input smoothing. The 10.5 V cutoff is a lead-acid figure AT REST, and it was being
+// applied to a reading taken UNDER LOAD: ~20 A through ~0.05 Ω sags the pack about 2 V, so a
+// perfectly healthy half-charged battery dips to ~10.0 V for the ~0.6 s an acceleration lasts
+// — long enough to clear the 500 ms debounce and cut the kart dead mid-manoeuvre. Measured in
+// simulation: at 12.0 V open-circuit the old code cut 0.55 s after the throttle opened.
+// Feeding the LVC a slow EMA fixes it WITHOUT weakening the protection, because a genuinely
+// flat pack sits below the threshold at rest too and is still caught at the same instant.
+// Sweep over the sag probe: τ of 1–3 s classifies every test pack correctly, τ ≥ 5 s starts
+// missing a worn one. 2 s is the middle of that band.
+constexpr float VBAT_LVC_EMA_TAU_S = 2.0f;
+constexpr float VBAT_LVC_EMA_ALPHA = CTRL_DT_S / VBAT_LVC_EMA_TAU_S;   // ≈ 0.001 at 500 Hz
+
 constexpr int ADC_OVERSAMPLE = 8;   // number of ADS1115 reads averaged (smooths residual noise)
 // The ADS1115 in continuous mode at 128 SPS only produces a new value every ~8 ms: reading
 // the voltage on every 2 ms tick would waste ~4000 I2C transactions/s re-reading the same

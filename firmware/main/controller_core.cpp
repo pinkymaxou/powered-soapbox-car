@@ -178,14 +178,20 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     // ensures protection). Also allows bench testing without the ADS1115 wired.
     if (vbat_valid)
     {
+        // Type detection stays on the RAW value: it only runs at rest, before any load, and
+        // deliberately demands a voltage that does not move.
         m_batt_det.update(vbat, now, hw::VBAT_DETECT_STABLE_US,
                           hw::VBAT_DETECT_TOL_V, hw::VBAT_DETECT_24V_MIN);
+        // The LVC judges a SLOWLY SMOOTHED voltage, so an acceleration sag cannot trip it —
+        // see hw::VBAT_LVC_EMA_* for why the raw value was the wrong thing to threshold.
+        if (m_vbat_lvc <= 0.f) m_vbat_lvc = vbat;
+        else m_vbat_lvc += hw::VBAT_LVC_EMA_ALPHA * (vbat - m_vbat_lvc);
         // vbat_check_en = 0: the voltage stays MEASURED (display, graphs, automatic PWM cap
         // below) but stops being a driving condition — no fb::LVC, so nothing blocks and the
         // 30 s power cutoff (which watches that very bit) never arms either.
         if (m_cfg.vbat_check_en != 0)
         {
-            updateLVC(vbat, now);
+            updateLVC(m_vbat_lvc, now);
         }
         else
         {
@@ -202,6 +208,7 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         m_lvc_tripped = false;
         m_sag_start_us = 0;
         m_vbat_ema = 0.f;   // unknown voltage → no automatic cap
+        m_vbat_lvc = 0.f;   // and the LVC filter restarts from the next real reading
     }
 
     // PWM cap: AUTOMATIC (12 V nominal / measured Vbat: 12 V → ~100%, 24 V → ~50%)

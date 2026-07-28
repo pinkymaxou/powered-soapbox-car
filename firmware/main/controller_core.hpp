@@ -157,6 +157,7 @@ private:
     float   m_fwd_cmd = 0.f;           // forward command (no smoothing — stick maps straight through)
     float   m_turn_cmd = 0.f;
     float   m_vbat_ema = 0.f;          // smoothed Vbat (τ ≈ 1 s) for the PWM cap — 0 = unknown
+    float   m_vbat_lvc = 0.f;          // smoothed Vbat (τ = 2 s) the LVC judges — see hw::VBAT_LVC_EMA_*
     ctl::BattDetect m_batt_det;        // 12/24 V type classified at startup (voltage stable 3 s)
     float   m_cps_l = 0.f;             // SMOOTHED encoder count rate (EMA, counts/s)
     float   m_cps_r = 0.f;
