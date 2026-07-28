@@ -150,6 +150,9 @@
    <label>Network SSID<input name="ssid" type="text"></label>
    <label>Password<input name="pass" type="password"></label>
   </form>
+  <p class="note"><b>Retype the password every time.</b> It is never sent back to the page, so the
+   field always starts empty — saving it blank would wipe the stored one. A save with an empty
+   or under-8-character password (WPA2 minimum) is <b>refused</b> and changes nothing.</p>
   <button type="button" onclick="saveWifi()">💾 Save &amp; reboot</button>
   <p class="note">The kart connects to the chosen network <b>after reboot</b>, while keeping the "Kart-Config" access point active. Automatic reconnection every 5 s if the link drops.</p>
   <p class="note"><b>mDNS:</b> on either network the page is reachable at <a href="http://kart.local/">http://kart.local</a> — no need to know the IP. Works on Windows 10+, macOS/iOS and Linux (Avahi); <b>on Android use the IP address</b> (Chrome does not resolve <code>.local</code>).</p>
@@ -227,6 +230,74 @@
    On release, <b>Dynamic brake</b> shorts the windings to hold the kart; <b>Freewheel</b>
    (dynamic brake turned off) lets the wheels spin free. The Dashboard centre readout shows
    which one is active right now.</p>
+
+  <div class="dochead">⚙️ Gear &amp; pulley ratios <span class="docsub">— motor to wheel, per side</span></div>
+  <p class="note">Each front wheel has its own chain: a printed <b>two-stage gearbox</b> then a
+   <b>toothed belt</b>. What makes two reductions fit in one small box is the <b>compound gear</b> —
+   the 80T of stage 1 and the 30T of stage 2 are a single printed part on one shaft.
+   Plan view, drawn to scale at the real centre distances:</p>
+
+  <svg class="gears" viewBox="0 0 415 212" role="img"
+       aria-label="Gear train: 16T motor pinion into 80T, compound 30T into 80T output, 25T pulley belted to a 32T pulley on the 10 inch wheel">
+   <!-- wheel + belt (drawn first: everything else sits on top) -->
+   <circle class="tyre" cx="320" cy="118" r="80"/>
+   <circle cx="320" cy="118" r="68" fill="none" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 5"/>
+   <path class="belt" d="M125.5 82.6 L321.9 102.1 M122.5 107.4 L318.1 133.9"/>
+   <!-- stage 1: motor pinion 16T -> 80T -->
+   <rect x="2" y="42" width="28" height="26" rx="4" class="body"/>
+   <circle class="body" cx="86" cy="55" r="40"/><circle class="teeth" cx="86" cy="55" r="40"/>
+   <circle class="body" cx="38" cy="55" r="8"/><circle class="teeth" cx="38" cy="55" r="8"/>
+   <!-- stage 2: compound 30T -> 80T output, in the SECOND tooth plane (accent) -->
+   <g class="s2">
+    <circle class="body" cx="124" cy="95" r="40"/><circle class="teeth" cx="124" cy="95" r="40"/>
+    <circle class="body" cx="86" cy="55" r="15"/><circle class="teeth" cx="86" cy="55" r="15"/>
+   </g>
+   <!-- pulleys -->
+   <circle class="body" cx="124" cy="95" r="12.5"/>
+   <circle class="body" cx="320" cy="118" r="16"/>
+   <!-- labels -->
+   <text x="16" y="59" text-anchor="middle">M</text>
+   <text x="38" y="40" text-anchor="middle">16T</text>
+   <text x="60" y="26" text-anchor="middle">80T</text>
+   <text x="86" y="59" text-anchor="middle">30T</text>
+   <text x="152" y="129" text-anchor="middle">80T</text>
+   <text x="124" y="99" text-anchor="middle">25T</text>
+   <text x="320" y="122" text-anchor="middle">32T</text>
+   <text class="dim" x="320" y="176" text-anchor="middle">wheel 10″</text>
+   <text class="dim" x="62" y="80" text-anchor="middle">×5</text>
+   <text class="dim" x="112" y="70" text-anchor="middle">×2.67</text>
+   <text class="dim" x="222" y="103" text-anchor="middle">belt ×1.28</text>
+   <text class="dim" x="196" y="17" text-anchor="start">▬ stage 1 plane</text>
+   <text class="dim" x="196" y="32" text-anchor="start" fill="var(--accent)">▬ stage 2 plane</text>
+  </svg>
+
+  <p class="note">The two 80T overlap on the drawing because they really do overlap seen from
+   above — they live in <b>different tooth planes</b>, one above the other. That is what sets the
+   depth of the housing, and why nothing may stick out into the neighbouring plane.</p>
+
+  <table class="doctbl">
+   <tr><th>Stage</th><th>Teeth</th><th>Ratio</th><th>Cumulative</th></tr>
+   <tr><td>1 — pinion → gear</td><td>16T → 80T <small>(24 DP, metal pinion)</small></td><td>5.000 : 1</td><td>5.00</td></tr>
+   <tr><td>2 — compound → output</td><td>30T → 80T <small>(30T is one part with the stage-1 80T)</small></td><td>2.667 : 1</td><td>13.33</td></tr>
+   <tr><td>3 — synchronous belt</td><td>25T → 32T <small>(HTD 5M; coprime, so wear spreads)</small></td><td>1.280 : 1</td><td><b>17.07</b></td></tr>
+  </table>
+
+  <p class="note"><b>Speed</b>: 4615 rpm ÷ 17.07 ≈ 270 rpm at the wheel, × π × 0.254 m ≈
+   <b>3.6 m/s</b> unloaded at 12 V (~3.4 m/s in practice) — well above what the firmware allows,
+   the real cap is <code>speed_limit_ms</code>. <b>Torque</b> multiplies the same way in reverse:
+   ~0.36 N·m at the motor becomes ~6 N·m at the wheel, which is why stage 2 is the thick one and
+   the belt — the most shock-loaded link — is deliberately last.</p>
+
+  <div class="dochead">🧲 Where the AS5600 sits <span class="docsub">— sets <code>enc_per_wheel</code></span></div>
+  <p class="note">The sensor measures <b>the shaft it is bolted to</b>, not the wheel, so the
+   firmware has to be told where in the chain it is. A wrong value scales every speed reading and
+   trips false <i>encoder</i> faults.</p>
+  <table class="doctbl">
+   <tr><th>Magnet mounted on</th><th>Sensor turns per wheel turn</th><th><code>enc_per_wheel</code></th></tr>
+   <tr><td>Gearbox output shaft <small>(current build)</small></td><td>belt only → 1.28</td><td><b>1.28</b></td></tr>
+   <tr><td>Intermediate shaft <small>(after the ×5 stage)</small></td><td>2.667 × 1.28</td><td>3.41</td></tr>
+   <tr><td>Wheel hub</td><td>direct drive → 1</td><td>1.00</td></tr>
+  </table>
  </section>
 
  <section id="sys" class="panel" hidden>
@@ -275,7 +346,7 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
  Pad:{fields:{conn:{type:"bool",id:1},name:{type:"string",id:2},batt:{type:"int32",id:3},
   calibrated:{type:"bool",id:4},calstate:{type:"int32",id:5},pairing:{type:"bool",id:6}}},
  Wifi:{fields:{enabled:{type:"bool",id:1},ssid:{type:"string",id:2},connected:{type:"bool",id:3},
-  ip:{type:"string",id:4}}},
+  ip:{type:"string",id:4},error:{type:"string",id:5}}},
  Ip6:{fields:{addr:{type:"string",id:1},type:{type:"string",id:2}}},
  SysInfo:{fields:{fw_ver:{type:"string",id:1},fw_proj:{type:"string",id:2},fw_date:{type:"string",id:3},
   idf:{type:"string",id:4},chip:{type:"string",id:5},cores:{type:"int32",id:6},rev:{type:"int32",id:7},
@@ -691,12 +762,18 @@ function showPad(m){
  document.getElementById('calcancelbtn').disabled=!encours;
 }
 function reboot(){if(confirm("Reboot the system? It will restart DISARMED."))sendReq({type:'reboot'});}
+let wifiSaving=false;
 function showWifi(m){
  const e=document.querySelector('#wf [name=ssid]'); if(e&&document.activeElement!==e)e.value=m.ssid||'';
  const c=document.querySelector('#wf [name=enabled]'); if(c&&document.activeElement!==c)c.checked=!!m.enabled;
  document.getElementById('wifistatus').textContent=
   `Station mode: ${m.enabled?'enabled':'disabled'}\nSaved network: ${m.ssid||'(none)'}\n`+
   `Connected: ${m.connected?'YES':'no'}\nStation IP: ${m.ip}`;
+ // Only a reply to OUR save decides whether to offer the reboot — a plain wifiget must not.
+ if(!wifiSaving)return;
+ wifiSaving=false;
+ if(m.error){alert("NOT saved — "+m.error);return;}
+ if(confirm("Saved. Reboot now to apply?"))sendReq({type:'reboot'});
 }
 function loadWifi(){sendReq({type:'wifiget'});}
 let sysBuilt=false;
@@ -729,8 +806,9 @@ function saveWifi(){
  const ssid=document.querySelector('#wf [name=ssid]').value;
  const pass=document.querySelector('#wf [name=pass]').value;
  const enabled=document.querySelector('#wf [name=enabled]').checked;
+ // The kart validates and answers with a Wifi message; showWifi() reports the outcome.
+ wifiSaving=true;
  sendReq({type:'wifiset',ssid:ssid,pass:pass,enabled:enabled});
- if(confirm("Saved. Reboot now to apply?"))sendReq({type:'reboot'});
 }
 initCharts();buildBars();buildInds();buildPadBtns();connect();
 </script></body></html>

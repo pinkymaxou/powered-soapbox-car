@@ -160,6 +160,7 @@ typedef struct _Wifi {
     pb_callback_t ssid;
     bool connected;
     pb_callback_t ip;
+    pb_callback_t error; /* wifiset REFUSED: reason to show; empty = saved */
 } Wifi;
 
 typedef struct _Ip6 {
@@ -265,7 +266,7 @@ extern "C" {
 #define Vals_init_default                        {{{NULL}, NULL}}
 #define Hist_init_default                        {0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Pad_init_default                         {0, {{NULL}, NULL}, 0, 0, 0, 0}
-#define Wifi_init_default                        {0, {{NULL}, NULL}, 0, {{NULL}, NULL}}
+#define Wifi_init_default                        {0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Ip6_init_default                         {{{NULL}, NULL}, {{NULL}, NULL}}
 #define SysInfo_init_default                     {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define SysDyn_init_default                      {0, 0, 0, 0}
@@ -279,7 +280,7 @@ extern "C" {
 #define Vals_init_zero                           {{{NULL}, NULL}}
 #define Hist_init_zero                           {0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Pad_init_zero                            {0, {{NULL}, NULL}, 0, 0, 0, 0}
-#define Wifi_init_zero                           {0, {{NULL}, NULL}, 0, {{NULL}, NULL}}
+#define Wifi_init_zero                           {0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Ip6_init_zero                            {{{NULL}, NULL}, {{NULL}, NULL}}
 #define SysInfo_init_zero                        {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define SysDyn_init_zero                         {0, 0, 0, 0}
@@ -363,6 +364,7 @@ extern "C" {
 #define Wifi_ssid_tag                            2
 #define Wifi_connected_tag                       3
 #define Wifi_ip_tag                              4
+#define Wifi_error_tag                           5
 #define Ip6_addr_tag                             1
 #define Ip6_type_tag                             2
 #define SysInfo_fw_ver_tag                       1
@@ -514,7 +516,8 @@ X(a, STATIC,   SINGULAR, BOOL,     pairing,           6)
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, CALLBACK, SINGULAR, STRING,   ssid,              2) \
 X(a, STATIC,   SINGULAR, BOOL,     connected,         3) \
-X(a, CALLBACK, SINGULAR, STRING,   ip,                4)
+X(a, CALLBACK, SINGULAR, STRING,   ip,                4) \
+X(a, CALLBACK, SINGULAR, STRING,   error,             5)
 #define Wifi_CALLBACK pb_default_field_callback
 #define Wifi_DEFAULT NULL
 

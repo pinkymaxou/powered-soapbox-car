@@ -177,6 +177,15 @@ table.doctbl th,table.doctbl td{padding:8px 10px;text-align:left;border-bottom:1
 table.doctbl th{background:var(--card2);color:var(--accent);font-weight:700}
 table.doctbl tr:last-child td{border-bottom:0}
 table.doctbl td:first-child{white-space:nowrap;font-weight:600;color:var(--txt)}
+/* Gear-train schematic (inline SVG): colours come from the theme variables. */
+.gears{display:block;width:100%;max-width:540px;height:auto;margin:10px 0}
+.gears text{font:600 11px ui-sans-serif,system-ui,sans-serif;fill:var(--txt)}
+.gears text.dim{font-weight:400;fill:var(--muted)}
+.gears .body{fill:var(--card2);stroke:var(--line);stroke-width:1.5}
+.gears .teeth{fill:none;stroke:var(--muted);stroke-width:4;stroke-dasharray:4 5;opacity:.75}
+.gears .s2 .teeth{stroke:var(--accent)}
+.gears .belt{fill:none;stroke:var(--muted);stroke-width:3}
+.gears .tyre{fill:none;stroke:var(--line);stroke-width:9}
 
 /* ============================================================================
    THEME: TACTICAL / MIL-SPEC  (active skin — everything above is structure)

@@ -164,7 +164,8 @@ size_t encodeMsg(const Msg& msg)
     return os.bytes_written;
 }
 
-size_t buildWifiPb()
+// error = "" on success; otherwise the reason the save was REFUSED (shown by the page).
+size_t buildWifiPb(const char* error = "")
 {
     char ssid[33];
     bool enabled = false;
@@ -177,6 +178,8 @@ size_t buildWifiPb()
     msg.body.wifi.connected = m_sta_connected.load();
     msg.body.wifi.ip.funcs.encode = encStr;
     msg.body.wifi.ip.arg = m_sta_ip;
+    msg.body.wifi.error.funcs.encode = encStr;
+    msg.body.wifi.error.arg = const_cast<char*>(error);
     return encodeMsg(msg);   // encode BEFORE ssid goes out of scope
 }
 
@@ -709,10 +712,21 @@ esp_err_t wsHandler(httpd_req_t* req)
     if (0 == strcmp(cmd, "padinfo"))   {                        return wsReply(req, buildPadPb()); }
     if (0 == strcmp(cmd, "wifiset"))
     {
+        // The page NEVER pre-fills the password field, so saving without retyping it used to
+        // silently blank the stored one — a working station config lost by clicking Save.
+        // Refuse instead. The 8-character floor is WPA2's: a shorter key is accepted here,
+        // then fails much later in the 4-way handshake with only a cryptic reason code.
+        const char* err = nullptr;
+        if ('\0' == rq.ssid[0])              err = "SSID required.";
+        else if ('\0' == rq.pass[0])         err = "Password required: retype it, the page never pre-fills it.";
+        else if (std::strlen(rq.pass) < 8)   err = "Password too short: WPA2 requires at least 8 characters.";
+        if (err)
+        {
+            ESP_LOGW(TAG, "Wi-Fi save REFUSED: %s", err);
+            return wsReply(req, buildWifiPb(err));   // config left untouched
+        }
         configSetWifi(rq.ssid, rq.pass, rq.enabled);   // takes effect on reboot
-        Msg msg = Msg_init_zero;
-        msg.which_body = Msg_ok_tag;
-        return wsReply(req, encodeMsg(msg));
+        return wsReply(req, buildWifiPb());
     }
     if (0 == strcmp(cmd, "wifiget"))   { return wsReply(req, buildWifiPb()); }
     if (0 == strcmp(cmd, "vals"))      { return wsReply(req, buildValsPb()); }

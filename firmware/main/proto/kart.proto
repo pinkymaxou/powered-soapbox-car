@@ -112,6 +112,7 @@ message Wifi {
   string ssid = 2;
   bool   connected = 3;
   string ip = 4;
+  string error = 5;             // wifiset REFUSED: reason to show; empty = saved
 }
 
 message Ip6 {
