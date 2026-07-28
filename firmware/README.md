@@ -35,6 +35,10 @@ idf.py -p /dev/ttyUSB0 flash monitor
 > **Vendored components** (in [`components/`](components/), **committed** — a fresh clone
 > builds without any manual step): `bluepad32`, `btstack`, `cmd_nvs`, `cmd_system`, **patched
 > for IDF 6.1**. Provenance and patch details: [`components/README.md`](components/README.md).
+>
+> **Managed component**: `espressif/mdns` (declared in [`main/idf_component.yml`](main/idf_component.yml))
+> is downloaded into `managed_components/` on the first build → **that build needs an internet
+> connection**. mDNS was removed from ESP-IDF in v5; the registry is the only source.
 
 ### Bluetooth + Wi-Fi: radio configuration
 
@@ -145,14 +149,34 @@ quadrature incremental encoders** (one per front wheel), as an alternative/compl
 On startup, the ESP32 creates an access point:
 
 - **SSID**: `Kart-Config`  ·  **password**: `kart12345`
-- Open **http://192.168.4.1**
+- Open **http://kart.local** (mDNS) or **http://192.168.4.1**
 
 The **Wi-Fi** tab lets you enter an SSID/password and **enable station mode**
 (checkbox): the kart then connects to that network **while keeping the SoftAP**
 (AP+STA mode). Applied **at restart**; automatic reconnection every 5 s.
 
-The page (6 tabs: **Dashboard / Configuration / Gamepad / Wi-Fi / Pinout /
-System**) communicates over **WebSocket** (`/ws`) using **binary Protocol Buffers** — a single
+### mDNS (`kart.local`)
+
+The kart announces itself on the local network via **mDNS/Bonjour**
+([`main/mdns_svc.cpp`](main/mdns_svc.cpp), managed component `espressif/mdns`), on **both
+interfaces** (SoftAP *and* station): the same URL **http://kart.local** works whether you are
+connected to `Kart-Config` or to the home network — no need to know the DHCP address, which
+changes. The `_http._tcp` service is also published, so the kart appears on its own in the
+network browsers (Bonjour, `avahi-browse`, Windows Explorer "Network"). The host name is
+**also sent to the router's DHCP server** (`esp_netif_set_hostname`), so the kart shows up as
+`kart` in the list of connected clients.
+
+- Name defined in one place: `HOSTNAME` in [`main/mdns_svc.cpp`](main/mdns_svc.cpp); it is
+  shown in the **System** tab and used for the DHCP host name.
+- Supported out of the box on **Windows 10+, macOS/iOS and Linux** (Avahi).
+  ⚠️ **Android**: Chrome does *not* resolve `.local` → use `http://192.168.4.1` from a phone.
+- If two karts are on the same network, the library detects the collision and appends a
+  number (`kart-2.local`).
+- Cost: ~34 kB of flash and one low-priority task; a failure to start is **logged and
+  ignored** — access by IP is never affected.
+
+The page (8 tabs: **Dashboard / Graph / Configuration / Gamepad / Wi-Fi / Pinout /
+Documentation / System**) communicates over **WebSocket** (`/ws`) using **binary Protocol Buffers** — a single
 schema [`main/proto/kart.proto`](main/proto/kart.proto) (regenerate: `main/proto/generate.sh`),
 encoded on the kart side by **nanopb** (vendored, callbacks → zero-copy/zero-heap, from the
 static arena) and decoded browser-side by **protobuf.js** (`/pb.js` embedded, mirror JSON

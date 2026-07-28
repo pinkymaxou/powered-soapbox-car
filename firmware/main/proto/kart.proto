@@ -142,6 +142,7 @@ message SysInfo {
   string ip_sta = 20;
   repeated Ip6 ip6_ap = 21;
   repeated Ip6 ip6_sta = 22;
+  string mdns = 23;             // mDNS host name WITHOUT the suffix ("kart" → kart.local)
 }
 
 message SysDyn {

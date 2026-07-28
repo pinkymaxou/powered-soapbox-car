@@ -1,7 +1,7 @@
 // webserver.cpp — SoftAP + HTTP/WebSocket server to tune the config live.
 //
 // Connection: Wi-Fi "Kart-Config" (password "kart12345"), then
-// open http://192.168.4.1 in a browser.
+// open http://kart.local (mDNS, see mdns_svc.cpp) or http://192.168.4.1 in a browser.
 //
 // The page (HTML/CSS/JS) comes from main/assets/ (EMBED_TXTFILES). Comms over WebSocket /ws
 // use BINARY Protocol Buffers (nanopb; see main/proto/kart.proto): the client sends a Req
@@ -21,6 +21,7 @@
 #include "config.hpp"
 #include "hardware.hpp"
 #include "input.hpp"
+#include "mdns_svc.hpp"
 #include "ringbuffer.hpp"
 #include "esp_app_desc.h"
 #include "esp_chip_info.h"
@@ -571,6 +572,7 @@ size_t buildSysInfoPb()
     str(si.sta_ssid, ssid);
     si.sta_conn = m_sta_connected.load();
     str(si.ip_sta,  m_sta_ip);
+    str(si.mdns,    mdnsHostname());
     si.ip6_ap.funcs.encode  = encIp6;
     si.ip6_ap.arg  = m_netif_ap;
     si.ip6_sta.funcs.encode = encIp6;
@@ -739,6 +741,12 @@ void wifiSoftAPInit()
     m_netif_ap  = esp_netif_create_default_wifi_ap();
     m_netif_sta = esp_netif_create_default_wifi_sta();
 
+    // Same name as the one published by mDNS (mdns_svc.cpp). On the station side it is
+    // ALSO the name sent to the router's DHCP server → the kart appears as "kart" in the
+    // list of connected clients. Must be set before esp_wifi_start().
+    ESP_ERROR_CHECK(esp_netif_set_hostname(m_netif_ap, mdnsHostname()));
+    ESP_ERROR_CHECK(esp_netif_set_hostname(m_netif_sta, mdnsHostname()));
+
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&init));
 
@@ -777,7 +785,8 @@ void wifiSoftAPInit()
     }
 
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "SoftAP \"%s\" ready → http://192.168.4.1", AP_SSID);
+    ESP_LOGI(TAG, "SoftAP \"%s\" ready → http://%s.local (or http://192.168.4.1)",
+             AP_SSID, mdnsHostname());
 }
 
 void webServerStart()

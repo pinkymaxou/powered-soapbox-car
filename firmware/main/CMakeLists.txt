@@ -8,6 +8,7 @@ idf_component_register(
         "input.cpp"
         "input_bp32.c"
         "leds.cpp"
+        "mdns_svc.cpp"
         "config.cpp"
         "config_params.cpp"
         "webserver.cpp"
@@ -28,6 +29,7 @@ idf_component_register(
         esp_event
         esp_netif
         esp_http_server
+        espressif__mdns
         bluepad32
         btstack
 )

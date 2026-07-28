@@ -152,6 +152,7 @@
   </form>
   <button type="button" onclick="saveWifi()">💾 Save &amp; reboot</button>
   <p class="note">The kart connects to the chosen network <b>after reboot</b>, while keeping the "Kart-Config" access point active. Automatic reconnection every 5 s if the link drops.</p>
+  <p class="note"><b>mDNS:</b> on either network the page is reachable at <a href="http://kart.local/">http://kart.local</a> — no need to know the IP. Works on Windows 10+, macOS/iOS and Linux (Avahi); <b>on Android use the IP address</b> (Chrome does not resolve <code>.local</code>).</p>
  </section>
 
  <section id="pins" class="panel" hidden>
@@ -283,7 +284,7 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
   mac_sta:{type:"string",id:14},ap_ssid:{type:"string",id:15},ip_ap:{type:"string",id:16},
   sta_en:{type:"bool",id:17},sta_ssid:{type:"string",id:18},sta_conn:{type:"bool",id:19},
   ip_sta:{type:"string",id:20},ip6_ap:{rule:"repeated",type:"Ip6",id:21},
-  ip6_sta:{rule:"repeated",type:"Ip6",id:22}}},
+  ip6_sta:{rule:"repeated",type:"Ip6",id:22},mdns:{type:"string",id:23}}},
  SysDyn:{fields:{uptime_s:{type:"int64",id:1},heap_free:{type:"uint32",id:2},
   heap_min:{type:"uint32",id:3},ledc_fix:{type:"uint32",id:4}}},
  Ok:{fields:{}},
@@ -718,6 +719,7 @@ function showSys(m){
   `<tr><th>Uptime</th><td id="sysup">${upt(m.uptime_s)}</td></tr>`+r('Last reset cause',m.reset)+
   `<tr><th>Free heap</th><td id="sysheap">${heapTxt(m)}</td></tr>`+
   r('Access point MAC',m.mac_ap)+r('Station MAC',m.mac_sta)+
+  r('mDNS name',m.mdns?`<a href="http://${m.mdns}.local/">${m.mdns}.local</a>`:'—')+
   r('AP — SSID',m.ap_ssid)+r('AP — IPv4',m.ip_ap)+r('AP — IPv6',fmt6(m.ip6_ap))+
   r('Station — enabled',m.sta_en?'yes':'no')+r('Station — SSID',m.sta_ssid||'(none)')+
   r('Station — connected',m.sta_conn?'YES':'no')+

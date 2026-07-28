@@ -190,6 +190,7 @@ typedef struct _SysInfo {
     pb_callback_t ip_sta;
     pb_callback_t ip6_ap;
     pb_callback_t ip6_sta;
+    pb_callback_t mdns; /* mDNS host name WITHOUT the suffix ("kart" → kart.local) */
 } SysInfo;
 
 typedef struct _SysDyn {
@@ -266,7 +267,7 @@ extern "C" {
 #define Pad_init_default                         {0, {{NULL}, NULL}, 0, 0, 0, 0}
 #define Wifi_init_default                        {0, {{NULL}, NULL}, 0, {{NULL}, NULL}}
 #define Ip6_init_default                         {{{NULL}, NULL}, {{NULL}, NULL}}
-#define SysInfo_init_default                     {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define SysInfo_init_default                     {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define SysDyn_init_default                      {0, 0, 0, 0}
 #define Ok_init_default                          {0}
 #define Msg_init_default                         {0, {Status_init_default}}
@@ -280,7 +281,7 @@ extern "C" {
 #define Pad_init_zero                            {0, {{NULL}, NULL}, 0, 0, 0, 0}
 #define Wifi_init_zero                           {0, {{NULL}, NULL}, 0, {{NULL}, NULL}}
 #define Ip6_init_zero                            {{{NULL}, NULL}, {{NULL}, NULL}}
-#define SysInfo_init_zero                        {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define SysInfo_init_zero                        {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define SysDyn_init_zero                         {0, 0, 0, 0}
 #define Ok_init_zero                             {0}
 #define Msg_init_zero                            {0, {Status_init_zero}}
@@ -386,6 +387,7 @@ extern "C" {
 #define SysInfo_ip_sta_tag                       20
 #define SysInfo_ip6_ap_tag                       21
 #define SysInfo_ip6_sta_tag                      22
+#define SysInfo_mdns_tag                         23
 #define SysDyn_uptime_s_tag                      1
 #define SysDyn_heap_free_tag                     2
 #define SysDyn_heap_min_tag                      3
@@ -544,7 +546,8 @@ X(a, CALLBACK, SINGULAR, STRING,   sta_ssid,         18) \
 X(a, STATIC,   SINGULAR, BOOL,     sta_conn,         19) \
 X(a, CALLBACK, SINGULAR, STRING,   ip_sta,           20) \
 X(a, CALLBACK, REPEATED, MESSAGE,  ip6_ap,           21) \
-X(a, CALLBACK, REPEATED, MESSAGE,  ip6_sta,          22)
+X(a, CALLBACK, REPEATED, MESSAGE,  ip6_sta,          22) \
+X(a, CALLBACK, SINGULAR, STRING,   mdns,             23)
 #define SysInfo_CALLBACK pb_default_field_callback
 #define SysInfo_DEFAULT NULL
 #define SysInfo_ip6_ap_MSGTYPE Ip6

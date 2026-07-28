@@ -1,0 +1,5 @@
+# Manifeste du gestionnaire de composants — dépendances téléchargées au build.
+# mDNS ne fait plus partie d'ESP-IDF depuis la v5 : c'est un composant géré.
+dependencies:
+  idf: ">=5.0"
+  espressif/mdns: "^1.11.3"

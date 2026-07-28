@@ -35,6 +35,15 @@ CONFIG_BTSTACK_AUDIO=n
 # Support WebSocket dans le serveur HTTP
 CONFIG_HTTPD_WS_SUPPORT=y
 
+# mDNS (composant géré espressif/mdns) — publie « kart.local » + le service _http._tcp.
+# Réglages au plus juste : 2 interfaces (AP + STA, pas d'Ethernet), 1 seul service,
+# et pas de CLI de debug (économise de la flash).
+CONFIG_MDNS_MAX_INTERFACES=2
+CONFIG_MDNS_MAX_SERVICES=2
+CONFIG_MDNS_PREDEF_NETIF_ETH=n
+CONFIG_MDNS_ENABLE_CONSOLE_CLI=n
+CONFIG_MDNS_MULTIPLE_INSTANCE=n
+
 # Watchdog de tâche : 5 s. La boucle de contrôle s'y abonne et le réarme ;
 # si elle se bloque > 5 s, le panic déclenché redémarre l'ESP32.
 CONFIG_ESP_TASK_WDT_INIT=y

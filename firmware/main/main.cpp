@@ -4,6 +4,7 @@
 #include "controller.hpp"
 #include "hardware.hpp"
 #include "leds.hpp"
+#include "mdns_svc.hpp"
 #include "webserver.hpp"
 
 #include "esp_log.h"
@@ -24,9 +25,11 @@ extern "C" void app_main()
     configInit();        // settings table (NVS)
     wifiSoftAPInit();    // "Kart-Config" access point
     webServerStart();    // HTTP/WebSocket server
+    mdnsStart();         // advertises http://kart.local (after the server: the port is open)
     Controller::init();  // hardware (ADC, PWM, I2C sensor, buttons)
     ledsStart();         // WS2812B strip display task
     Controller::start(); // 500 Hz control loop (system disarmed at startup)
 
-    ESP_LOGI("kart", "Kart ready. Config: Wi-Fi 'Kart-Config' → http://192.168.4.1");
+    ESP_LOGI("kart", "Kart ready. Config: Wi-Fi 'Kart-Config' → http://%s.local (or http://192.168.4.1)",
+             mdnsHostname());
 }
