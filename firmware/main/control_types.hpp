@@ -148,6 +148,7 @@ struct KartConfig
     int32_t dyn_brake_en;   // 1 = short the motors when the stick is released; 0 = FREEWHEEL (coast)
     int32_t open_loop;      // 1 = TEST: mixed stick → motors, no control loops (limiter/rollover/PID/smoothing)
     int32_t use_encoders;   // 1 = speed/brake/fault control via AS5600; 0 = ignore the encoders
+    int32_t vbat_check_en;  // 1 = the LVC can block driving and cut power; 0 = voltage shown only
     float   enc_per_wheel;  // encoder-shaft turns per WHEEL turn (mount: gearbox output 1.28, 1:5 shaft 3.41)
     int32_t arm_hold_ms;
     int32_t disarm_s;

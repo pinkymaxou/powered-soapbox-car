@@ -1,6 +1,7 @@
 // leds.cpp — Task dedicated to the WS2812B strip: reflects the kart's state.
 //   green = armed & ready · yellow = healthy but disarmed · pulsing yellow = arming ·
-//   fault stop = 2 s rapid red blink then solid red · orange = low battery · blue = calibration.
+//   fault stop = 2 s rapid red blink then a steady 1 Hz red blink until the fault clears ·
+//   orange = low battery · blue = calibration.
 #include "leds.hpp"
 
 #include "config.hpp"
@@ -35,19 +36,23 @@ void render(const KartConfig& cfg)
     switch (state)
     {
         case State::Fault:
-            // Stop due to a fault: 2 s rapid red blink to grab attention, then hold solid
-            // red while the fault persists (encoder faults latch until reboot).
-            r = (m_fault_ms <= FAULT_ALERT_MS) ? (veryfast ? 255 : 0) : 255;
+            // Stop due to a fault: 2 s rapid red blink to grab attention, then a steady ~1 Hz
+            // red blink for as long as the fault lasts. It must NEVER settle to solid red — a
+            // static light reads as "state shown", a blinking one as "something needs fixing",
+            // and some faults (encoders) latch until reboot with nothing else to signal them.
+            r = (m_fault_ms <= FAULT_ALERT_MS) ? (veryfast ? 255 : 0) : (slow ? 255 : 0);
             break;
         case State::Calibrate:
             b = 255;
             break;
         case State::Run:
         {
-            // Warning threshold according to the detected battery (12/24 V); unknown type → no alert.
+            // Warning threshold according to the detected battery (12/24 V); unknown type → no
+            // alert. Silent too when the voltage check is off (vbat_check_en=0): a bench with
+            // nothing on the divider bridge would otherwise sit permanently orange.
             const int   bt     = st.m_batt_type;
             const float warn_v = (24 == bt) ? hw::VBAT24_WARN_V : hw::VBAT12_WARN_V;
-            if ((0 != bt) && st.m_vbat < warn_v)
+            if ((0 != bt) && (0 != cfg.vbat_check_en) && st.m_vbat < warn_v)
             {
                 r = 255;
                 g = 120;       // low battery: orange

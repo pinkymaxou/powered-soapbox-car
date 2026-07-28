@@ -49,7 +49,7 @@
    <path class="body" d="M112 48 H188 Q214 48 214 100 V234 Q214 270 176 298 Q150 314 124 298 Q86 270 86 234 V100 Q86 48 112 48 Z"/>
    <!-- 12 V battery in the front tech bay (nose) -->
    <g class="fz" id="fz-batt">
-    <title>Measured pack voltage, 15 s filtered average (low-pass, τ=15 s)</title>
+    <title>Measured pack voltage — 15 s sliding median</title>
     <rect class="zsh" x="118" y="26" width="64" height="32" rx="6"/>
     <text class="zlab" id="fd-vbat" x="150" y="43" text-anchor="middle">— V</text>
     <text class="zsub" id="fd-batttype" x="150" y="54" text-anchor="middle">detecting…</text>
@@ -80,8 +80,8 @@
    <g><title>Final vehicle speed — gear ratio applied (m/s)</title><text class="fdms"  id="fd-ms"   x="150" y="121" text-anchor="middle">— m/s</text></g>
    <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpml" x="69"  y="176" text-anchor="middle">— rpm</text></g>
    <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpmr" x="231" y="176" text-anchor="middle">— rpm</text></g>
-   <g><title>15 s filtered average (low-pass, τ=15 s)</title><text class="fdrpm5" id="fd-rpml5" x="69"  y="192" text-anchor="middle">—</text></g>
-   <g><title>15 s filtered average (low-pass, τ=15 s)</title><text class="fdrpm5" id="fd-rpmr5" x="231" y="192" text-anchor="middle">—</text></g>
+   <g><title>5 s sliding median of the encoder rpm</title><text class="fdrpm5" id="fd-rpml5" x="69"  y="192" text-anchor="middle">—</text></g>
+   <g><title>5 s sliding median of the encoder rpm</title><text class="fdrpm5" id="fd-rpmr5" x="231" y="192" text-anchor="middle">—</text></g>
    <!-- per-wheel motor PWM as a vertical gauge (fills up = forward, down = reverse) + % label -->
    <g class="pwmg"><title>Motor PWM (signed) — fills up for forward, down for reverse</title>
     <rect class="pwmtrack" x="44"  y="88" width="8" height="66" rx="4"/>
@@ -342,8 +342,8 @@
    <text class="dim" x="274" y="130" text-anchor="middle">I²C bus 0 · 0x48</text>
   </svg>
 
-  <p class="note">The green figures are <b>live</b>, refreshed at 20 Hz from what the converter is
-   actually reading — <b>V_adc</b> at the node and the pack voltage rebuilt from it. They read
+  <p class="note">The green figures are <b>live</b>, from what the converter is actually reading (15 s sliding
+   median, same value as the Dashboard diagram) — <b>V_adc</b> at the node and the pack voltage rebuilt from it. They read
    <b>—</b> when the ADS1115 is not detected.</p>
 
   <p class="note">The divider gives <b>V_adc = Vbat × 15 / (100 + 15) = Vbat / 7.667</b>, and the
@@ -462,10 +462,21 @@ function pbDecode(buf){
 let ws,timer,histTimer,built=false;
 let speedScale=3.3;  // m/s ≙ 100 % (speed bars), set from the config
 let useEnc=1;   // use_encoders (from config): when 0, encoder-sensor faults are warnings, not errors
-// 15 s low-pass (EMA) of the noisy readouts — encoder rpm and pack voltage. Wall-clock dt,
-// so the smoothing is the same whether the tab is at 20 Hz or throttled in the background.
-const EMA_TAU_S=15;
-let ema={l:null,r:null,vbat:null,t:0};
+// MEDIAN over a sliding time window, for the noisy readouts. A median is the right tool
+// here and an average is not: the encoder produces aliasing BURSTS and the pack sags in
+// DIPS under load — outliers, which a mean would smear across the whole window while the
+// median simply ignores them. Windows are in seconds of wall clock, not in samples, so a
+// throttled background tab widens nothing.
+const MED_RPM_S=5, MED_VBAT_S=15;
+let med={l:[],r:[],vbat:[]};
+function medianWindow(buf,v,now,win_s){
+ buf.push({t:now,v:v});
+ const cut=now-win_s*1000;
+ while(buf.length&&buf[0].t<cut)buf.shift();
+ const a=buf.map(o=>o.v).sort((x,y)=>x-y), n=a.length;
+ if(!n)return null;
+ return (n&1)?a[(n-1)>>1]:(a[n/2-1]+a[n/2])/2;
+}
 let battLow=0, battFull=1, battType=-1;   // scale received from the FIRMWARE (batt_lo/batt_hi of the status)
 
 // Tabs
@@ -650,12 +661,13 @@ function whyBlocked(s){
 const VBAT_R_TOP=100000, VBAT_R_BOTTOM=15000;
 const VBAT_DIV_RATIO=(VBAT_R_TOP+VBAT_R_BOTTOM)/VBAT_R_BOTTOM;
 const FB_NO_VBAT=1<<5;   // fb::NO_VBAT — ADS1115 not detected
-function updateDivider(s){
+// v = the 15 s median pack voltage, or null when the ADS1115 is not answering.
+function updateDivider(v){
  const vb=document.getElementById('dvVbat'); if(!vb)return;
  const va=document.getElementById('dvVadc');
- if(((s.faults>>>0)&FB_NO_VBAT)||!(s.vbat>0)){vb.textContent='—';va.textContent='—';return;}
- vb.textContent=s.vbat.toFixed(2)+' V';
- va.textContent=(s.vbat/VBAT_DIV_RATIO).toFixed(3)+' V';
+ if(null===v){vb.textContent='—';va.textContent='—';return;}
+ vb.textContent=v.toFixed(1)+' V';
+ va.textContent=(v/VBAT_DIV_RATIO).toFixed(3)+' V';
 }
 function showStatus(s){
  const st=ST[s.state]||s.state;
@@ -679,26 +691,24 @@ function showStatus(s){
  }
  setBattType(s.batt_type||0,s.batt_lo||0,s.batt_hi||0);
  showFaults(s.faults>>>0);
- updateDivider(s);
  const _rl=document.getElementById('fd-rpml'); if(_rl)_rl.textContent=s.rpm_l.toFixed(0)+' rpm';
  const _rr=document.getElementById('fd-rpmr'); if(_rr)_rr.textContent=s.rpm_r.toFixed(0)+' rpm';
  const _vm=document.getElementById('fd-ms');   if(_vm)_vm.textContent=s.speed_ms.toFixed(2)+' m/s';
- // 15 s low-pass (EMA, τ=15 s) — wall-clock dt so it's robust to frame rate.
- const _now=performance.now(), _dt=ema.t?Math.min((_now-ema.t)/1000,EMA_TAU_S):0;
- const _a=1-Math.exp(-_dt/EMA_TAU_S); ema.t=_now;
- const _flt=(prev,v)=>prev===null?v:prev+_a*(v-prev);
- ema.l=_flt(ema.l,s.rpm_l);
- ema.r=_flt(ema.r,s.rpm_r);
- const _l5=document.getElementById('fd-rpml5'); if(_l5)_l5.textContent='15 s: '+ema.l.toFixed(0);
- const _r5=document.getElementById('fd-rpmr5'); if(_r5)_r5.textContent='15 s: '+ema.r.toFixed(0);
- // Pack voltage on the vehicle diagram: same filter, one decimal (12.6 V, not 12.63 V —
- // the extra digit only shows the sag jitter under load).
+ const _now=performance.now();
+ const _ml=medianWindow(med.l,s.rpm_l,_now,MED_RPM_S);
+ const _mr=medianWindow(med.r,s.rpm_r,_now,MED_RPM_S);
+ const _l5=document.getElementById('fd-rpml5'); if(_l5)_l5.textContent='5 s: '+_ml.toFixed(0);
+ const _r5=document.getElementById('fd-rpmr5'); if(_r5)_r5.textContent='5 s: '+_mr.toFixed(0);
+ // Pack voltage: 15 s median, shown to one decimal (12.6 V, not 12.63 V — the extra digit
+ // only ever displayed the sag jitter). Feeds BOTH diagrams so they cannot disagree.
  const _hasV=!((s.faults>>>0)&FB_NO_VBAT) && s.vbat>0;
- ema.vbat=_hasV?_flt(ema.vbat,s.vbat):null;
+ if(!_hasV) med.vbat.length=0;
+ const _mv=_hasV?medianWindow(med.vbat,s.vbat,_now,MED_VBAT_S):null;
  const _fv=document.getElementById('fd-vbat');
- if(_fv)_fv.textContent=(null===ema.vbat)?'— V':ema.vbat.toFixed(1)+' V';
+ if(_fv)_fv.textContent=(null===_mv)?'— V':_mv.toFixed(1)+' V';
  const _ft=document.getElementById('fd-batttype');
  if(_ft)_ft.textContent=!_hasV?'no sensor':(s.batt_type?s.batt_type+' V pack':'detecting…');
+ updateDivider(_mv);
  // Mix outputs on the schematic: drive (fwd/rev/stop) + turn, and per-motor PWM.
  const _sv=(id,t)=>{const e=document.getElementById(id); if(e)e.textContent=t;};
  const _pct=v=>(Math.abs(v)*100).toFixed(0), _arw=v=>v>0.02?'▲':(v<-0.02?'▼':'■');

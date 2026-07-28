@@ -297,6 +297,25 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
+    // SAME worn battery, but the voltage check is switched off (bench option): the sag must
+    // no longer trip anything — no LVC, no disarm, no power cutoff. The pack's own BMS
+    // becomes the only protection, which is the documented trade-off of vbat_check_en=0.
+    v.push_back({
+        "lvc_desactive",
+        "Same worn battery with vbat_check_en=0: no LVC, the kart keeps driving",
+        12.f,
+        [](KartConfig& c) { c.vbat_check_en = 0; },
+        [](Vehicle& v) {
+            v.params().batt_v0 = 11.2f;
+            v.params().batt_rint = 0.12f;
+        },
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = (t > 5.f) ? 1.f : 0.f;
+            return c;
+        }});
+
     // 24 V detection at boot (stable voltage 3 s).
     v.push_back({
         "detection_24v",

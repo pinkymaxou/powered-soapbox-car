@@ -180,7 +180,18 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     {
         m_batt_det.update(vbat, now, hw::VBAT_DETECT_STABLE_US,
                           hw::VBAT_DETECT_TOL_V, hw::VBAT_DETECT_24V_MIN);
-        updateLVC(vbat, now);
+        // vbat_check_en = 0: the voltage stays MEASURED (display, graphs, automatic PWM cap
+        // below) but stops being a driving condition — no fb::LVC, so nothing blocks and the
+        // 30 s power cutoff (which watches that very bit) never arms either.
+        if (m_cfg.vbat_check_en != 0)
+        {
+            updateLVC(vbat, now);
+        }
+        else
+        {
+            m_lvc_tripped = false;
+            m_sag_start_us = 0;
+        }
         // SLOW smoothing for the auto PWM cap: the sag under load must not
         // make the duty oscillate (sag → Vbat drops → duty rises → more sag…).
         if (m_vbat_ema <= 0.f) m_vbat_ema = vbat;

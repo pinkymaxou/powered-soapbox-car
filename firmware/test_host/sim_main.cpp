@@ -171,6 +171,16 @@ void testScenarios()
         CHECK(r.t_first_fault > 5.4f);      // load at 5 s + 500 ms debounce
     }
 
+    // Same battery, voltage check DISABLED: nothing must trip, and it must still drive.
+    {
+        const RunResult r = run(get("lvc_desactive"));
+        CHECK(!r.ever_fault);
+        CHECK(Fault::None == r.final_fault);
+        CHECK(!r.powered_off);
+        CHECK(r.max_v > 1.0f);              // it really drove on the sagging battery
+        printf("  lvc_desactive : no fault, max v=%.2f m/s (LVC would have cut at ~5.5 s)\n", r.max_v);
+    }
+
     // 24 V detection.
     {
         const RunResult r = run(get("detection_24v"));

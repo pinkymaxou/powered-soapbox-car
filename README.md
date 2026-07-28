@@ -298,7 +298,7 @@ Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_h
 | | **Soldered perfboard** | Vbat voltage divider 100 k/15 k (to A0 of the ADS1115) + decoupling capacitors (⚠️ no breadboard — vibration) |
 | | **Weatherproof electrical enclosure** (ABS, clear lid, ~150 × 100 × 70 mm, ≈IP65) | **in the front tech bay**; houses ESP32 + breakout + ADS1115 + perfboard; cable glands for the cables; protects against dust/rain/impact (clear lid = status LED visible) |
 | | Elec. safety | **Emergency stop (NC) in series** in the gate line (mushroom button **at the top of the seatback, centered**, within reach of both kids) + **fuse/pack** |
-| | **WS2812B** strip (~10 LEDs) | status: green = running, red = disarmed |
+| | **WS2812B** strip (~10 LEDs) | status: green = armed, yellow = disarmed, blinking red = fault, blue = calibration |
 | **Controls** | **Arming** button + LED | momentary; arming = ~1 s press (physical button **or** gamepad START) |
 | **Brake** | **Electric brake (default)** ✅ | handled by the firmware (plugging PID); **default state = braking**; gamepad disconnect → immediate braking; no brake pad |
 | **Future reserves** (wired, unused) | **analog joystick** | joystick on A1/A2 of the ADS1115 |
@@ -451,7 +451,7 @@ flowchart LR
     ESP -- "PWM+DIR L/R" --> DRV
     RAIL -- "÷ divider" --> DIVB -- "→ A0 ADS1115" --> ADS
     BTN -- "GPIO16 (pull-up)" --> ESP
-    ESP -- "data GPIO17" --> WS
+    ESP -- "data GPIO4" --> WS
 
     classDef pwr fill:#f8d7da,stroke:#333;
     classDef ctrl fill:#d1e7dd,stroke:#333;
@@ -471,7 +471,7 @@ flowchart LR
 | 27 / 14 | **I²C bus 1 SDA / SCL** | I/O | **AS5600 wheel R (0x36)**, 3.3 V, 4.7 kΩ pull-ups |
 | 13 | **POWER_HOLD** (power latch) | output | **active LOW**: holds power; HIGH = cuts |
 | 16 | **Arming button (START)** | input | pull-up, ~1 s press (or gamepad START) |
-| 17 | **WS2812B strip** (data) | output | ~10 LEDs |
+| 4 | **WS2812B strip** (data) | output | ~10 LEDs |
 | 2 | **Status LED** (onboard) | output | — |
 | **Free** | | | |
 | 34 / 35 / 36 / 39 | unused | inputs only | input-only pins |
@@ -519,7 +519,7 @@ flowchart LR
     RAIL --> DRV
     DRV -->|"M1A / M1B"| MG["⚙️ FRONT L MOTOR CONN"]
     DRV -->|"M2A / M2B"| MD["⚙️ FRONT R MOTOR CONN"]
-    ESP -->|"GPIO17 data"| WS["🌈 WS2812B CONN"]
+    ESP -->|"GPIO4 data"| WS["🌈 WS2812B CONN"]
 
     V5 -. "+5 V" .-> WS
     ESP -. "3.3 V" .-> EG
@@ -723,7 +723,7 @@ flowchart LR
 
 **Phase 4 — Power electronics ⚠️ (at the front).** 2 packs + adapters **housed in the front tech bay** (short power wiring to the 2 motors); each pack **fuse → ideal diode → +20 V rail** (diode-OR); **low-side latch kill switch** (2× IRFZ44N on the ground, gate via **button** + **opto**, pull-down + zener, **NC e-stop in series in the gate** — see `doc/schematics/power_latch.png`); **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~20 V at the driver, the button primes and **the central e-stop cuts everything** (power + ESP32).*
 
-**Phase 5 — Control electronics.** ESP32 + breakout; **buck 20→5 V** on the +20 rail (the ESP makes its own 3.3 V); **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO17). *(Future reserves wired but unused: 2× encoder A/B 34/35 + 36/39; joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
+**Phase 5 — Control electronics.** ESP32 + breakout; **buck 20→5 V** on the +20 rail (the ESP makes its own 3.3 V); **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
 
 **Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://kart.local` (or `http://192.168.4.1`). **Pair then calibrate the gamepad** (mandatory to drive); adjust **`vbat_div_ratio`** with a multimeter. Speed conversion **already determined** (AS5600 at the output of the 1:13.33 gearbox + 1.28:1 sprockets → `GEAR_RATIO=1.28`, 10″ wheel, **vehicle speed in m/s**) → **verify on the bench** + **fine-tune the PIDs** per wheel (limiter ≈ 0.54/0.50, brake ≈ 0.43/0.29/0.011 — in m/s). Set a **low speed limit** (`speed_limit_ms`) + **rollover protection** (`turn_gain`, `turn_full_ms`, `turn_hi`, `turn_rate`, `thr_ramp_per_s`) + check LVC. *(500 Hz loop, IPv6, System page: automatic.)*
 
