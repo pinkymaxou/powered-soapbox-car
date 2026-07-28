@@ -49,9 +49,7 @@ const ParamDesc PARAMS[] =
     {"turn_alat_vmax",  "Max turn at Vmax (0-1)", "Rollover protection",
      "Turn limit at maximum speed; in between, the limit follows 1/v (same lateral acceleration at all speeds). 0.2 = the only value verified safe by simulation for offset loads (child alone on one side, adult+child) with turn gain 1.",
      PType::Float, {.f = 0.1f}, {.f = 0.2f}, {.f = 0.4f}, {.f = &KartConfig::turn_hi}},
-    {"vbat_div_ratio",  "Vbat divider ratio",     "Battery",
-     "Ratio of the voltage-measurement divider bridge: Vbat = voltage read by the ADS1115 x this ratio. To calibrate with a multimeter. The battery type (12 or 24 V) and the cutoff thresholds are detected automatically at startup.",
-     PType::Float, {.f = 1.f}, {.f = 7.667f}, {.f = 20.f}, {.f = &KartConfig::vbat_div_ratio}},
+    // (No vbat_div_ratio: the divider is fixed by the resistors on the board — hw::VBAT_DIV_RATIO.)
     // PID gains operate on an error in m/s.
     {"brk_kp",          "PID brake Kp (m/s)",      "Control loops (PID)",
      "Proportional gain of the active electric brake (speed command 0). Encoders required.",
@@ -89,9 +87,7 @@ const ParamDesc PARAMS[] =
     {"enc_per_wheel",   "Enc turns / wheel turn", "Behavior",
      "Encoder-shaft turns per wheel turn — set it to match where the magnet sits: gearbox output = 1.28, 1:5 intermediate shaft = 3.41. Converts encoder counts to WHEEL speed (limiter, rollover protection, sanity check). The raw rpm readout is unaffected.",
      PType::Float, {.f = 1.f}, {.f = 1.28f}, {.f = 10.f}, {.f = &KartConfig::enc_per_wheel}},
-    {"allow_reverse",   "Reverse (0/1)",    "Behavior",
-     "Allow reverse (held by its own speed limit, rev_speed_ms).",
-     PType::Bool,  {.i = 0}, {.i = 1}, {.i = 1}, {.i = &KartConfig::allow_reverse}},
+    // (No allow_reverse: reverse is ALWAYS permitted, held by its own limit rev_speed_ms.)
     {"arm_hold_ms",     "Arming hold (ms)",     "Behavior",
      "Held press duration on START (physical or gamepad) to arm, centered stick required.",
      PType::Int,   {.i = 200}, {.i = 1000}, {.i = 5000}, {.i = &KartConfig::arm_hold_ms}},

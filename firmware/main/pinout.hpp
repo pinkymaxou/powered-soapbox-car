@@ -50,21 +50,8 @@ constexpr gpio_num_t WS2812 = GPIO_NUM_4;   // status strip
 // Active levels
 constexpr int BTN_ACTIVE = 0;   // button pressed = low level
 
-// ───── Reserved: AMT103-V incremental quadrature encoders (FUTURE, not wired) ─────
-// "Just in case": alternative/complement to the AS5600 (one encoder per front wheel). CMOS
-// push-pull A/B outputs (+ optional X index); hardware decoding via the PCNT peripheral.
-// ⚠️ Power: VDD min ~3.6 V → high output ≈ VDD−0.8 ≈ 2.8 V, readable by the ESP32
-//    WITHOUT level-shift. At 5 V the output rises to ~4.2 V → divider/level-shift MANDATORY.
-// INPUT-ONLY pins (34/35/36/39): ideal as inputs (driven signals, no pull-up required).
-namespace future
-{
-constexpr gpio_num_t ENC_L_A = GPIO_NUM_34;   // LEFT wheel encoder — channel A
-constexpr gpio_num_t ENC_L_B = GPIO_NUM_35;   // LEFT wheel encoder — channel B
-constexpr gpio_num_t ENC_R_A = GPIO_NUM_36;   // RIGHT wheel encoder — channel A
-constexpr gpio_num_t ENC_R_B = GPIO_NUM_39;   // RIGHT wheel encoder — channel B
-// Index (X, 1 pulse/turn) optional: wire to 22/23 if needed later.
-} // namespace future
-
-// Other free GPIOs: 21, 22, 23.
+// Free GPIOs: 21, 22, 23 and the input-only 34, 35, 36, 39.
+// (Quadrature encoders were reserved here as a fallback to the AS5600; dropped — the
+// magnetic sensors do the job. See doc/reducteur.md for the kinematics they measure.)
 
 } // namespace pins

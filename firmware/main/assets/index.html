@@ -49,8 +49,10 @@
    <path class="body" d="M112 48 H188 Q214 48 214 100 V234 Q214 270 176 298 Q150 314 124 298 Q86 270 86 234 V100 Q86 48 112 48 Z"/>
    <!-- 12 V battery in the front tech bay (nose) -->
    <g class="fz" id="fz-batt">
+    <title>Measured pack voltage, 15 s filtered average (low-pass, τ=15 s)</title>
     <rect class="zsh" x="118" y="26" width="64" height="32" rx="6"/>
-    <text class="zlab" x="150" y="47" text-anchor="middle">12 V</text>
+    <text class="zlab" id="fd-vbat" x="150" y="43" text-anchor="middle">— V</text>
+    <text class="zsub" id="fd-batttype" x="150" y="54" text-anchor="middle">detecting…</text>
    </g>
    <!-- bench: two seats side by side -->
    <rect class="seatback" x="99" y="150" width="46" height="12" rx="5"/>
@@ -78,8 +80,8 @@
    <g><title>Final vehicle speed — gear ratio applied (m/s)</title><text class="fdms"  id="fd-ms"   x="150" y="121" text-anchor="middle">— m/s</text></g>
    <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpml" x="69"  y="176" text-anchor="middle">— rpm</text></g>
    <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpmr" x="231" y="176" text-anchor="middle">— rpm</text></g>
-   <g><title>5 s filtered average (low-pass, τ=5 s)</title><text class="fdrpm5" id="fd-rpml5" x="69"  y="192" text-anchor="middle">—</text></g>
-   <g><title>5 s filtered average (low-pass, τ=5 s)</title><text class="fdrpm5" id="fd-rpmr5" x="231" y="192" text-anchor="middle">—</text></g>
+   <g><title>15 s filtered average (low-pass, τ=15 s)</title><text class="fdrpm5" id="fd-rpml5" x="69"  y="192" text-anchor="middle">—</text></g>
+   <g><title>15 s filtered average (low-pass, τ=15 s)</title><text class="fdrpm5" id="fd-rpmr5" x="231" y="192" text-anchor="middle">—</text></g>
    <!-- per-wheel motor PWM as a vertical gauge (fills up = forward, down = reverse) + % label -->
    <g class="pwmg"><title>Motor PWM (signed) — fills up for forward, down for reverse</title>
     <rect class="pwmtrack" x="44"  y="88" width="8" height="66" rx="4"/>
@@ -172,9 +174,9 @@
    <tr><th colspan="3">External ADS1115 ADC (I²C bus 0, 3.3 V)</th></tr>
    <tr><td>A0</td><td>Battery voltage (100k/15k divider) — continuous</td><td>ADC input</td></tr>
    <tr><td>A1 / A2</td><td>Joystick X / Y — FUTURE (not wired)</td><td>ADC inputs</td></tr>
-   <tr><th colspan="3">Reserved: AMT103-V quadrature encoders FUTURE (not wired)</th></tr>
-   <tr><td>34 / 35</td><td>Left wheel encoder — A / B</td><td>inputs (input-only)</td></tr>
-   <tr><td>36 / 39</td><td>Right wheel encoder — A / B</td><td>inputs (input-only)</td></tr>
+   <tr><th colspan="3">Free</th></tr>
+   <tr><td>21 / 22 / 23</td><td>unused</td><td>—</td></tr>
+   <tr><td>34 / 35 / 36 / 39</td><td>unused</td><td>input-only</td></tr>
   </table>
   <p class="note">Control = <b>Bluetooth gamepad</b> (Gamepad tab). Tricycle: 2 driven front wheels + rear caster wheel.<br>
   Disconnected or uncalibrated gamepad → <b>braking / refuses to drive</b>. Emergency stop = hardware kill switch.</p>
@@ -288,10 +290,15 @@
   <p class="note"><b>Speed</b>: 4615 rpm ÷ 17.07 ≈ 270 rpm at the wheel, × π × 0.254 m ≈
    <b>3.6 m/s</b> unloaded at 12 V (~3.4 m/s in practice) — well above what the firmware allows,
    the real cap is <code>speed_limit_ms</code>. <b>Torque</b> multiplies the same way in reverse:
-   ~0.36 N·m at the motor becomes ~6 N·m at the wheel, which is why stage 2 is the thick one.
-   The chain carries that full output torque <b>without slipping</b> and spans the distance out to
-   the wheel, but unlike a belt it does not damp shocks and it needs <b>lubrication, alignment and
-   re-tensioning</b> — a slack chain climbing the sprocket is how you throw it.</p>
+   ~0.36 N·m at the motor becomes ~6 N·m at the wheel, which is why stage 2 is the thick one.</p>
+
+  <p class="note"><b>Why a chain and not a belt.</b> A chain is <b>cut to whatever length you
+   need</b> — add or drop links, close it with a master link — so the gearbox-to-wheel centre
+   distance stays a <b>free variable</b> instead of being dictated by the belt lengths that happen
+   to exist. On a one-off build where the motor mount finds its final position during assembly,
+   that settles it. The counterpart: unlike a belt a chain does <b>not damp shocks</b> (they go
+   straight into the gear teeth) and it wants <b>lubrication, alignment and re-tensioning</b> — a
+   slack chain climbs the sprocket flank and is thrown.</p>
 
   <div class="dochead">🧲 Where the AS5600 sits <span class="docsub">— sets <code>enc_per_wheel</code></span></div>
   <p class="note">The sensor measures <b>the shaft it is bolted to</b>, not the wheel, so the
@@ -327,22 +334,28 @@
    <text class="dim" x="152" y="140" text-anchor="start">100 nF</text>
    <text class="dim" x="100" y="104" text-anchor="middle">V_adc</text>
    <text class="dim" x="86" y="178" text-anchor="start">GND — cut by the latch</text>
+   <!-- Live readings, fed by showStatus() at 20 Hz. -->
+   <text class="live" id="dvVbat" x="110" y="26" text-anchor="start">—</text>
+   <text class="live" id="dvVadc" x="172" y="104" text-anchor="middle">—</text>
    <text x="274" y="100" text-anchor="middle">ADS1115</text>
    <text class="dim" x="274" y="116" text-anchor="middle">A0 · ±4.096 V · 16 bit</text>
    <text class="dim" x="274" y="130" text-anchor="middle">I²C bus 0 · 0x48</text>
   </svg>
 
-  <p class="note">The divider gives <b>V_adc = Vbat × 15 / (100 + 15) = Vbat / 7.667</b>. The
-   firmware goes the other way — <b>Vbat = V_adc × <code>vbat_div_ratio</code></b> — so the
-   parameter is the <i>multiplier</i> 115/15 = <b>7.667</b>, not the 0.13 division factor.
-   Resistors are 1 % at best, so the number is meant to be trimmed:
-   measure the pack with a multimeter, then set
-   <code>new = old × (V_multimeter ÷ V_displayed)</code>.</p>
+  <p class="note">The green figures are <b>live</b>, refreshed at 20 Hz from what the converter is
+   actually reading — <b>V_adc</b> at the node and the pack voltage rebuilt from it. They read
+   <b>—</b> when the ADS1115 is not detected.</p>
+
+  <p class="note">The divider gives <b>V_adc = Vbat × 15 / (100 + 15) = Vbat / 7.667</b>, and the
+   firmware goes the other way: <b>Vbat = V_adc × 7.667</b>. That ratio is <b>not</b> a settable
+   parameter — it is <code>hw::VBAT_DIV_RATIO</code>, computed from the two resistor values in
+   <code>control_types.hpp</code>, because it is decided by what is soldered on the board and not
+   by taste. Change the resistors, change those two constants, reflash.</p>
 
   <table class="doctbl">
    <tr><th>Property</th><th>Value</th><th>Where it comes from</th></tr>
-   <tr><td>Divider</td><td>100 kΩ / 15 kΩ</td><td>fixed, on A0</td></tr>
-   <tr><td><code>vbat_div_ratio</code></td><td>7.667</td><td>(100 + 15) ÷ 15, then calibrated</td></tr>
+   <tr><td>Divider</td><td>100 kΩ / 15 kΩ</td><td><code>hw::VBAT_R_TOP</code> / <code>hw::VBAT_R_BOTTOM</code></td></tr>
+   <tr><td>Ratio</td><td>7.667</td><td>(100 + 15) ÷ 15, computed at compile time</td></tr>
    <tr><td>ADC range</td><td>±4.096 V, 128 SPS continuous</td><td>PGA setting in <code>hardware.cpp</code></td></tr>
    <tr><td>Resolution</td><td>0.96 mV of battery</td><td>4.096 V ÷ 32768 = 125 µV, × 7.667</td></tr>
    <tr><td>Ceiling</td><td>≈ 25.3 V</td><td>A0 must stay under the 3.3 V rail</td></tr>
@@ -449,7 +462,10 @@ function pbDecode(buf){
 let ws,timer,histTimer,built=false;
 let speedScale=3.3;  // m/s ≙ 100 % (speed bars), set from the config
 let useEnc=1;   // use_encoders (from config): when 0, encoder-sensor faults are warnings, not errors
-let rpm5={l:null,r:null,t:0};   // 5 s low-pass (EMA, τ=5 s) of the encoder rpm, wall-clock dt
+// 15 s low-pass (EMA) of the noisy readouts — encoder rpm and pack voltage. Wall-clock dt,
+// so the smoothing is the same whether the tab is at 20 Hz or throttled in the background.
+const EMA_TAU_S=15;
+let ema={l:null,r:null,vbat:null,t:0};
 let battLow=0, battFull=1, battType=-1;   // scale received from the FIRMWARE (batt_lo/batt_hi of the status)
 
 // Tabs
@@ -628,6 +644,19 @@ function whyBlocked(s){
  if(!b.length && !s.arming) b.push("Not armed: hold START ~1 s (stick centered)");
  return b;
 }
+// Divider-bridge schematic (Documentation tab), fed live from the status stream.
+// MIRROR of hw::VBAT_R_TOP / hw::VBAT_R_BOTTOM in control_types.hpp — the kart sends the
+// rebuilt battery voltage, so V_adc has to be divided back out here. Keep the two in step.
+const VBAT_R_TOP=100000, VBAT_R_BOTTOM=15000;
+const VBAT_DIV_RATIO=(VBAT_R_TOP+VBAT_R_BOTTOM)/VBAT_R_BOTTOM;
+const FB_NO_VBAT=1<<5;   // fb::NO_VBAT — ADS1115 not detected
+function updateDivider(s){
+ const vb=document.getElementById('dvVbat'); if(!vb)return;
+ const va=document.getElementById('dvVadc');
+ if(((s.faults>>>0)&FB_NO_VBAT)||!(s.vbat>0)){vb.textContent='—';va.textContent='—';return;}
+ vb.textContent=s.vbat.toFixed(2)+' V';
+ va.textContent=(s.vbat/VBAT_DIV_RATIO).toFixed(3)+' V';
+}
 function showStatus(s){
  const st=ST[s.state]||s.state;
  const hs=document.getElementById('hdrstate'); hs.textContent=st; hs.className='hdr-state s'+s.state;
@@ -650,15 +679,26 @@ function showStatus(s){
  }
  setBattType(s.batt_type||0,s.batt_lo||0,s.batt_hi||0);
  showFaults(s.faults>>>0);
+ updateDivider(s);
  const _rl=document.getElementById('fd-rpml'); if(_rl)_rl.textContent=s.rpm_l.toFixed(0)+' rpm';
  const _rr=document.getElementById('fd-rpmr'); if(_rr)_rr.textContent=s.rpm_r.toFixed(0)+' rpm';
  const _vm=document.getElementById('fd-ms');   if(_vm)_vm.textContent=s.speed_ms.toFixed(2)+' m/s';
- // 5 s low-pass (EMA, τ=5 s) of the encoder rpm — wall-clock dt so it's robust to frame rate.
- const _now=performance.now(), _dt=rpm5.t?Math.min((_now-rpm5.t)/1000,5):0, _a=1-Math.exp(-_dt/5); rpm5.t=_now;
- rpm5.l = rpm5.l===null ? s.rpm_l : rpm5.l+_a*(s.rpm_l-rpm5.l);
- rpm5.r = rpm5.r===null ? s.rpm_r : rpm5.r+_a*(s.rpm_r-rpm5.r);
- const _l5=document.getElementById('fd-rpml5'); if(_l5)_l5.textContent='5 s: '+rpm5.l.toFixed(0);
- const _r5=document.getElementById('fd-rpmr5'); if(_r5)_r5.textContent='5 s: '+rpm5.r.toFixed(0);
+ // 15 s low-pass (EMA, τ=15 s) — wall-clock dt so it's robust to frame rate.
+ const _now=performance.now(), _dt=ema.t?Math.min((_now-ema.t)/1000,EMA_TAU_S):0;
+ const _a=1-Math.exp(-_dt/EMA_TAU_S); ema.t=_now;
+ const _flt=(prev,v)=>prev===null?v:prev+_a*(v-prev);
+ ema.l=_flt(ema.l,s.rpm_l);
+ ema.r=_flt(ema.r,s.rpm_r);
+ const _l5=document.getElementById('fd-rpml5'); if(_l5)_l5.textContent='15 s: '+ema.l.toFixed(0);
+ const _r5=document.getElementById('fd-rpmr5'); if(_r5)_r5.textContent='15 s: '+ema.r.toFixed(0);
+ // Pack voltage on the vehicle diagram: same filter, one decimal (12.6 V, not 12.63 V —
+ // the extra digit only shows the sag jitter under load).
+ const _hasV=!((s.faults>>>0)&FB_NO_VBAT) && s.vbat>0;
+ ema.vbat=_hasV?_flt(ema.vbat,s.vbat):null;
+ const _fv=document.getElementById('fd-vbat');
+ if(_fv)_fv.textContent=(null===ema.vbat)?'— V':ema.vbat.toFixed(1)+' V';
+ const _ft=document.getElementById('fd-batttype');
+ if(_ft)_ft.textContent=!_hasV?'no sensor':(s.batt_type?s.batt_type+' V pack':'detecting…');
  // Mix outputs on the schematic: drive (fwd/rev/stop) + turn, and per-motor PWM.
  const _sv=(id,t)=>{const e=document.getElementById(id); if(e)e.textContent=t;};
  const _pct=v=>(Math.abs(v)*100).toFixed(0), _arw=v=>v>0.02?'▲':(v<-0.02?'▼':'■');

@@ -68,7 +68,6 @@ public:
         pad.start = m_cmd.start;
         pad.last_report_us = m_last_report_us;
 
-        m_vdiv = cfg.vbat_div_ratio;   // pin volts → battery volts conversion (readSensors)
         m_ctrl.setPad(pad);
         m_ctrl.setConfig(cfg);         // scenarios / driving mode change cfg on the fly
         m_ctrl.tick(m_now_us);
@@ -111,7 +110,7 @@ private:
         s.enc_ok_r = m_veh.encPresent(false);
         const float pin_v = m_veh.vbatPinVolts();
         s.vbat_ok = (pin_v >= 0.f);
-        s.vbat_v = s.vbat_ok ? pin_v * m_vdiv : -1.f;
+        s.vbat_v = s.vbat_ok ? pin_v * hw::VBAT_DIV_RATIO : -1.f;   // same constant as the ESP host
         return s;
     }
 
@@ -132,7 +131,6 @@ private:
     PowerOffAdvisor m_poweroff;
     int64_t   m_now_us = 0;
     int64_t   m_last_report_us = 0;
-    float     m_vdiv = 1.f;
     float     m_out_l = 0.f, m_out_r = 0.f;
     uint32_t  m_cap = hw::PWM_MAX;
     bool      m_brake_out = true;

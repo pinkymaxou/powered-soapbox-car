@@ -128,21 +128,11 @@ The design provides for a **physical joystick** as an alternative to the gamepad
 **only Bluetooth is implemented**, but the `input::` interface is neutral and **2 ADS1115
 channels (A1/A2) are reserved** ([`pinout.hpp`](main/pinout.hpp), `namespace pins::ads`).
 
-### Wheel encoders (reserved, not wired)
+### Wheel encoders
 
-In addition to the 2× AS5600, some pins are **reserved "just in case"** for **AMT103-V
-quadrature incremental encoders** (one per front wheel), as an alternative/complement
-([`pinout.hpp`](main/pinout.hpp), `namespace pins::future`):
-
-| Encoder | Channel A | Channel B |
-|---|---|---|
-| Left wheel | GPIO34 | GPIO35 |
-| Right wheel | GPIO36 | GPIO39 |
-
-- **Input-only** pins (34/35/36/39) → ideal as inputs; hardware decoding via **PCNT**.
-- **CMOS push-pull** A/B outputs (+ optional X index on 22/23) — **no pull-up required**.
-- ⚠️ **Power**: VDD min ~3.6 V → high output ≈ 2.8 V, **readable by the ESP32 without
-  a level-shift**. At **5 V** the output rises to ~4.2 V → **divider/level-shift mandatory**.
+The **2× AS5600** are the whole story — quadrature encoders were once penciled in as a
+fallback, but the magnetic sensors do the job and the reservation is gone. GPIO 21/22/23 and
+the input-only 34/35/36/39 are free.
 
 ## Wireless configuration (SoftAP + WebSocket)
 
@@ -314,7 +304,7 @@ Web parameters: **`turn_gain`**, **`turn_full_ms`**, **`turn_hi`**,
 ## ⚠️ To adjust before first startup
 
 - **Speed sensors**: kinematics **hardcoded** in `config.hpp` (`namespace hw`) —
-  `AS5600_CPR = 4096`, `GEAR_RATIO = 1.28` (magnet at the output of the 1:13.33 gearbox, 25T→32T pulleys),
+  `AS5600_CPR = 4096`, `GEAR_RATIO = 1.28` (magnet at the output of the 1:13.33 gearbox, 25T→32T #35 chain),
   `WHEEL_DIAM_M = 0.254` (10″ wheel). **2 AS5600**,
   **one per I²C bus** (fixed address `0x36` → a single sensor per bus). To be **verified on the bench**.
 - **Gamepad**: pair (Gamepad tab) then **calibrate** — mandatory to drive.

@@ -111,6 +111,10 @@ label[title]{cursor:help}
 #faultdiag .diagfront{fill:var(--muted);font:10px system-ui,sans-serif;letter-spacing:2px}
 #faultdiag .ctxlab{fill:var(--muted);font:11px system-ui,sans-serif}
 #faultdiag .zlab{fill:var(--muted);font:600 13px system-ui,sans-serif}
+#faultdiag .zsub{fill:var(--muted);font:400 9px system-ui,sans-serif;opacity:.8}
+#faultdiag #fd-vbat{fill:var(--txt);font:700 14px ui-monospace,Menlo,Consolas,monospace}
+#faultdiag .fz.on .zsub,#faultdiag .fz.on #fd-vbat{fill:#ffd9d9}
+#faultdiag .fz.warn .zsub,#faultdiag .fz.warn #fd-vbat{fill:#ffe6a0}
 #faultdiag .stick{fill:var(--line)}
 #faultdiag .fz.on .zsh{fill:#4a1414;stroke:var(--red);stroke-width:2.5;animation:fpulse 1.1s ease-in-out infinite}
 #faultdiag .fz.on .zlab,#faultdiag .fz.on .stick,#faultdiag .fz.on .tread{stroke:#ffd9d9;fill:#ffd9d9}
@@ -181,6 +185,7 @@ table.doctbl td:first-child{white-space:nowrap;font-weight:600;color:var(--txt)}
 .gears{display:block;width:100%;max-width:540px;height:auto;margin:10px 0}
 .gears text{font:600 11px ui-sans-serif,system-ui,sans-serif;fill:var(--txt)}
 .gears text.dim{font-weight:400;fill:var(--muted)}
+.gears text.live{font-weight:700;fill:var(--green)}
 .gears .body{fill:var(--card2);stroke:var(--line);stroke-width:1.5}
 .gears .teeth{fill:none;stroke:var(--muted);stroke-width:4;stroke-dasharray:4 5;opacity:.75}
 .gears .s2 .teeth{stroke:var(--accent)}

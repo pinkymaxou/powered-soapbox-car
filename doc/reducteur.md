@@ -16,19 +16,28 @@
 **24 DP: 3.33 mm** vs module 1: 3.14 mm; or print a 16T/24 DP test pinion
 and check the tooth-in-tooth meshing with the motor pinion.
 
-## ⭐ REVISION (chosen): 1:13.33 gearbox (16→80, 30→80) + 25T→32T pulleys = **1:17.07**
+## ⭐ REVISION (chosen): 1:13.33 gearbox (16→80, 30→80) + 25T→32T #35 chain = **1:17.07**
 
 | Mesh | Ratio | Center distance | Parts |
 |---|---|---|---|
 | **16T motor → 80T** | 5:1 | `96/48` = 2.0000″ = **50.80 mm** | 80T: pitch Ø 84.7, outside Ø **86.8 mm** |
 | **30T → 80T (output)** | 2.667:1 | `110/48` = 2.2917″ = **58.21 mm** | 30T integral with the 1st 80T (compound gear) |
-| **25T → 32T pulleys** | 1.28:1 | — | 25 and 32 **coprime** (wear spread out) |
+| **25T → 32T #35 sprockets** | 1.28:1 | **free** (chain cut to length) | 25 and 32 **coprime** (wear spread out) |
 
 - **Total: 13.33 × 1.28 = 17.07** — top speed ~3.4 m/s (10″ wheel), firmware-limited to 3.3 m/s; ~7% more torque than 1:16.
 - ⚠️ **Higher loads at stage 2**: intermediate torque ×5 (1.8 N·m) → **Ft ≈ 113 N** on
   the 30T. At 20 mm thickness → ~22 MPa (ASA limit): **increase stage 2 to 25 mm** (~18 MPa).
-- Higher belt tension than with the large pulleys (~190 N at max torque on a
-  25T HTD 5M) — still comfortable for a 15 mm belt.
+- **Why a #35 roller chain and not a toothed belt** (belts abandoned for now): a chain is
+  **cut to whatever length you need** — add or remove links, close it with a master link — so the
+  gearbox-to-wheel **centre distance is a free variable** instead of being dictated by the stock
+  belt lengths on the shelf. On a one-off build where the mount position settles during assembly,
+  that is decisive. **#35** = 3/8″ (9.525 mm) pitch, ~2 kN working load — vastly over-specified
+  here, which is fine.
+- ⚠️ **The counterpart**: a chain does **not** damp shocks the way a belt does (they go straight
+  into the gear teeth), it needs **lubrication**, and it needs **sprocket alignment + tension**
+  kept up — slack chain climbs a sprocket flank and gets thrown. Budget an adjustable motor mount.
+- ⚠️ **Sprockets are big**: at 3/8″ pitch a 25T sprocket is Ø 76 mm at the pitch line — nearly the
+  84.7 mm of the 80T gear next to it. Check the housing clearance; a 25T *pulley* was half that.
 - Firmware: `GEAR_RATIO = 1.28` (magnet at the gearbox output). Calculated alternatives:
   25→34 = 1:17.0; 30→42 = 1:17.5; 25→36 = 1:18.0.
 
@@ -72,6 +81,10 @@ Settings that finally printed the gears cleanly after chasing a recurring extrud
 
 ## Previous iteration (reference): printed 1:8 gearbox + 1:2 belt to the wheel (= 1:16)
 
+> ⛔ **Superseded.** Kept for the sizing work only — the belt was dropped in favour of the
+> #35 chain (free length, see the revision above). The shock-absorption argument below is
+> what a belt would have bought us; the chain does not offer it.
+
 Same total reduction (~3.2 m/s on a 10″ wheel), but the **last stage — the most loaded — becomes the
 belt** (absorbs shocks, quiet, tolerant of alignment): the gearbox now sees
 only ~2.9 N·m at the output instead of ~5.8 N·m.
@@ -110,7 +123,7 @@ only ~2.9 N·m at the output instead of ~5.8 N·m.
   (2) **clean** the dust; (3) **thin layer** of **PTFE or silicone** grease on the
   tooth flanks (no bath; lithium tolerated, **never** any penetrating oil/solvent on the ASA);
   (4) after a few hours: retighten the flange screws (creep), check for wear.
-  6805 bearings greased for life; **no grease on the belt side**.
+  6805 bearings greased for life. ⚠️ With the #35 chain the opposite rule applies on the output side: the **chain must stay lubricated** (chain oil on the rollers, wiped off the outside) — only the *gear* flanks take PTFE/silicone.
 - **2-part housing**: main shell + **removable plate** (insert the gears
   then close). Plate requirements: **2 centering dowels** (screws alone have play →
   the center distance must repeat to ~0.1 mm), **shouldered** bearing seats (captive with the plate
@@ -132,7 +145,7 @@ module 2 (15T→30T, center distance 45 mm) — ruled out in favor of reusing th
 30T Ø47.7 → wheel pulley 60T Ø95.5, screwed onto the 12″ rim). Useful tension ≈ 100 N at max
 torque — very comfortable for a 15 mm belt.
 
-> ✅ **Firmware aligned (1:13.33 revision + 1.28 pulleys)**: `hw::GEAR_RATIO = 1.28` (AS5600
+> ✅ **Firmware aligned (1:13.33 revision + 1.28 sprockets)**: `hw::GEAR_RATIO = 1.28` (AS5600
 > magnet on the **gearbox output**) and `WHEEL_DIAM_M = 0.254` (**10″** wheel) applied in
 > config.hpp; vehicle speed in **m/s** (signed average of the 2 wheels — pivot → 0).
 > If the magnet is moved **onto the wheel**, set `GEAR_RATIO` back to 1.
@@ -140,6 +153,8 @@ torque — very comfortable for a 15 mm belt.
 ---
 
 ## Initial train (reference): 2 stages of 4:1 (= 1:16), 1:1 belt
+
+> ⛔ **Superseded** (belt abandoned — see the revision at the top).
 
 ```
 Motor ──[16T metal, 24 DP]──╮

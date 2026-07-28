@@ -40,14 +40,29 @@ constexpr int VBAT_READ_TICKS = 25;   // 500 Hz / 25 = 20 Hz
 // On bus 0 (with the left AS5600). Address set by ADDR; 0x48 = ADDR→GND.
 constexpr uint8_t ADS1115_ADDR = 0x48;
 
+// Battery measurement divider bridge on A0. Fixed by the resistors soldered on the board, so
+// it is a CONSTANT and not a settable parameter — a wrong value silently misreports the
+// battery and drags the LVC thresholds along with it. Swap the resistors ⇒ edit the two
+// values below and reflash; the ratio follows on its own.
+//
+//   Vbat + ──[ R_TOP ]──┬──[ R_BOTTOM ]── GND (switched by the latch)
+//                       └── A0        ⇒  V_adc = Vbat × R_BOTTOM / (R_TOP + R_BOTTOM)
+//
+// ⚠️ Sizing rule: V_adc must stay under the 3.3 V rail at the pack's MAXIMUM voltage (on
+// charge), otherwise the ADS1115 is driven past its absolute maximum. 100 k/15 k suits a 12 V
+// pack (1.93 V at 14.8 V); a 24 V pack needs 100 k/12 k.
+constexpr float VBAT_R_TOP    = 100000.0f;   // R1, from Vbat+ to the A0 node (Ω)
+constexpr float VBAT_R_BOTTOM =  15000.0f;   // R2, from the A0 node to ground (Ω)
+constexpr float VBAT_DIV_RATIO = (VBAT_R_TOP + VBAT_R_BOTTOM) / VBAT_R_BOTTOM;   // ≈ 7.667
+
 // AS5600 angle sensor (I2C, 12-bit absolute = 4096 counts/turn). Kinematics (see
 // doc/reducteur.md): gearbox 16T→80T then 30T→80T = 1:13.33; magnet on the GEARBOX OUTPUT,
-// then pulleys 25T→32T (1.28:1) up to the wheel → the sensor turns 1.28 times per wheel turn
+// then a #35 chain 25T→32T (1.28:1) up to the wheel → the sensor turns 1.28 times per wheel turn
 // ⇒ GEAR_RATIO = 1.28 (total motor→wheel reduction: 13.33 × 1.28 = 17.07).
 // 10" wheel = 0.254 m. Native 3.3 V supply → NO level-shift. Speed = derivative of the angle
 // (Δcounts × CTRL_HZ) with 0↔4095 wrap; the SIGN of Δ gives the direction. 500 Hz: unambiguous.
 constexpr float AS5600_CPR    = 4096.0f;  // counts per turn (12 bits)
-constexpr float GEAR_RATIO    = 1.28f;    // sensor turns per wheel turn (gearbox output, pulleys 32/25)
+constexpr float GEAR_RATIO    = 1.28f;    // sensor turns per wheel turn (gearbox output, sprockets 32/25)
 constexpr float WHEEL_DIAM_M  = 0.254f;   // 10" wheel
 
 constexpr int     I2C_FREQ_HZ       = 400000;  // Fast-mode (the sensor supports up to 1 MHz)
@@ -117,7 +132,6 @@ struct KartConfig
     float rev_speed_ms;     // speed limit in REVERSE (m/s) — separate
     float duty_cap_frac;
     float thr_deadzone;   // stick deadzone (forward AND turn)
-    float vbat_div_ratio;
     float brk_kp;
     float brk_ki;
     float brk_kd;
@@ -135,7 +149,6 @@ struct KartConfig
     int32_t open_loop;      // 1 = TEST: mixed stick → motors, no control loops (limiter/rollover/PID/smoothing)
     int32_t use_encoders;   // 1 = speed/brake/fault control via AS5600; 0 = ignore the encoders
     float   enc_per_wheel;  // encoder-shaft turns per WHEEL turn (mount: gearbox output 1.28, 1:5 shaft 3.41)
-    int32_t allow_reverse;
     int32_t arm_hold_ms;
     int32_t disarm_s;
     int32_t led_count;

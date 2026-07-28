@@ -271,7 +271,7 @@ inline std::vector<Scenario> allScenarios()
         }});
     v.push_back({
         "roue_bloquee",
-        "Stuck encoders (jammed wheel/belt): Fault::Encoder after ~1 s of pushing",
+        "Stuck encoders (jammed wheel/thrown chain): Fault::Encoder after ~1 s of pushing",
         7.f, nullptr,
         [](Vehicle& v) { v.enc_mode_l = EncMode::Stuck; v.enc_mode_r = EncMode::Stuck; },
         [](float t) {

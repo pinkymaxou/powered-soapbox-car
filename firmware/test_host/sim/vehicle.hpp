@@ -54,7 +54,9 @@ struct VehicleParams
     // ── Battery (12 V lead-acid by default; V0=25.6/rint doubled for 24 V) ──
     float batt_v0   = 12.8f;    // open-circuit voltage (full charge at rest)
     float batt_rint = 0.05f;    // internal resistance (Ω) — the sag under load
-    float vdiv      = 7.667f;   // measurement voltage divider (≈ hw:: default vbat_div_ratio)
+    // Divider actually FITTED on the simulated board — defaults to what the firmware assumes
+    // (hw::VBAT_DIV_RATIO); a scenario can detune it to check a mis-sized bridge.
+    float vdiv      = hw::VBAT_DIV_RATIO;
 
     float slope_rad = 0.f;      // slope (+ = uphill) — F = m·g·sin(θ) opposing forward motion
 

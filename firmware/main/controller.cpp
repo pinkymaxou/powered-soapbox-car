@@ -28,7 +28,7 @@ SensorReadings EspController::readSensors()
     // encoder's read timing → RPM dips. The control loop only consumes Vbat at 20 Hz anyway.
     if (0 == (m_vbat_tick++ % hw::VBAT_READ_TICKS)) m_pin_v = board::vbatVolts(hw::ADC_OVERSAMPLE);
     s.vbat_ok = (m_pin_v >= 0.f);
-    s.vbat_v = s.vbat_ok ? m_pin_v * m_ctrl.config().vbat_div_ratio : -1.f;
+    s.vbat_v = s.vbat_ok ? m_pin_v * hw::VBAT_DIV_RATIO : -1.f;
     return s;
 }
 

@@ -286,7 +286,7 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         m_brake_r.reset();
         float fwd_t = deadzone(in.pad.y, m_cfg.thr_deadzone);
         const float turn_t = deadzone(in.pad.x, m_cfg.thr_deadzone);
-        if (m_cfg.allow_reverse == 0 && fwd_t < 0.f) fwd_t = 0.f;   // reverse forbidden?
+        // Reverse is always allowed; rev_speed_ms is what holds it back.
         // (No PWM limit in reverse: the TOTAL SPEED LIMIT — PID on |v| — holds
         // in both directions, like the rollover protection which works on |v|.)
 
