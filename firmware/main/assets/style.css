@@ -184,8 +184,13 @@ table.doctbl td:first-child{white-space:nowrap;font-weight:600;color:var(--txt)}
 .gears .body{fill:var(--card2);stroke:var(--line);stroke-width:1.5}
 .gears .teeth{fill:none;stroke:var(--muted);stroke-width:4;stroke-dasharray:4 5;opacity:.75}
 .gears .s2 .teeth{stroke:var(--accent)}
-.gears .belt{fill:none;stroke:var(--muted);stroke-width:3}
+.gears .spr{fill:none;stroke:var(--green);stroke-width:3;stroke-dasharray:3 4}
+.gears .chain{fill:none;stroke:var(--muted);stroke-width:2;stroke-dasharray:5 3}
 .gears .tyre{fill:none;stroke:var(--line);stroke-width:9}
+/* Schematics (divider bridge) reuse .gears for sizing and theming. */
+.gears .wire{fill:none;stroke:var(--muted);stroke-width:2}
+.gears .node{fill:var(--accent);stroke:none}
+.gears .chip{fill:var(--card);stroke:var(--accent);stroke-width:1.5}
 
 /* ============================================================================
    THEME: TACTICAL / MIL-SPEC  (active skin — everything above is structure)

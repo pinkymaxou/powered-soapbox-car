@@ -231,73 +231,141 @@
    (dynamic brake turned off) lets the wheels spin free. The Dashboard centre readout shows
    which one is active right now.</p>
 
-  <div class="dochead">⚙️ Gear &amp; pulley ratios <span class="docsub">— motor to wheel, per side</span></div>
-  <p class="note">Each front wheel has its own chain: a printed <b>two-stage gearbox</b> then a
-   <b>toothed belt</b>. What makes two reductions fit in one small box is the <b>compound gear</b> —
-   the 80T of stage 1 and the 30T of stage 2 are a single printed part on one shaft.
-   Plan view, drawn to scale at the real centre distances:</p>
+  <div class="dochead">⚙️ Gear &amp; sprocket ratios <span class="docsub">— motor to wheel, per side</span></div>
+  <p class="note">Each front wheel has its own drivetrain: a printed <b>two-stage gearbox</b>, then
+   a <b>#35 roller chain</b> to the wheel. What makes two reductions fit in one small box is the
+   <b>compound gear</b> — the 80T of stage 1 and the 30T of stage 2 are a single printed part on
+   one shaft. Plan view; gears and sprockets are drawn <b>proportional to their pitch diameters</b>
+   at the real centre distances, only the chain run is shortened to fit:</p>
 
-  <svg class="gears" viewBox="0 0 415 212" role="img"
-       aria-label="Gear train: 16T motor pinion into 80T, compound 30T into 80T output, 25T pulley belted to a 32T pulley on the 10 inch wheel">
-   <!-- wheel + belt (drawn first: everything else sits on top) -->
-   <circle class="tyre" cx="320" cy="118" r="80"/>
-   <circle cx="320" cy="118" r="68" fill="none" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 5"/>
-   <path class="belt" d="M125.5 82.6 L321.9 102.1 M122.5 107.4 L318.1 133.9"/>
-   <!-- stage 1: motor pinion 16T -> 80T -->
-   <rect x="2" y="42" width="28" height="26" rx="4" class="body"/>
-   <circle class="body" cx="86" cy="55" r="40"/><circle class="teeth" cx="86" cy="55" r="40"/>
-   <circle class="body" cx="38" cy="55" r="8"/><circle class="teeth" cx="38" cy="55" r="8"/>
+  <svg class="gears" viewBox="0 0 340 196" role="img"
+       aria-label="Drivetrain: 16T motor pinion into 80T, compound 30T into 80T output, 25T sprocket driving a 32T sprocket on the 10 inch wheel through a number 35 roller chain">
+   <!-- wheel + chain (drawn first: everything else sits on top) -->
+   <circle class="tyre" cx="250" cy="105" r="78.7"/>
+   <circle cx="250" cy="105" r="66" fill="none" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 5"/>
+   <path class="chain" d="M98.2 63.6 L253.5 75.1 M92.8 110.5 L246.5 134.9"/>
+   <!-- motor + stage 1: pinion 16T -> 80T (24 DP, module 1.058) -->
+   <rect x="6" y="50" width="24" height="24" rx="4" class="body"/>
+   <path class="wire" d="M30 62 H33"/>
+   <circle class="body" cx="69.5" cy="62" r="26.2"/><circle class="teeth" cx="69.5" cy="62" r="26.2"/>
+   <circle class="body" cx="38" cy="62" r="5.25"/><circle class="teeth" cx="38" cy="62" r="5.25"/>
    <!-- stage 2: compound 30T -> 80T output, in the SECOND tooth plane (accent) -->
    <g class="s2">
-    <circle class="body" cx="124" cy="95" r="40"/><circle class="teeth" cx="124" cy="95" r="40"/>
-    <circle class="body" cx="86" cy="55" r="15"/><circle class="teeth" cx="86" cy="55" r="15"/>
+    <circle class="body" cx="95.5" cy="87" r="26.2"/><circle class="teeth" cx="95.5" cy="87" r="26.2"/>
+    <circle class="body" cx="69.5" cy="62" r="9.8"/><circle class="teeth" cx="69.5" cy="62" r="9.8"/>
    </g>
-   <!-- pulleys -->
-   <circle class="body" cx="124" cy="95" r="12.5"/>
-   <circle class="body" cx="320" cy="118" r="16"/>
+   <!-- #35 sprockets: 3/8″ pitch, so they dwarf a toothed pulley of the same tooth count -->
+   <circle class="spr" cx="95.5" cy="87" r="23.6"/>
+   <circle class="spr" cx="250" cy="105" r="30.1"/>
    <!-- labels -->
-   <text x="16" y="59" text-anchor="middle">M</text>
-   <text x="38" y="40" text-anchor="middle">16T</text>
-   <text x="60" y="26" text-anchor="middle">80T</text>
-   <text x="86" y="59" text-anchor="middle">30T</text>
-   <text x="152" y="129" text-anchor="middle">80T</text>
-   <text x="124" y="99" text-anchor="middle">25T</text>
-   <text x="320" y="122" text-anchor="middle">32T</text>
-   <text class="dim" x="320" y="176" text-anchor="middle">wheel 10″</text>
-   <text class="dim" x="62" y="80" text-anchor="middle">×5</text>
-   <text class="dim" x="112" y="70" text-anchor="middle">×2.67</text>
-   <text class="dim" x="222" y="103" text-anchor="middle">belt ×1.28</text>
-   <text class="dim" x="196" y="17" text-anchor="start">▬ stage 1 plane</text>
-   <text class="dim" x="196" y="32" text-anchor="start" fill="var(--accent)">▬ stage 2 plane</text>
+   <text x="18" y="66" text-anchor="middle">M</text>
+   <text x="38" y="50" text-anchor="middle">16T</text>
+   <text x="56" y="44" text-anchor="middle">80T</text>
+   <text x="69.5" y="66" text-anchor="middle">30T</text>
+   <text x="112" y="108" text-anchor="middle">80T</text>
+   <text x="95.5" y="91" text-anchor="middle">25T</text>
+   <text x="250" y="109" text-anchor="middle">32T</text>
+   <text class="dim" x="150" y="95" text-anchor="middle">#35 chain</text>
+   <text class="dim" x="250" y="160" text-anchor="middle">wheel 10″</text>
+   <text class="dim" x="5" y="176" text-anchor="start">▬ stage 1 plane</text>
+   <text class="dim" x="85" y="176" text-anchor="start" fill="var(--accent)">▬ stage 2 plane</text>
   </svg>
 
-  <p class="note">The two 80T overlap on the drawing because they really do overlap seen from
-   above — they live in <b>different tooth planes</b>, one above the other. That is what sets the
-   depth of the housing, and why nothing may stick out into the neighbouring plane.</p>
+  <p class="note">Two things the drawing is telling you. The <b>two 80T overlap</b> because they
+   really do overlap seen from above — they live in <b>different tooth planes</b>, one above the
+   other, which is what sets the depth of the housing and why nothing may stick out into the
+   neighbouring plane. And the <b>25T sprocket is nearly as big as the 80T gear</b> next to it:
+   #35 chain has a 3/8″ (9.53 mm) pitch against the gearbox's 1.06 mm module, so a sprocket tooth
+   is roughly nine times the pitch of a gear tooth.</p>
 
   <table class="doctbl">
    <tr><th>Stage</th><th>Teeth</th><th>Ratio</th><th>Cumulative</th></tr>
    <tr><td>1 — pinion → gear</td><td>16T → 80T <small>(24 DP, metal pinion)</small></td><td>5.000 : 1</td><td>5.00</td></tr>
    <tr><td>2 — compound → output</td><td>30T → 80T <small>(30T is one part with the stage-1 80T)</small></td><td>2.667 : 1</td><td>13.33</td></tr>
-   <tr><td>3 — synchronous belt</td><td>25T → 32T <small>(HTD 5M; coprime, so wear spreads)</small></td><td>1.280 : 1</td><td><b>17.07</b></td></tr>
+   <tr><td>3 — #35 roller chain</td><td>25T → 32T <small>(coprime: every tooth meets every link, wear spreads)</small></td><td>1.280 : 1</td><td><b>17.07</b></td></tr>
   </table>
 
   <p class="note"><b>Speed</b>: 4615 rpm ÷ 17.07 ≈ 270 rpm at the wheel, × π × 0.254 m ≈
    <b>3.6 m/s</b> unloaded at 12 V (~3.4 m/s in practice) — well above what the firmware allows,
    the real cap is <code>speed_limit_ms</code>. <b>Torque</b> multiplies the same way in reverse:
-   ~0.36 N·m at the motor becomes ~6 N·m at the wheel, which is why stage 2 is the thick one and
-   the belt — the most shock-loaded link — is deliberately last.</p>
+   ~0.36 N·m at the motor becomes ~6 N·m at the wheel, which is why stage 2 is the thick one.
+   The chain carries that full output torque <b>without slipping</b> and spans the distance out to
+   the wheel, but unlike a belt it does not damp shocks and it needs <b>lubrication, alignment and
+   re-tensioning</b> — a slack chain climbing the sprocket is how you throw it.</p>
 
   <div class="dochead">🧲 Where the AS5600 sits <span class="docsub">— sets <code>enc_per_wheel</code></span></div>
   <p class="note">The sensor measures <b>the shaft it is bolted to</b>, not the wheel, so the
-   firmware has to be told where in the chain it is. A wrong value scales every speed reading and
-   trips false <i>encoder</i> faults.</p>
+   firmware has to be told where in the drivetrain it is. A wrong value scales every speed reading
+   and trips false <i>encoder</i> faults.</p>
   <table class="doctbl">
    <tr><th>Magnet mounted on</th><th>Sensor turns per wheel turn</th><th><code>enc_per_wheel</code></th></tr>
-   <tr><td>Gearbox output shaft <small>(current build)</small></td><td>belt only → 1.28</td><td><b>1.28</b></td></tr>
+   <tr><td>Gearbox output shaft <small>(current build)</small></td><td>chain only → 1.28</td><td><b>1.28</b></td></tr>
    <tr><td>Intermediate shaft <small>(after the ×5 stage)</small></td><td>2.667 × 1.28</td><td>3.41</td></tr>
    <tr><td>Wheel hub</td><td>direct drive → 1</td><td>1.00</td></tr>
   </table>
+
+  <div class="dochead">🔋 Battery measurement <span class="docsub">— the divider bridge into the ADS1115</span></div>
+  <p class="note">The pack sits far above anything an ADC can swallow, so a <b>resistor divider</b>
+   scales it down onto <b>A0</b> of the external ADS1115. That converter is used instead of the
+   ESP32's own ADC because it is 16-bit, linear, and — decisively — because ADC2 is unusable while
+   Wi-Fi is running.</p>
+
+  <svg class="gears" viewBox="0 0 340 190" role="img"
+       aria-label="Voltage divider: 100 kilohm from battery positive to the A0 node, 15 kilohm from that node to switched ground, decoupling capacitor on the node, feeding ADS1115 input A0">
+   <text x="70" y="14" text-anchor="middle">Vbat +</text>
+   <circle class="node" cx="70" cy="22" r="3"/>
+   <path class="wire" d="M70 22 V44 M70 80 V126 M70 162 V172 M70 110 H215 M140 110 V132 M140 138 V152"/>
+   <rect class="body" x="58" y="44" width="24" height="36" rx="2"/>
+   <rect class="body" x="58" y="126" width="24" height="36" rx="2"/>
+   <circle class="node" cx="70" cy="110" r="3.5"/>
+   <path class="wire" d="M131 132 H149 M131 138 H149"/>
+   <path class="wire" d="M60 172 H80 M64 176 H76 M67.5 180 H72.5"/>
+   <path class="wire" d="M130 152 H150 M134 156 H146 M137.5 160 H142.5"/>
+   <rect class="chip" x="215" y="82" width="119" height="56" rx="6"/>
+   <text x="90" y="66" text-anchor="start">R1 100 kΩ</text>
+   <text x="90" y="148" text-anchor="start">R2 15 kΩ</text>
+   <text class="dim" x="152" y="140" text-anchor="start">100 nF</text>
+   <text class="dim" x="100" y="104" text-anchor="middle">V_adc</text>
+   <text class="dim" x="86" y="178" text-anchor="start">GND — cut by the latch</text>
+   <text x="274" y="100" text-anchor="middle">ADS1115</text>
+   <text class="dim" x="274" y="116" text-anchor="middle">A0 · ±4.096 V · 16 bit</text>
+   <text class="dim" x="274" y="130" text-anchor="middle">I²C bus 0 · 0x48</text>
+  </svg>
+
+  <p class="note">The divider gives <b>V_adc = Vbat × 15 / (100 + 15) = Vbat / 7.667</b>. The
+   firmware goes the other way — <b>Vbat = V_adc × <code>vbat_div_ratio</code></b> — so the
+   parameter is the <i>multiplier</i> 115/15 = <b>7.667</b>, not the 0.13 division factor.
+   Resistors are 1 % at best, so the number is meant to be trimmed:
+   measure the pack with a multimeter, then set
+   <code>new = old × (V_multimeter ÷ V_displayed)</code>.</p>
+
+  <table class="doctbl">
+   <tr><th>Property</th><th>Value</th><th>Where it comes from</th></tr>
+   <tr><td>Divider</td><td>100 kΩ / 15 kΩ</td><td>fixed, on A0</td></tr>
+   <tr><td><code>vbat_div_ratio</code></td><td>7.667</td><td>(100 + 15) ÷ 15, then calibrated</td></tr>
+   <tr><td>ADC range</td><td>±4.096 V, 128 SPS continuous</td><td>PGA setting in <code>hardware.cpp</code></td></tr>
+   <tr><td>Resolution</td><td>0.96 mV of battery</td><td>4.096 V ÷ 32768 = 125 µV, × 7.667</td></tr>
+   <tr><td>Ceiling</td><td>≈ 25.3 V</td><td>A0 must stay under the 3.3 V rail</td></tr>
+   <tr><td>Leakage</td><td>≈ 0.11 mA at 12.6 V</td><td>and <b>zero when off</b> — the divider returns through the latch</td></tr>
+  </table>
+
+  <p class="note"><b>Change the pack, change the resistors.</b> 100 k/15 k suits a 12 V pack
+   (1.93 V at A0 when charging at 14.8 V). A 24 V pack would drive A0 to 3.8 V — past the
+   converter's absolute maximum — so it needs 100 k/12 k (ratio 9.33); a 12 V pack can also use
+   100 k/27 k (ratio 4.70) to use more of the ADC range.</p>
+
+  <p class="note"><b>Why it is only read at 20 Hz.</b> The ADS1115 shares I²C bus 0 with the
+   <b>left</b> wheel's AS5600. Polling it on every 500 Hz control tick stretched the interval
+   between two encoder reads just enough to alias the left wheel's speed — measured stdev fell
+   from 1313 to 117 once the battery moved to its own slow cadence. Vbat changes over seconds;
+   the encoder does not.</p>
+
+  <p class="note"><b>What the firmware does with it.</b> The pack type is detected at boot — the
+   voltage must hold steady within 0.5 V for 3 s, then it is classed 12 V or 24 V on an 18 V
+   threshold and <b>frozen until reboot</b>. Thresholds are hardcoded per type rather than left as
+   parameters, so they cannot be set inconsistently: <b>12 V</b> → warn 11.5 / cut 10.5 / rearm
+   12.0 V; <b>24 V</b> → 23.0 / 21.0 / 24.0 V. The cut is debounced (~0.5 s) so a momentary sag
+   under load does not stop the kart, and coming back up requires a deliberate rearm on START.</p>
  </section>
 
  <section id="sys" class="panel" hidden>
@@ -647,7 +715,7 @@ const FAULTS_DESC=[
  {b:0, t:'Gamepad emergency stop (button B)', d:'Button B is/was pressed. Release it, then rearm with START.', grave:true, z:['pad']},
  {b:1, t:'Low battery (LVC)',                     d:'Voltage below the cutoff threshold of the detected battery type (12/24 V). Recharge the battery; automatic power cutoff if the condition persists.', grave:true, z:['batt']},
  {b:2, t:'Gamepad not calibrated',               d:'Start the stick calibration (Gamepad tab).', grave:true, z:['pad']},
- {b:3, t:'Encoder: wheel stuck',                 d:'PWM applied but no rotation measured. Jammed wheel, broken belt or AS5600 sensor unplugged. Locked until reboot.', grave:true, z:['wl','wr']},
+ {b:3, t:'Encoder: wheel stuck',                 d:'PWM applied but no rotation measured. Jammed wheel, thrown/broken chain or AS5600 sensor unplugged. Locked until reboot.', grave:true, z:['wl','wr']},
  {b:4, t:'Gamepad disconnected',                 d:'No Bluetooth gamepad connected. Turn on/pair the gamepad.', grave:true, z:['pad']},
  {b:5, t:'Voltage sensor absent (info)',         d:'ADS1115 not detected: no LVC and no automatic PWM cap. OK on the bench; to be wired before driving.', grave:false, z:['batt']},
  {b:6, t:'Encoder: direction reversed',          d:'The wheel turns clearly opposite to the command: sensor or motor wired backwards. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
