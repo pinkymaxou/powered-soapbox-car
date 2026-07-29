@@ -180,6 +180,48 @@ Ranked, what changes the strength of this part:
    is a crack starter in the worst possible place. Random or scarf spreads it.
 6. **Infill density and pattern** — last, and by a wide margin, for the reasons above.
 
+#### Top / bottom shells: the part is a sandwich
+
+The 5 + 5 solid layers are not "surface finish", they are the **skins of a sandwich** and the
+infill is its core. Skins carry bending, core carries shear — and because plate stiffness goes
+as thickness cubed, the skins dominate:
+
+| | thickness | share of out-of-plane bending stiffness |
+|---|---|---|
+| 2 skins (5 layers each) | 1.20 mm × 2 | **91 %** |
+| 40 % core | 1.92 mm | 9 % |
+
+So if the sprocket ever needs to resist being **bent sideways** — a misaligned chain pulling
+the rim out of plane, or the part doubling as a flange — **add shell layers, not infill**. Same
+material, an order of magnitude more effect. Note this applies to the web only: a tooth is
+solid perimeter on every one of its layers, so the shell count changes nothing there.
+
+#### Layer height: matters less than it looks, but pick it deliberately
+
+Printed **flat**, the tooth profile is an XY contour repeated identically on every layer, so
+layer height does **not** degrade the tooth shape — that is set by line width, `resolution`
+and arc fitting. What it does change:
+
+| layer height | layers in 4.32 mm | interfaces | thickness you actually get |
+|---|---|---|---|
+| 0.12 mm | 36 | 35 | 4.32 mm |
+| 0.20 mm | 21.6 | ~21 | 4.40 mm |
+| **0.24 mm** (this profile) | **18** | **17** | **4.32 mm** |
+| 0.30 mm | 14.4 | ~13 | 4.20 mm |
+
+- **Thickness quantisation.** 0.24 lands exactly on 4.32 mm, which is why it is a good choice
+  here. 0.20 overshoots to 4.40 — still inside the 4.76 mm inner link width, but less margin.
+  Always check the thickness your layer height actually produces before printing a sprocket.
+- **Interface count.** Thicker layers mean fewer planes that can delaminate. Irrelevant while
+  the load stays in-plane (flat print), useful insurance when it does not.
+- **In-plane strength is essentially unaffected** — each layer carries its share in proportion
+  to its height, so the total is the same. Choosing 0.12 over 0.24 buys print time, not teeth.
+
+The one place layer height genuinely costs you is the **top and bottom faces of the teeth**,
+where the chain plates run: 5 shells at 0.24 mm give a 1.2 mm skin, at 0.12 mm only 0.6 mm.
+Keep the shells as a **thickness**, not a layer count, if you change layer height — 10 layers
+at 0.12 mm to keep the same 1.2 mm skin and the same 91 %.
+
 ---
 
 ## Previous iteration (reference): printed 1:8 gearbox + 1:2 belt to the wheel (= 1:16)
