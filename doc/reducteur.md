@@ -125,6 +125,61 @@ loads one tooth at a time.
 ⚠️ `xy_hole_compensation` is **0** in this profile, so the bore prints undersize by the usual
 0.1–0.2 mm. Measure the shaft fit on the first part rather than assuming nominal.
 
+### What actually makes a printed sprocket strong
+
+Short version: **infill is not what you think it is, and it is not what breaks.** Two parts of
+the sprocket carry load, and they are carried by different settings.
+
+**The web carries torque from the bore out to the rim** — that is the only job the infill has.
+Treating it as a thin disc in torsion, at 4.8 N·m of gearbox output torque:
+
+| radius | shear in the web |
+|---|---|
+| 12.5 mm (at the bore) | 1.13 MPa |
+| 20 mm | 0.44 MPa |
+| 30 mm | 0.20 MPa |
+
+PETG takes 12–15 MPa. So the web is over-strength by a factor of **ten or more even at 40 %
+infill** — and at 5 top + 5 bottom shells out of 18 layers, the part is 73 % solid by thickness
+anyway. **Raising the infill density buys nothing here.** If you ever want a stronger sprocket,
+that dial is not the one.
+
+**The teeth carry the chain, and they are already 100 % perimeter.** A #35 tooth is ~4.8 mm
+across; five 0.42 mm walls give 2.1 mm of solid from each side = 4.2 mm. The infill never
+reaches a tooth. What sets tooth strength is the **wall count** and, far more, the **print
+orientation**.
+
+Root bending, with the ~126 N chain tension:
+
+| teeth sharing the load | stress at the root |
+|---|---|
+| 1 | **16.4 MPa** — at/over the PETG allowable |
+| 2 | 8.2 MPa |
+| 3 | 5.5 MPa |
+
+Which is the real reason the earlier warning about **chain tension and sprocket alignment**
+is not housekeeping advice: with proper wrap a dozen teeth are engaged and the first few share
+the pull, but a slack or misaligned chain rides up and dumps the whole 126 N onto **one** tooth
+— right where a printed part is already at its limit. That is how a tooth shears off.
+
+Ranked, what changes the strength of this part:
+
+1. **Print orientation — flat, face on the bed.** Worth a factor of 2–3 on its own. Printed on
+   edge, the tooth-bending load pulls layers apart and the teeth snap. Nothing else on this
+   list can compensate for getting it wrong.
+2. **Wall count.** 5 loops is what makes the teeth solid. Below 4 the tooth core turns to
+   infill and the numbers above stop applying.
+3. **Interlayer bonding** — nozzle temperature, and *how hard you cool*. This profile runs the
+   part fan at **80–90 %**, which is a lot for PETG: it buys crisp tooth edges and costs Z
+   strength. Printed flat that is a fair trade (the load is in-plane), but it is the setting to
+   revisit first if a tooth ever delaminates rather than breaks.
+4. **Flow.** 0.95 is slightly under-extruded; voids between beads are missing cross-section.
+   1.0 is the strength setting, 0.95 the dimensional-accuracy one.
+5. **Seam placement.** `seam_position: aligned` stacks every perimeter's start point into one
+   vertical column. On a gear, check where that column lands — a seam sitting in a tooth root
+   is a crack starter in the worst possible place. Random or scarf spreads it.
+6. **Infill density and pattern** — last, and by a wide margin, for the reasons above.
+
 ---
 
 ## Previous iteration (reference): printed 1:8 gearbox + 1:2 belt to the wheel (= 1:16)
