@@ -31,8 +31,10 @@ and check the tooth-in-tooth meshing with the motor pinion.
   **cut to whatever length you need** — add or remove links, close it with a master link — so the
   gearbox-to-wheel **centre distance is a free variable** instead of being dictated by the stock
   belt lengths on the shelf. On a one-off build where the mount position settles during assembly,
-  that is decisive. **#35** = 3/8″ (9.525 mm) pitch, ~2 kN working load — vastly over-specified
-  here, which is fine.
+  that is decisive. **#35** = 3/8″ (9.525 mm) pitch, roller/bushing Ø 0.200″, inner link width
+  3/16″; **9.3 kN minimum ultimate** per ANSI, so roughly **1.2 kN working** (ultimate ÷ 8).
+  Against an actual chain tension of **~126 N** (4.8 N·m at the gearbox output on the 25T's
+  38 mm pitch radius) that is a factor of ~10 — vastly over-specified, which is fine.
 - ⚠️ **The counterpart**: a chain does **not** damp shocks the way a belt does (they go straight
   into the gear teeth), it needs **lubrication**, and it needs **sprocket alignment + tension**
   kept up — slack chain climbs a sprocket flank and gets thrown. Budget an adjustable motor mount.
@@ -76,6 +78,52 @@ Settings that finally printed the gears cleanly after chasing a recurring extrud
 > moisture (fresh vacuum-sealed spool), a nozzle clog (clean cold pull), and oversized
 > filament (measured). It was cured by **more heat (260 °C) + maximum heat-break cooling +
 > an open chamber**, not by lowering the temperature.
+
+> ⚠️ That profile is tied to **that** printer — an open-frame machine whose all-metal hotend
+> was heat-creeping. "Open the enclosure, push to 260 °C" is the cure for that fault, **not**
+> a general PETG rule. Do not port it onto an enclosed machine (see the K1 Max profile below,
+> which runs happily at 255 °C with the chamber at 35 °C).
+
+### PETG print profile — 25T #35 sprocket (Creality K1 Max, printed)
+
+| Setting | Value |
+|---|---|
+| Nozzle / bed / chamber | **255 °C** (first layer too) · 70 °C · 35 °C |
+| Layer height | **0.24 mm** (first layer 0.20), 0.4 mm nozzle |
+| Walls | **5 loops**, 0.42 mm, inner→outer |
+| Top / bottom shells | 5 / 5 |
+| Infill | 40 %, **triangles** |
+| Flow ratio | 0.95 · max volumetric **9 mm³/s** |
+| Elephant-foot comp. | 0.15 mm · brim **ears**, 5 mm |
+| Retraction | 0.8 mm @ 40 mm/s, z-hop 0.4 mm |
+
+Three things worth knowing about this profile before reusing it:
+
+- **The teeth come out 100 % perimeter, by accident and happily.** A #35 tooth is ~4–5 mm
+  across and 5 walls give 2.1 mm of solid from each side = 4.2 mm. Nothing is left for the
+  infill to fill, so the infill pattern only matters for the hub and web. This is exactly the
+  property you want on a tooth and it is why 40 % triangles is fine here even though the gears
+  wanted gyroid.
+- **The headline speeds are fiction** — the 9 mm³/s volumetric cap governs everything:
+
+  | | profile says | actually prints at |
+  |---|---|---|
+  | outer wall | 200 mm/s | **89 mm/s** |
+  | inner wall | 300 mm/s | 83 mm/s |
+  | infill | 250 mm/s | 83 mm/s |
+
+  Not a problem (slow and cool suits PETG), but do not go tuning those numbers expecting
+  anything to change until the volumetric cap moves.
+- **Thickness quantises to 4.08 or 4.32 mm** (17 or 18 layers for a 4.27 mm tooth). Both clear
+  the 4.76 mm inner link width, so either is fine — but check which one you got before
+  blaming the chain if it binds.
+
+⚠️ **Print it FLAT** (face on the bed): the tooth-bending load then runs in the plane of the
+layers instead of across them. Same rule as the gears, and it matters more here — the chain
+loads one tooth at a time.
+
+⚠️ `xy_hole_compensation` is **0** in this profile, so the bore prints undersize by the usual
+0.1–0.2 mm. Measure the shaft fit on the first part rather than assuming nominal.
 
 ---
 
