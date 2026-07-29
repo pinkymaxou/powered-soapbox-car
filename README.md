@@ -619,17 +619,42 @@ flowchart LR
 > | 40 A relay coil, 12 V ~75 Ω | 160 mA | **~6 000 µF** |
 >
 > *(RC decay, not constant current — a relay holds well below nominal, releasing around 10–30 %,
-> which is what keeps this at millifarads instead of tens of them. Take ~10 000 µF for margin.)*
+> which is what keeps this at millifarads instead of tens of them.)*
 >
-> **The cleaner answer is to not need the capacitor at all: make the relay self-holding.** An
-> auxiliary contact feeding its own coil, primed by the START button, with the **emergency stop
-> NC in that hold loop** — then a reboot changes nothing, because nothing has to be driven to
-> stay on. The ESP's job inverts: it *breaks* the loop to power down instead of *driving* it to
-> stay up. That flips the meaning of `POWER_HOLD` (today `pins::POWER_HOLD` is LOW = held), a
-> small firmware change to make deliberately rather than discover.
+> **Decision: fit the capacitor and accept that it is not perfect.** The coil current is not a
+> consumption problem — the module runs off 12 V and the ESP only lights an opto LED — it is
+> simply the current the capacitor has to supply while nothing is driving. And because the
+> module's contacts feed the big coil, **one capacitor across the big relay's coil is enough**:
+> if the little module drops out mid-reboot it no longer matters, the cap keeps the 40 A relay
+> closed on its own.
 >
-> Why it matters: if the relay releases on a reboot the driver loses power, the windings go
-> open and the kart **freewheels**. On a slope that is the `coupure_pente*` simulation result —
+> - **~10 000 µF across the 40 A coil** → τ = 0.75 s, holds ≈ 0.9 s. Covers the 700 ms window.
+> - **Hold START for ~1 s at power-up.** Not a workaround for the capacitor — it is what covers
+>   the *first* boot, where the ESP simply does not exist yet to hold anything. It also means the
+>   **button** takes the capacitor's charging surge (once, mechanically, on a contact built for
+>   it) and the little module's contacts never see it: they only ever close onto an
+>   already-charged capacitor. **That removes the need for an inrush limiter** (otherwise: 4.7 Ω
+>   in the capacitor branch with a diode across it so the discharge still goes straight to the
+>   coil).
+>
+> The two cover different windows and neither replaces the other: **the finger covers the first
+> boot, the capacitor covers every reboot after that** — the watchdog reset at speed, when nobody
+> has a hand on the button. The capacitor charges in ~2 ms through the battery, so it is not what
+> makes the 1 s necessary; the ESP's ~700 ms to reach `app_main` is.
+>
+> ⚠️ **The trade to be explicit about: the capacitor delays the emergency stop by exactly as
+> long as it holds the relay up.** If the mushroom button sits in the coil/hold path, pressing it
+> now leaves the relay closed for ~0.7–0.9 s — **2.3 m at full speed**, 1 m at walking pace. This
+> README calls the central hardware e-stop *the only guaranteed stop*; a hold capacitor quietly
+> takes that away. **Put the e-stop in the 40 A main path** (a mushroom button rated for it), so
+> it breaks the current mechanically and the capacitor has nothing to hold up.
+>
+> *(The alternative that needs no capacitor at all: a self-holding relay — auxiliary contact
+> feeding its own coil, primed by START. Nothing has to be driven to stay on, so a reboot changes
+> nothing. It inverts the meaning of `POWER_HOLD`, today LOW = held.)*
+>
+> Why any of this matters: if the relay releases on a reboot the driver loses power, the windings
+> go open and the kart **freewheels**. On a slope that is the `coupure_pente*` simulation result —
 > 4.4 m/s eight seconds after the cut at 8 %, 12 m/s at 16 %.
 
 ![Power latch schematic](doc/schematics/power_latch.png)
@@ -756,7 +781,7 @@ flowchart LR
 
 **Phase 3 — Front drives (replaces the old "steering").** On **each front wheel**: bolted sprocket (large washers / backing plate) + 3D gearbox + motor on a reinforced mount + #35 chain cut to length + tension adjustment + guard. **No linkage**: steering is differential, so nothing to adjust on the steering-wheel/tie-rod side. ✅ *With no power: each front wheel turns by hand, chain tensioned and lubricated.*
 
-**Phase 4 — Power electronics ⚠️ (at the front).** The **single 12 V pack housed in the front tech bay** (short power wiring to the 2 motors); **fuse 40 A → 40 A DC relay → +12 V rail**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, with the **NC e-stop in the hold path** — see `doc/schematics/power_latch.png` for the latch principle, and the ⚠️ note in [power switch](#power-switch-low-side-mosfet--latch--kill-switch) about **holding through a reboot** (a relay coil will not ride out the 700 ms bootloader window the way a MOSFET gate does); **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes and **the central e-stop cuts everything** (power + ESP32). Then check the reboot case: force a reset while powered and watch whether the relay drops.*
+**Phase 4 — Power electronics ⚠️ (at the front).** The **single 12 V pack housed in the front tech bay** (short power wiring to the 2 motors); **fuse 40 A → 40 A DC relay → +12 V rail**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, plus the **~10 000 µF hold capacitor across the 40 A coil** so a reboot does not drop the power — **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`, and the button takes the capacitor's charging surge instead of the module's contacts); the **e-stop goes in the 40 A main path, NOT in the coil loop** — with the capacitor fitted, an e-stop on the coil side would take ~0.9 s to act (**2.3 m at full speed**). See `doc/schematics/power_latch.png` for the latch principle and the ⚠️ note in [power switch](#power-switch-low-side-mosfet--latch--kill-switch) for both trade-offs; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes and **the central e-stop cuts everything** (power + ESP32). Then check the reboot case: force a reset while powered and watch whether the relay drops.*
 
 **Phase 5 — Control electronics.** ESP32 + breakout; **buck 20→5 V** on the +20 rail (the ESP makes its own 3.3 V); **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
 
