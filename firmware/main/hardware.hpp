@@ -34,6 +34,7 @@ void refreshMagStatus(); // poll the AS5600 STATUS register (rate-limited); call
 // START button: pollButtons() once per tick (debounce), then btnStart().
 void pollButtons();
 bool btnStart();
+bool motorPowerLive();   // 40 A relay output present (opto sense, active low)
 
 // Call at the VERY START of boot: forces the PWM/DIR pins to the low level (motors stopped)
 // before full init, to prevent any spurious movement while the GPIOs float.

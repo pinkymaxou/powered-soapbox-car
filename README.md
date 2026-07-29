@@ -496,17 +496,23 @@ Block-by-block overview showing **each connector** (gamepad via the internal rad
 flowchart LR
     subgraph PWR["⚡ Power supply"]
         direction TB
-        PA["🔌 PACK CONN<br/>12 V (+ / −)"] --> FA["Fuse 40 A"] --> RLY["🔌 40 A DC relay<br/>(opto module + e-stop)"]
-        RLY --> RAIL(["+12 V rail"])
+        PA["🔌 PACK CONN<br/>12 V (+ / −)"] --> FA["Fuse 40 A"] --> SR["🔌 Small opto relay<br/>(LOGIC rail)"]
+        FA --> BR["🔌 40 A DC relay<br/>(MOTOR power)"]
+        SR --> RAIL(["+12 V logic"])
+        SR -->|"coil"| BR
+        ESTOP["🛑 E-STOP (40 A path)"] --> BR
+        BR --> MPWR(["+12 V motors"])
+        BR -->|"opto sense"| SENSE(["GPIO34"])
         RAIL --> BUCK["Buck 12→5 V"] --> V5(["+5 V"])
     end
 
     ESP["🧠 ESP32-WROOM<br/>3.3 V via on-board regulator"]
     V5 --> ESP
-    ESP -. "GPIO13 POWER_HOLD (active low)" .-> RLY
+    ESP -. "GPIO13 POWER_HOLD (active low)" .-> SR
+    SENSE -.->|"motor power live?"| ESP
 
     PAD["🎮 BLUETOOTH GAMEPAD<br/>(ESP32 internal radio)"] -.->|"x, y, buttons"| ESP
-    RAIL --> DIVB["Divider 100k/15k"] -->|"A0"| ADS["📈 ADS1115 (0x48)<br/>bus 0 I²C (3.3 V)"]
+    RAIL --> DIVB["Divider 100k/15k<br/>(on the LOGIC rail)"] -->|"A0"| ADS["📈 ADS1115 (0x48)<br/>bus 0 I²C (3.3 V)"]
     ADS -->|"I²C GPIO18/19"| ESP
     EG["🧭 AS5600 L CONN (bus 0)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO18/19 (3.3 V)"| ESP
     ED["🧭 AS5600 R CONN (bus 1)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO27/14 (3.3 V)"| ESP
@@ -599,12 +605,32 @@ flowchart LR
 
 ### Power switch: low-side MOSFET + latch + kill switch
 
-> 🔁 **This phase: a 40 A DC relay** carries the main current instead of the low-side MOSFET
-> pair — simpler to wire, and with a single pack there is nothing to OR together. The isolation
-> principle is unchanged: an **opto-isolated relay module** (the ready-made kind, opto and
-> flyback diode on board) is driven from `POWER_HOLD`, and its contacts energise the **big
-> relay's coil**. The ESP never sees pack voltage. Prime with the button, hold from the ESP,
-> as before.
+> 🔁 **This phase: two rails, two relays.** The low-side MOSFET pair is replaced by
+> - a **small opto-isolated relay module** (ready-made, opto and flyback diode on board) that
+>   holds the **LOGIC rail** — ESP32 + motor-controller board — driven from `POWER_HOLD`;
+> - a **40 A DC relay** that carries the **MOTOR power**, energised through the small one.
+>
+> The ESP never sees pack voltage, and an unenergised coil draws nothing, so the kart at rest
+> consumes zero. Prime with the button, hold from the ESP, as before.
+>
+> **The emergency stop only needs to cut the motor relay.** That is the point of splitting the
+> rails: the logic survives, so the kart can *say* what happened instead of going dark. A
+> **feedback opto** from the 40 A relay's output tells the firmware whether motor power is
+> actually live (`pins::MOTOR_PWR_SENSE`, GPIO34, active low so a broken wire reads "dead").
+> With `pwr_sense_en=1` the firmware raises **`fb::NO_MOTOR_PWR`**, disarms, names the fault on
+> the page, and requires a deliberate re-arm on START — releasing the mushroom button never
+> resumes drive on its own.
+>
+> ⚠️ **What the e-stop actually does to the motors: freewheel, not brake.** Cutting the 40 A
+> relay unpowers the driver, its bridge goes open and the windings are left floating. On the
+> flat that coasts to a stop; on a slope it is the `coupure_pente*` runaway. If you want the
+> mushroom button to *stop* the kart rather than merely stop driving it, it needs a second pole
+> that **shorts the motor windings** — the dynamic brake the firmware normally applies, done
+> mechanically for the case where the electronics are dead.
+>
+> ⚠️ **Put the voltage divider on the LOGIC rail**, not the motor rail. On the motor rail it
+> would read 0 V the moment the e-stop is pressed, and the kart would report a dead battery
+> instead of an emergency stop.
 >
 > ⚠️ **What does not carry over is holding through a reboot**, because the load changed. After
 > a watchdog reset the ESP32 spends ~700 ms in the bootloader with `POWER_HOLD` undriven, and

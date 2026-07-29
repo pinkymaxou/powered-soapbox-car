@@ -27,6 +27,7 @@ private:
     PadInputs      m_pad_in;     // last gamepad state pushed to the core (for the advisors)
     RumbleAdvisor  m_rumble;     // haptic feedback (host decision)
     PowerOffAdvisor m_poweroff;  // power cutoff on prolonged LVC (host decision)
+    IdleOffAdvisor m_idle_off;   // power cutoff after N minutes disarmed (host decision)
     bool           m_was_armed = false;   // armed→disarmed edge → configFlushPending
     int            m_vbat_tick = 0;        // rate-limit the ADS1115 read (shares bus 0 w/ left enc)
     float          m_pin_v = -1.f;         // last ADC pin voltage (cached between 20 Hz reads)

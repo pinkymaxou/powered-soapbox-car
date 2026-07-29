@@ -151,8 +151,15 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     m_last_now_us = now;
     if (dt_s <= 0.f || dt_s > 0.1f) dt_s = hw::CTRL_DT_S;   // first tick / clock glitch → nominal
     const float inv_dt = 1.f / dt_s;
-    m_cps_win_l[m_cps_win_i] = static_cast<float>(in.sensors.enc_delta_l) * inv_dt;
-    m_cps_win_r[m_cps_win_i] = static_cast<float>(in.sensors.enc_delta_r) * inv_dt;
+    // Per-wheel SIGN. Which way an AS5600 counts depends on which face of the magnet it sees,
+    // so it flips with the motor's mounting orientation — and the two sides are mirrored to
+    // begin with. CONVENTION: positive rpm = FORWARD, negative = reverse, on both wheels.
+    // enc_inv_* corrects the mounting in software instead of rewiring; the ENC_REV fault stays
+    // as the safety net for the case where it is set wrong.
+    const float sign_l = (0 != m_cfg.enc_inv_l) ? -1.f : 1.f;
+    const float sign_r = (0 != m_cfg.enc_inv_r) ? -1.f : 1.f;
+    m_cps_win_l[m_cps_win_i] = sign_l * static_cast<float>(in.sensors.enc_delta_l) * inv_dt;
+    m_cps_win_r[m_cps_win_i] = sign_r * static_cast<float>(in.sensors.enc_delta_r) * inv_dt;
     m_cps_win_i = (m_cps_win_i + 1) % 5;
     const float cps_l = median5(m_cps_win_l);
     const float cps_r = median5(m_cps_win_r);
@@ -243,8 +250,14 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     if (enc_r_abs)                               fmask |= fb::ENC_R_ABS;
     if (mag_l_out)                               fmask |= fb::MAG_L;
     if (mag_r_out)                               fmask |= fb::MAG_R;
+    // Motor rail dead while the logic rail is alive = the emergency stop is pressed (two-rail
+    // wiring). Reported only when the opto is declared wired, and blocking on the same terms:
+    // it must force a DISARM, so that releasing the mushroom button never resumes drive on its
+    // own — the driver has to hold START again.
+    const bool no_motor_pwr = (0 != m_cfg.pwr_sense_en) && !in.sensors.motor_pwr;
+    if (no_motor_pwr)                            fmask |= fb::NO_MOTOR_PWR;
 
-    const bool blocking = (0 != (fmask & fb::BLOCKING)) ||
+    const bool blocking = (0 != (fmask & fb::BLOCKING)) || no_motor_pwr ||
                           (use_enc && (enc_l_abs || enc_r_abs || mag_l_out || mag_r_out));
 
     // Gamepad absent / gamepad e-stop / BLOCKING FAULT → we disarm and brake (absolute

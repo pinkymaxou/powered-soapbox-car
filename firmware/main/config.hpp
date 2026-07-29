@@ -40,6 +40,7 @@ struct KartStatus
     float    m_pad_rx2 = 0.f;   // RIGHT stick [-1..1] (display only)
     float    m_pad_ry2 = 0.f;
     unsigned m_pad_btns = 0;    // mask: buttons | (misc<<16) | (dpad<<24) (display)
+    int      m_idle_off_s = -1; // seconds before the idle power-off (-1 = not counting)
 };
 
 // PROTECTED access to the telemetry (internal mutex): coherent copy for the readers

@@ -34,7 +34,8 @@ typedef enum _Status_Fault {
     Status_Fault_ENCODER_DIR = 5,
     Status_Fault_ENCODER_MAD = 6,
     Status_Fault_ENCODER_ABSENT = 7,
-    Status_Fault_ENCODER_MAGNET = 8
+    Status_Fault_ENCODER_MAGNET = 8,
+    Status_Fault_MOTOR_POWER = 9
 } Status_Fault;
 
 /* Struct definitions */
@@ -91,6 +92,7 @@ typedef struct _Status {
     float pad_ry2;
     uint32_t pad_btns;
     int32_t pad_age_ms; /* gamepad heartbeat (age of the last HID report) */
+    int32_t idle_off_s; /* seconds left before the idle power-off (-1 = not counting) */
 } Status;
 
 typedef struct _ParamMeta {
@@ -236,8 +238,8 @@ extern "C" {
 #define _Status_BrakeMode_ARRAYSIZE ((Status_BrakeMode)(Status_BrakeMode_ACTIVE+1))
 
 #define _Status_Fault_MIN Status_Fault_NO_FAULT
-#define _Status_Fault_MAX Status_Fault_ENCODER_MAGNET
-#define _Status_Fault_ARRAYSIZE ((Status_Fault)(Status_Fault_ENCODER_MAGNET+1))
+#define _Status_Fault_MAX Status_Fault_MOTOR_POWER
+#define _Status_Fault_ARRAYSIZE ((Status_Fault)(Status_Fault_MOTOR_POWER+1))
 
 
 
@@ -260,7 +262,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define Req_init_default                         {"", "", "", 0, {{NULL}, NULL}}
 #define ParamVal_init_default                    {"", 0, {0}}
-#define Status_init_default                      {_Status_State_MIN, _Status_Fault_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _Status_BrakeMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Status_init_default                      {_Status_State_MIN, _Status_Fault_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _Status_BrakeMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define ParamMeta_init_default                   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {0}, 0, {0}, 0, {0}, 0, {0}}
 #define Config_init_default                      {{{NULL}, NULL}}
 #define Vals_init_default                        {{{NULL}, NULL}}
@@ -274,7 +276,7 @@ extern "C" {
 #define Msg_init_default                         {0, {Status_init_default}}
 #define Req_init_zero                            {"", "", "", 0, {{NULL}, NULL}}
 #define ParamVal_init_zero                       {"", 0, {0}}
-#define Status_init_zero                         {_Status_State_MIN, _Status_Fault_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _Status_BrakeMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Status_init_zero                         {_Status_State_MIN, _Status_Fault_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _Status_BrakeMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define ParamMeta_init_zero                      {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {0}, 0, {0}, 0, {0}, 0, {0}}
 #define Config_init_zero                         {{{NULL}, NULL}}
 #define Vals_init_zero                           {{{NULL}, NULL}}
@@ -326,6 +328,7 @@ extern "C" {
 #define Status_pad_ry2_tag                       27
 #define Status_pad_btns_tag                      28
 #define Status_pad_age_ms_tag                    29
+#define Status_idle_off_s_tag                    30
 #define ParamMeta_name_tag                       1
 #define ParamMeta_desc_tag                       2
 #define ParamMeta_cat_tag                        3
@@ -452,7 +455,8 @@ X(a, STATIC,   SINGULAR, FLOAT,    pad_zr,           25) \
 X(a, STATIC,   SINGULAR, FLOAT,    pad_rx2,          26) \
 X(a, STATIC,   SINGULAR, FLOAT,    pad_ry2,          27) \
 X(a, STATIC,   SINGULAR, UINT32,   pad_btns,         28) \
-X(a, STATIC,   SINGULAR, INT32,    pad_age_ms,       29)
+X(a, STATIC,   SINGULAR, INT32,    pad_age_ms,       29) \
+X(a, STATIC,   SINGULAR, INT32,    idle_off_s,       30)
 #define Status_CALLBACK NULL
 #define Status_DEFAULT NULL
 
@@ -636,7 +640,7 @@ extern const pb_msgdesc_t Msg_msg;
 #define KART_PB_H_MAX_SIZE                       Status_size
 #define Ok_size                                  0
 #define ParamVal_size                            28
-#define Status_size                              161
+#define Status_size                              173
 #define SysDyn_size                              29
 
 #ifdef __cplusplus

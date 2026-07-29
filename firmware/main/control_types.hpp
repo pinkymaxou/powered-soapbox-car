@@ -161,6 +161,10 @@ struct KartConfig
     int32_t open_loop;      // 1 = TEST: mixed stick → motors, no control loops (limiter/rollover/PID/smoothing)
     int32_t use_encoders;   // 1 = speed/brake/fault control via AS5600; 0 = ignore the encoders
     int32_t vbat_check_en;  // 1 = the LVC can block driving and cut power; 0 = voltage shown only
+    int32_t enc_inv_l;      // 1 = flip the LEFT encoder's sign (convention: +rpm = forward)
+    int32_t enc_inv_r;      // 1 = flip the RIGHT encoder's sign
+    int32_t pwr_sense_en;   // 1 = the motor-power opto sense is wired and blocks when it reads dead
+    int32_t idle_off_min;   // minutes disarmed before self power-off (0 = never)
     float   enc_per_wheel;  // encoder-shaft turns per WHEEL turn (mount: gearbox output 1.28, 1:5 shaft 3.41)
     int32_t arm_hold_ms;
     int32_t disarm_s;
@@ -212,7 +216,7 @@ enum class State : int { Lockout = 0, Calibrate = 1, Run = 2, Fault = 3 };
 // Dynamic = phase short-circuit (default state, disarmed, or fallback without encoders);
 // Active  = PID braking (speed command 0) — requires encoders present AND brk_pid_enable=1.
 enum class BrakeMode : int { None = 0, Dynamic = 1, Active = 2 };
-enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4, EncoderDir = 5, EncoderMad = 6, EncoderAbsent = 7, EncoderMagnet = 8 };
+enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4, EncoderDir = 5, EncoderMad = 6, EncoderAbsent = 7, EncoderMagnet = 8, MotorPower = 9 };
 
 // Bits of the m_faults mask: ALL conditions active simultaneously (m_fault keeps only
 // the highest-priority one). Single source on the firmware side; presentation mirror on the
@@ -232,6 +236,11 @@ constexpr unsigned ENC_R_ABS = 1u << 9;   // right AS5600 absent — if use_enco
 constexpr unsigned PAD_STALE = 1u << 10;  // gamepad "connected" but silent > 250 ms (heartbeat)
 constexpr unsigned MAG_L     = 1u << 11;  // left AS5600 magnet out of field (absent/too far/too close)
 constexpr unsigned MAG_R     = 1u << 12;  // right AS5600 magnet out of field
+// MOTOR power rail dead while the logic rail is alive — which, in the two-rail wiring, is
+// exactly what pressing the emergency stop looks like from the ESP's point of view. Reported
+// only when pwr_sense_en=1 (the opto is wired); blocking is handled in step(), like the
+// encoder-sensor bits, so a bench without the opto is unaffected.
+constexpr unsigned NO_MOTOR_PWR = 1u << 13;
 
 // Aggregates: BLOCKING forbids driving (disarm + State::Fault);
 // HARD deserves the strong rumble (every blocking fault except the missing calibration).
@@ -247,6 +256,8 @@ constexpr unsigned HARD     = BLOCKING & ~NOCAL;
 // as the old controller cascade.
 inline Fault primaryFault(unsigned faults)
 {
+    // Motor rail dead outranks everything: nothing else can be acted on until it is back.
+    if (faults & fb::NO_MOTOR_PWR)                return Fault::MotorPower;
     if (faults & fb::LVC)                         return Fault::Lvc;
     if (faults & (fb::ENC_L_ABS | fb::ENC_R_ABS)) return Fault::EncoderAbsent;
     if (faults & (fb::MAG_L | fb::MAG_R))         return Fault::EncoderMagnet;

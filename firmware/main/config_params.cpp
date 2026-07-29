@@ -90,7 +90,23 @@ const ParamDesc PARAMS[] =
     {"enc_per_wheel",   "Enc turns / wheel turn", "Behavior",
      "Encoder-shaft turns per wheel turn — set it to match where the magnet sits: gearbox output = 1.28, 1:5 intermediate shaft = 3.41. Converts encoder counts to WHEEL speed (limiter, rollover protection, sanity check). The raw rpm readout is unaffected.",
      PType::Float, {.f = 1.f}, {.f = 1.28f}, {.f = 10.f}, {.f = &KartConfig::enc_per_wheel}},
+    // Encoder SIGN per wheel. Which way an AS5600 counts depends on which face of the magnet
+    // it sees, so it flips with how the motor is mounted — and there is no "swap two wires"
+    // fix for a magnetic sensor the way there is for the motor leads.
+    {"enc_inv_l",       "Invert LEFT encoder",    "Behavior",
+     "Flips the sign of the LEFT wheel's measured speed. CONVENTION: positive rpm = the kart moves FORWARD. Set this if pushing the kart forward shows a negative rpm on the left wheel (Dashboard). Wrong setting = false 'encoder reversed' fault.",
+     PType::Bool,  {.i = 0}, {.i = 0}, {.i = 1}, {.i = &KartConfig::enc_inv_l}},
+    {"enc_inv_r",       "Invert RIGHT encoder",   "Behavior",
+     "Same for the RIGHT wheel. The two sides are mirrored mechanically, so it is normal for one to need inverting and not the other.",
+     PType::Bool,  {.i = 0}, {.i = 0}, {.i = 1}, {.i = &KartConfig::enc_inv_r}},
+    {"idle_off_min",    "Auto power-off (min)",   "Behavior",
+     "Minutes DISARMED before the kart powers itself down, so a forgotten kart does not flatten its battery. Arming restarts the countdown, which the Dashboard shows. 0 = never. Note: adjusting settings from this page does NOT restart it — only arming does.",
+     PType::Int,   {.i = 0}, {.i = 10}, {.i = 120}, {.i = &KartConfig::idle_off_min}},
+    {"pwr_sense_en",    "Motor-power sense (0/1)", "Behavior",
+     "1 = the opto that reports whether the 40 A motor relay is live is wired: losing motor power (emergency stop pressed) becomes a blocking fault instead of the kart silently commanding dead motors. 0 = ignore that input entirely (bench, or opto not fitted yet).",
+     PType::Bool,  {.i = 0}, {.i = 0}, {.i = 1}, {.i = &KartConfig::pwr_sense_en}},
     // (No allow_reverse: reverse is ALWAYS permitted, held by its own limit rev_speed_ms.)
+    // (No motor-output inversion: swapping the two motor leads does that in hardware.)
     {"arm_hold_ms",     "Arming hold (ms)",     "Behavior",
      "Held press duration on START (physical or gamepad) to arm, centered stick required.",
      PType::Int,   {.i = 200}, {.i = 1000}, {.i = 5000}, {.i = &KartConfig::arm_hold_ms}},

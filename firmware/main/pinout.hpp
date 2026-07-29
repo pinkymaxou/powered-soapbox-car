@@ -50,7 +50,14 @@ constexpr gpio_num_t WS2812 = GPIO_NUM_4;   // status strip
 // Active levels
 constexpr int BTN_ACTIVE = 0;   // button pressed = low level
 
-// Free GPIOs: 21, 22, 23 and the input-only 34, 35, 36, 39.
+// Motor-power sense: opto output reporting whether the 40 A relay is actually live, so the
+// firmware can tell "emergency stop pressed" from "all well" now that the e-stop only cuts
+// the MOTOR rail and leaves the ESP running. Input-only pin: the opto drives it, no pull
+// needed from us beyond the idle pull-up. ACTIVE LOW — opto conducting = motor power LIVE —
+// so a broken wire reads "dead" and errs toward refusing to drive.
+constexpr gpio_num_t MOTOR_PWR_SENSE = GPIO_NUM_34;
+
+// Free GPIOs: 21, 22, 23 and the input-only 35, 36, 39.
 // (Quadrature encoders were reserved here as a fallback to the AS5600; dropped — the
 // magnetic sensors do the job. See doc/reducteur.md for the kinematics they measure.)
 

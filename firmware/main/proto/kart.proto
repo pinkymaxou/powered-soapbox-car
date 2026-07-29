@@ -35,6 +35,7 @@ message Status {
   enum Fault {
     NO_FAULT = 0; ESTOP = 1; LVC = 2; NOT_CALIBRATED = 3; ENCODER = 4;
     ENCODER_DIR = 5; ENCODER_MAD = 6; ENCODER_ABSENT = 7; ENCODER_MAGNET = 8;
+    MOTOR_POWER = 9;
   }
   State  state = 1;
   Fault  fault = 2;
@@ -65,6 +66,7 @@ message Status {
   float  pad_ry2 = 27;
   uint32 pad_btns = 28;
   int32  pad_age_ms = 29;       // gamepad heartbeat (age of the last HID report)
+  int32  idle_off_s = 30;       // seconds left before the idle power-off (-1 = not counting)
 }
 
 message ParamMeta {

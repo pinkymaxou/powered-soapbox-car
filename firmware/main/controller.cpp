@@ -27,6 +27,7 @@ SensorReadings EspController::readSensors()
     // with the LEFT AS5600, and polling it (×ADC_OVERSAMPLE) every tick jittered the left
     // encoder's read timing → RPM dips. The control loop only consumes Vbat at 20 Hz anyway.
     if (0 == (m_vbat_tick++ % hw::VBAT_READ_TICKS)) m_pin_v = board::vbatVolts(hw::ADC_OVERSAMPLE);
+    s.motor_pwr = board::motorPowerLive();
     s.vbat_ok = (m_pin_v >= 0.f);
     s.vbat_v = s.vbat_ok ? m_pin_v * hw::VBAT_DIV_RATIO : -1.f;
     return s;
@@ -89,6 +90,7 @@ void EspController::publish(const CtrlTelemetry& t)
     st.m_pad_rx2  = m_in.rx2;
     st.m_pad_ry2  = m_in.ry2;
     st.m_pad_btns = m_in.buttons;
+    st.m_idle_off_s = m_idle_off.remainingS();
     statusPublish(st);
 }
 
@@ -106,7 +108,9 @@ void EspController::tickOnce()
     board::pollButtons();               // sampling/debounce of the START button
     pushPad();
     m_ctrl.setStartButton(board::btnStart());
-    m_ctrl.setConfig(configSnapshot());   // the web config can change at any time
+    const KartConfig cfg = configSnapshot();   // the web config can change at any time
+    const int cfg_idle_min = cfg.idle_off_min;
+    m_ctrl.setConfig(cfg);
     const int64_t now = esp_timer_get_time();
     m_ctrl.tick(now);
 
@@ -115,6 +119,9 @@ void EspController::tickOnce()
     const RumbleCmd r = m_rumble.update(t, m_pad_in, now);
     if (r.active) input::rumble(r.strong, r.weak, r.duration_ms);
     if (m_poweroff.update(t, now)) board::powerOff();
+    // Idle cutoff: fires ONCE. If the power does not actually drop (hold capacitor, or a
+    // self-holding relay), we stay alive with the countdown parked at 0 rather than retrying.
+    if (m_idle_off.update(t.armed, cfg_idle_min, now)) board::powerOff();
     if (m_was_armed && !t.armed) configFlushPending();   // deferred "set" received while driving
     m_was_armed = t.armed;
 

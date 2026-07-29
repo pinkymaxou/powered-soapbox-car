@@ -41,6 +41,7 @@
  </section>
 
  <section id="faults" class="panel">
+  <div class="idleoff" id="idleoff" hidden></div>
   <div class="chart-title">🚨 Currently active faults</div>
   <div class="hudcard">
   <svg id="faultdiag" viewBox="0 0 300 392" role="img" aria-label="Fault location on the vehicle (top view)">
@@ -411,7 +412,8 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
   pad_batt:{type:"int32",id:19},pad_x:{type:"float",id:20},pad_y:{type:"float",id:21},
   pad_cx:{type:"float",id:22},pad_cy:{type:"float",id:23},pad_zl:{type:"float",id:24},
   pad_zr:{type:"float",id:25},pad_rx2:{type:"float",id:26},pad_ry2:{type:"float",id:27},
-  pad_btns:{type:"uint32",id:28},pad_age_ms:{type:"int32",id:29}}},
+  pad_btns:{type:"uint32",id:28},pad_age_ms:{type:"int32",id:29},
+  idle_off_s:{type:"int32",id:30}}},
  ParamMeta:{oneofs:{value:{oneof:["bval","ival","fval"]},minv:{oneof:["bmin","imin","fmin"]},
    maxv:{oneof:["bmax","imax","fmax"]},defv:{oneof:["bdef","idef","fdef"]}},
   fields:{name:{type:"string",id:1},desc:{type:"string",id:2},cat:{type:"string",id:3},help:{type:"string",id:4},
@@ -709,6 +711,21 @@ function showStatus(s){
  const _ft=document.getElementById('fd-batttype');
  if(_ft)_ft.textContent=!_hasV?'no sensor':(s.batt_type?s.batt_type+' V pack':'detecting…');
  updateDivider(_mv);
+ // Idle power-off countdown. Only shown while it is actually counting (disarmed and the
+ // feature enabled); arming makes it disappear because the firmware resets it to -1.
+ const _io=document.getElementById('idleoff');
+ if(_io){
+  const left=s.idle_off_s;
+  if(left===undefined||left<0){_io.hidden=true;}
+  else{
+   _io.hidden=false;
+   const m=Math.floor(left/60), ss=left%60;
+   _io.className='idleoff'+(left<=60?' soon':'');
+   _io.textContent=(left===0)
+    ? '⏻ Idle power-off already commanded — still running, so the power did not actually drop.'
+    : `⏻ Idle power-off in ${m}:${String(ss).padStart(2,'0')} — arm the kart to reset it.`;
+  }
+ }
  // Mix outputs on the schematic: drive (fwd/rev/stop) + turn, and per-motor PWM.
  const _sv=(id,t)=>{const e=document.getElementById(id); if(e)e.textContent=t;};
  const _pct=v=>(Math.abs(v)*100).toFixed(0), _arw=v=>v>0.02?'▲':(v<-0.02?'▼':'■');
@@ -774,6 +791,7 @@ const FAULTS_DESC=[
  {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 250 ms: communication lost. Immediate disarm and braking.', grave:true, z:['pad']},
  {b:7, t:'Encoder: erratic reading',             d:'Measured speed physically impossible for the kart. Faulty sensor or magnet. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
  {b:11,t:'LEFT encoder: magnet out of range',    d:'The left AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wl'], cond:true},
+ {b:13,t:'Motor power absent (e-stop?)',        d:'The 40 A relay is not feeding the motor driver while the logic rail is still alive — normally that means the emergency stop is pressed. Can also be a blown fuse, a released relay, or the sense opto unplugged. Release the e-stop, then rearm with START. Only reported when pwr_sense_en=1.', grave:true, z:['batt']},
  {b:12,t:'RIGHT encoder: magnet out of range',   d:'The right AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wr'], cond:true},
 ];
 // cond:true faults (encoder sensor) are only GRAVE when the encoders are actually used;

@@ -120,7 +120,11 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
 // nanopb encodes BY STREAM with callbacks: the strings (PARAMS, gamepad name…) and the
 // history series go directly from their original pointers — zero copy,
 // zero allocation, frames ~3× smaller than JSON.
-constexpr size_t REPLY_CAP = 6144;   // largest response: config (4.7 KB binary, measured) + ~30 % margin
+constexpr size_t REPLY_CAP = 10240;   // largest response: the config — 6568 B MEASURED at 30
+                                      // params (2026-07-29), so ~64 % used and room for ~19
+                                      // more before the 80 % warning below starts firing.
+                                      // It HAS overflowed once: 4 params with long help text
+                                      // pushed past the old 6144 and the socket just died.
 pb_byte_t m_reply[REPLY_CAP];
 
 // Generic callback: encodes a C string (arg = const char*).
@@ -411,6 +415,7 @@ size_t buildStatusPb()
     st.fault      = static_cast<Status_Fault>(s.m_fault);
     st.faults     = s.m_faults;
     st.vbat       = s.m_vbat;
+    st.idle_off_s = s.m_idle_off_s;
     st.batt_type  = s.m_batt_type;
     st.batt_lo    = battDispLo(s.m_batt_type);
     st.batt_hi    = battDispHi(s.m_batt_type);

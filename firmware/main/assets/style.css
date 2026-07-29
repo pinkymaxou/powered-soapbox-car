@@ -231,3 +231,8 @@ button.alt{background:var(--card2);color:var(--accent);border:1px solid var(--ac
 /* PWM gauge/label + wheel-label colours follow the structural port/starboard
    convention (--port / --starboard); no skin override so LEFT stays red,
    RIGHT stays green in every theme. */
+
+/* Idle power-off countdown (Dashboard) — informative, then urgent under a minute. */
+.idleoff{background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--accent);
+ border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:13px;color:var(--muted)}
+.idleoff.soon{border-left-color:var(--amber);color:var(--txt)}

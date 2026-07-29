@@ -30,6 +30,8 @@ struct SensorReadings
     float vbat_v = -1.f;      // BATTERY voltage in VOLTS — the ADC pin →
                               // battery conversion (divider ratio) is done ON THE HOST
     bool  vbat_ok = false;    // false = ADS1115 absent or read in error
+    bool  motor_pwr = true;   // MOTOR power rail live (opto sense on the 40 A relay's output).
+                              // Default true = assume live if a host does not populate it.
 };
 
 // GAMEPAD state pushed by the host (setPad): percentages [-1..1] of the sticks and buttons.
