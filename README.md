@@ -661,14 +661,32 @@ flowchart LR
 > *(RC decay, not constant current — a relay holds well below nominal, releasing around 10–30 %,
 > which is what keeps this at millifarads instead of tens of them.)*
 >
+> **Parts actually used**
+>
+> | | part | coil | contacts |
+> |---|---|---|---|
+> | logic rail | **TONGLING JQC-3FF-S-Z** module, opto in, high/low trigger | 12 V, ~400 Ω, **30 mA** | 10 A 30 VDC |
+> | motor power | **YONGCHUAN YCL-12V-C**, automotive SPDT (85/86 coil, 30/87/87a) | 12 V, ~80 Ω, **150 mA** | **40 A** on 87 (NO), 30 A on 87a |
+>
+> Feed the motors from **87 (NO)** — that is the contact carrying the 40 A rating, and it also
+> means an unpowered relay is an unpowered kart. **87a (NC) is spare**: it cannot short the
+> windings *and* switch the supply at the same time (one pole, one job), but it is there for an
+> indicator or a future second relay. The module's 10 A contacts drive the 150 mA coil with a
+> factor of 66 in hand.
+>
 > **Decision: fit the capacitor and accept that it is not perfect.** The coil current is not a
 > consumption problem — the module runs off 12 V and the ESP only lights an opto LED — it is
-> simply the current the capacitor has to supply while nothing is driving. And because the
-> module's contacts feed the big coil, **one capacitor across the big relay's coil is enough**:
-> if the little module drops out mid-reboot it no longer matters, the cap keeps the 40 A relay
-> closed on its own.
+> simply the current the capacitor has to supply while nothing is driving.
 >
-> - **~10 000 µF across the 40 A coil** → τ = 0.75 s, holds ≈ 0.9 s. Covers the 700 ms window.
+> **Put the capacitor on the SMALL relay's coil, not the big one.** Two reasons, and they both
+> follow from the small relay carrying the LOGIC rail: if it drops mid-reboot the **ESP loses
+> its own power** and never comes back — a permanent shutdown, worse than a motor blip — and
+> since the big coil is fed *through* its contacts, holding the small one holds both. It is
+> also five times cheaper, because 400 Ω discharges far more slowly than 80 Ω:
+>
+> - **~1 500 µF across the JQC-3FF coil** covers the 700 ms window (760–1454 µF depending on
+>   where the relay actually releases, 10–30 % of nominal).
+> - The same job on the 40 A coil would need **~4 000–7 300 µF**.
 > - **Hold START for ~1 s at power-up.** Not a workaround for the capacitor — it is what covers
 >   the *first* boot, where the ESP simply does not exist yet to hold anything. It also means the
 >   **button** takes the capacitor's charging surge (once, mechanically, on a contact built for
@@ -688,6 +706,30 @@ flowchart LR
 > README calls the central hardware e-stop *the only guaranteed stop*; a hold capacitor quietly
 > takes that away. **Put the e-stop in the 40 A main path** (a mushroom button rated for it), so
 > it breaks the current mechanically and the capacitor has nothing to hold up.
+>
+> **Considered: going back to 2× IRFZ44N gated by the e-stop.** It is a genuine trade, not a
+> clear win, so here it is in numbers:
+>
+> | | 2× IRFZ44N (20 A each, low side) | YCL-12V-C relay |
+> |---|---|---|
+> | dissipation at 40 A | **14 W** cold, **24 W** at 100 °C (Rds rises ~1.7×) | ~3 W contacts + 1.8 W coil |
+> | heatsink | mandatory | none |
+> | drop | 350–600 mV | ~80 mV |
+> | reboot hold | **~7 µF** (a gate leaks µA) | ~1500 µF |
+> | e-stop in the control path | instant — the gate pull-down drains in µs | delayed by the hold cap ⇒ must go in the 40 A path |
+> | usual failure mode | shorted D-S — stuck ON | welded contacts — stuck ON |
+>
+> The MOSFETs win exactly where the relay hurt: **200× less capacitance to ride out the reboot**,
+> and an e-stop that can sit in the control path without being delayed. That was the elegance of
+> the original design. What they cost is 14–24 W to get rid of and a gate drive that wants
+> Vgs ≈ 10 V, which is why they switched the GROUND return rather than the supply.
+>
+> **Staying with the relay** for now: it is in hand, dissipates a fifth as much, needs no
+> heatsink, and both problems it created are already solved — 1500 µF on the small coil, and the
+> e-stop moved into the 40 A path where a mushroom button belongs anyway. ⚠️ The relay-specific
+> risk to watch is **contact welding on inrush**: closing 40 A onto the driver's bulk capacitors
+> is a hard surge, and a welded contact fails ON. If it welds, add a pre-charge resistor across
+> the contact.
 >
 > *(The alternative that needs no capacitor at all: a self-holding relay — auxiliary contact
 > feeding its own coil, primed by START. Nothing has to be driven to stay on, so a reboot changes

@@ -319,7 +319,8 @@ void testParamSweep()
 
 // ─────────────────────────── JSON stream (viewer) ───────────────────────────
 // One frame of the stream (shared between scripted scenarios and manual driving).
-void printFrame(const Vehicle& v, const SimController& c, const CtrlTelemetry& t)
+void printFrame(const Vehicle& v, const SimController& c, const CtrlTelemetry& t,
+                bool backrooms = false)
 {
     const float mps2rpm = 60.f * hw::GEAR_RATIO / (PI_F * hw::WHEEL_DIAM_M);
     std::printf("{\"t\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,\"h\":%.4f,\"v\":%.3f,\"w\":%.3f,"
@@ -329,7 +330,7 @@ void printFrame(const Vehicle& v, const SimController& c, const CtrlTelemetry& t
                 "\"p_w\":%.1f,\"e_wh\":%.3f,"
                 "\"stickx\":%.2f,\"sticky\":%.2f,"
                 "\"padx\":%.2f,\"pady\":%.2f,\"state\":%d,\"fault\":%d,\"faults\":%u,"
-                "\"brake\":%d,\"armed\":%s,\"power\":%s,\"vbat\":%.2f}\n",
+                "\"brake\":%d,\"armed\":%s,\"power\":%s,\"vbat\":%.2f,\"backrooms\":%s}\n",
                 v.t(), v.x(), v.y(), v.z(), v.heading(), v.v(), v.yawRate(),
                 v.aLat(), v.tipMargin(), v.roll(), v.pitch(), v.liftSide(),
                 v.tipped() ? "true" : "false", v.airborne() ? "true" : "false",
@@ -340,7 +341,7 @@ void printFrame(const Vehicle& v, const SimController& c, const CtrlTelemetry& t
                 c.padX(), c.padY(),
                 t.turn, t.fwd, static_cast<int>(t.state), static_cast<int>(primaryFault(t.faults)),
                 t.faults, static_cast<int>(t.brake_mode), t.armed ? "true" : "false",
-                c.powered() ? "true" : "false", t.vbat);
+                c.powered() ? "true" : "false", t.vbat, backrooms ? "true" : "false");
     std::fflush(stdout);
 }
 
@@ -412,7 +413,12 @@ int driveInteractive()
     KartConfig cfg;
     cfg.setDefaults();
     Vehicle veh;
-    veh.ground_fn = [](float x, float y) { return terrainH(x, y); };   // jumps possible!
+    // 🚪 One-way: drive into the shed and ground_fn stops returning the terrain. The kart is
+    // then well above the new floor, the ballistic physics takes over, and it falls 8 m.
+    bool backrooms = false;
+    veh.ground_fn = [&backrooms](float x, float y) {
+        return backrooms ? BACKROOMS_FLOOR : terrainH(x, y);
+    };   // jumps possible!
     PadCmd cmd;
     SimController ctrl(veh, [&cmd](float) { return cmd; });
 
@@ -463,11 +469,19 @@ int driveInteractive()
             acc.erase(0, nl + 1);
         }
 
+        // 🚪 No exit. Past the doorway the floor is gone and the carpet is damp.
+        if (!backrooms && inShed(veh.x(), veh.y()))
+        {
+            backrooms = true;
+            veh.params().roll_n = BACKROOMS_ROLL_N;
+        }
         // The REAL slope under the kart drives the physics (uphill brakes, downhill runs away).
-        veh.params().slope_rad = terrainSlopeAlong(veh.x(), veh.y(), veh.heading());
+        // The Backrooms are endless and flat: no slope down there, ever.
+        veh.params().slope_rad = backrooms
+            ? 0.f : terrainSlopeAlong(veh.x(), veh.y(), veh.heading());
         ctrl.stepOnce(cfg);
 
-        if (0 == (frame % 8)) printFrame(veh, ctrl, ctrl.telemetry());
+        if (0 == (frame % 8)) printFrame(veh, ctrl, ctrl.telemetry(), backrooms);
         std::this_thread::sleep_until(t0 + std::chrono::microseconds(2000 * (frame + 1)));
     }
     return 0;

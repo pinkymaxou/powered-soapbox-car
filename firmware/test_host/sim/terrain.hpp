@@ -57,4 +57,23 @@ inline float terrainSlopeAlong(float x, float y, float heading)
     return std::atan((ahead - behind) / (2.f * EPS));
 }
 
+// ─────────────────────────── The shed 🚪 ───────────────────────────
+// A hut standing in the start corridor. Drive through its door and the floor is not there.
+// MANUAL DRIVING ONLY (sim_main --drive): the CI scenarios never load the terrain, so none of
+// this can perturb them. ⚠️ JS MIRROR in tools/sim_viewer.html — keep both in step.
+constexpr float SHED_CX = 24.f, SHED_CY = -6.f;   // centre (m), clear of the ramp at y≈0
+constexpr float SHED_HALF = 2.0f;                 // 4 m × 4 m footprint
+constexpr float SHED_WALL = 0.15f;
+constexpr float SHED_H = 2.4f;
+constexpr float BACKROOMS_FLOOR = -8.f;           // you fall this far. Mind the step.
+constexpr float BACKROOMS_ROLL_N = 95.f;          // damp carpet: ~3x the rolling resistance
+
+// Inside the four walls, i.e. past the doorway (the door is the whole -x face).
+inline bool inShed(float x, float y)
+{
+    const float ix = SHED_HALF - SHED_WALL;
+    return (x > SHED_CX - ix) && (x < SHED_CX + ix) &&
+           (y > SHED_CY - ix) && (y < SHED_CY + ix);
+}
+
 } // namespace sim
