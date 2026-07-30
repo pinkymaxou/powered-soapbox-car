@@ -365,6 +365,25 @@ flowchart LR
 
 **Transmission gearbox → wheel:** sprocket **bolted to the inner side of the wheel** (multiple spokes, large washers / backing plate so as not to crack the plastic), **25T→32T #35 sprockets = 1.28:1** (exact tooth ratio — see [`doc/reducteur.md`](doc/reducteur.md)) with tension adjustment (slotted holes / idler), **closed guard**. The wheel turns **free on the through axle**; the motor only drives it. **Measure the hub thickness before the final cut of the rod**; **adjustable spacers** to bring the wheel-sprocket plane in line with the gearbox sprocket (chain alignment = critical adjustment: a misaligned chain climbs a sprocket flank and is thrown), gearbox mounting with slotted holes for fine adjustment.
 
+**Where to put the gearbox output sprocket** — full reasoning and the centre-distance table in
+[`doc/reducteur.md`](doc/reducteur.md#where-to-put-the-gearbox-output-sprocket):
+
+![Chain layout](doc/schematics/chain_layout.png)
+
+- ⚠️ **Never one sprocket directly above the other.** Gravity then pulls the slack *along* the run
+  instead of into the teeth, and wear elongation all collects at the **bottom** sprocket where
+  nothing keeps the chain seated — it climbs the teeth and skips. Keep the line of centres
+  **within 45° of horizontal**.
+- **The constraint is the DISTANCE, not the direction**: any position on a circle around the wheel
+  axle works, as long as it avoids the two vertical 45° sectors. Useful freedom when a frame member
+  is in the way — forward, back or diagonally up are all fine.
+- **165 mm centre distance → 64 links** for this build (168.7 mm hits 64 exactly). A short centre
+  distance costs almost nothing at 1.3 m/s and 10 % of working load; what it costs is **tension
+  sensitivity** (1.7 mm of nominal slack), so expect to re-tension more often.
+- **Even link count is mandatory** (an odd one needs a cranked link, ~20 % weaker), slack **~1 % of
+  C** rather than the usual 2 % because reverse makes both runs tight in turn, and slot the mount
+  **±15 mm**.
+
 ### Electronic control — ESP32
 
 - The **ESP32** receives the **Bluetooth gamepad** axes, applies **arcade mixing** + **rollover protection**, then sends **an independent PWM + DIR to each channel** of the driver.
