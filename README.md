@@ -621,15 +621,26 @@ flowchart LR
 > the page, and requires a deliberate re-arm on START — releasing the mushroom button never
 > resumes drive on its own.
 >
-> **What the e-stop does to the motors: freewheel, not brake** — cutting the 40 A relay
-> unpowers the driver, its bridge goes open and the windings float. **Accepted**, because the
-> kart is built for FLAT ground and the 1:17 gearbox is not meaningfully back-drivable: the
-> wheel would have to spin the motor seventeen times faster than itself, and printed spur
-> gears are not efficient in reverse. It coasts to a stop quickly rather than rolling away.
-> ⚠️ That reasoning is what makes it acceptable, so it stops being true on a slope — see the
-> `coupure_pente*` scenarios. If the kart is ever used on a gradient, the mushroom button
-> needs a second pole that **shorts the motor windings** (the dynamic brake the firmware
-> normally applies, done mechanically for when the electronics are dead).
+> **The e-stop may still BRAKE, not freewheel — and that is a bonus of splitting the rails.**
+> Dynamic braking is `motorsBrake()`: duty 0 + DIR low, which drives both bridge outputs low,
+> i.e. turns on both **low-side** MOSFETs and shorts the windings to ground. Low-side FETs are
+> referenced to ground and need only **gate drive** — they do not need VB+. So with the driver
+> board's logic alive on the logic rail and its 40 A supply cut, the firmware sees
+> `fb::NO_MOTOR_PWR`, disarms, and the disarm path already commands the brake. The chain works
+> end to end without a second pole on the mushroom button.
+>
+> ⚠️ **It hinges entirely on the driver board keeping its gate drive without VB+.** Boards with
+> a separate logic VCC generally do. Boards built around half-bridge ICs that take their own
+> supply from B+ (BTS7960 and friends) do **not** — cut B+ and the chip is simply off, outputs
+> floating. **Test it on the bench**, which the two-rail wiring makes trivial: logic up, 40 A
+> relay open, spin a wheel by hand and feel whether it resists. Thirty seconds, and it decides
+> whether the emergency stop stops the kart or merely stops driving it.
+>
+> If it turns out not to brake, freewheel is still acceptable *on the flat*: the 1:17 gearbox
+> is not meaningfully back-drivable — the wheel would have to spin the motor seventeen times
+> faster than itself through printed spur gears — so it coasts to a stop rather than rolling
+> away. That argument expires on a slope (`coupure_pente*`), where the fix is a second pole on
+> the mushroom button shorting the windings mechanically.
 >
 > ⚠️ **Put the voltage divider on the LOGIC rail**, not the motor rail. On the motor rail it
 > would read 0 V the moment the e-stop is pressed, and the kart would report a dead battery
