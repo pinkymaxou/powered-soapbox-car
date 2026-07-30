@@ -40,6 +40,7 @@
   <button class="alt" onclick="reload()">Reload</button>
   <form id="f"></form>
   <button type="button" id="cfgsave" onclick="save()">💾 Save</button>
+  <p class="note locknote" hidden>🔒 <b>Kart armed</b> — disarm to change these settings.</p>
  </section>
 
  <section id="faults" class="panel">
@@ -136,6 +137,7 @@
    <button id="padpairbtn" onclick="padPair()">🔗 Pair a gamepad</button>
    <button class="danger" id="padunpairbtn" onclick="padUnpair()">✖ Unpair</button>
   </div>
+  <p class="note locknote" hidden>🔒 <b>Kart armed</b> — disarm to pair or calibrate.</p>
   <p class="note">⚠️ Pairing <b>erases the calibration</b>: you will have to recalibrate. The gamepad must be in pairing mode (often hold the sync button).</p>
   <hr>
   <p class="note"><b>Gamepad calibration — MANDATORY to drive.</b><br>
@@ -158,7 +160,8 @@
   <p class="note"><b>Retype the password every time.</b> It is never sent back to the page, so the
    field always starts empty — saving it blank would wipe the stored one. A save with an empty
    or under-8-character password (WPA2 minimum) is <b>refused</b> and changes nothing.</p>
-  <button type="button" onclick="saveWifi()">💾 Save &amp; reboot</button>
+  <button type="button" id="wifisave" onclick="saveWifi()">💾 Save &amp; reboot</button>
+  <p class="note locknote" hidden>🔒 <b>Kart armed</b> — disarm to change these settings.</p>
   <p class="note">The kart connects to the chosen network <b>after reboot</b>, while keeping the "Kart-Config" access point active. Automatic reconnection every 5 s if the link drops.</p>
   <p class="note"><b>mDNS:</b> on either network the page is reachable at <a href="http://kart.local/">http://kart.local</a> — no need to know the IP. Works on Windows 10+, macOS/iOS and Linux (Avahi); <b>on Android use the IP address</b> (Chrome does not resolve <code>.local</code>).</p>
  </section>
@@ -917,7 +920,11 @@ function updateLocks(){
  lk('cfgsave',armedLock);
  lk('padpairbtn',armedLock);
  lk('padunpairbtn',armedLock);
+ lk('wifisave',armedLock);
  lk('calstartbtn',armedLock||calBusy);
+ // Visible notice, not just the hover tooltip: on a tablet there IS no hover, and a greyed
+ // button with no explanation reads as "broken page".
+ document.querySelectorAll('.locknote').forEach(e=>{e.hidden=!armedLock;});
 }
 function reboot(){if(confirm("Reboot the system? It will restart DISARMED."))sendReq({type:'reboot'});}
 let wifiSaving=false;

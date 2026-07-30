@@ -164,6 +164,8 @@ table.pins th{background:var(--card2);color:var(--accent);font-weight:700}
 table.pins tr:last-child td{border-bottom:0}
 table.pins td:first-child{font-family:ui-monospace,monospace;color:var(--green);width:60px;text-align:center}
 .note{color:var(--muted);font-size:13px;line-height:1.5;margin-top:12px}
+/* "Kart armed" lock notice: shown next to the buttons the firmware refuses while armed. */
+.locknote{color:var(--amber)}
 
 /* Documentation tab */
 .dochead{font-size:15px;font-weight:700;margin:18px 0 2px;color:var(--txt)}
