@@ -163,24 +163,29 @@ void evlog::push(Ev code, uint32_t data)
     m_head.store(head + 1, std::memory_order_release);
 }
 
-int evlog::read(Rec* out, int cap, uint32_t* total, uint32_t* pending)
+void evlog::stats(uint32_t& total, uint32_t& pending)
 {
-    if (pending) *pending = m_head.load() - m_tail.load();
-    if (!m_part || cap <= 0)
+    pending = m_head.load() - m_tail.load();
+    if (!m_part)
     {
-        if (total) *total = 0;
-        return 0;
+        total = 0;
+        return;
     }
     xSemaphoreTake(m_mtx, portMAX_DELAY);
-    const int on_flash = static_cast<int>(m_write_off / sizeof(Rec));
-    if (total) *total = static_cast<uint32_t>(on_flash);
-    const int n = (on_flash < cap) ? on_flash : cap;
-    const uint32_t first = m_write_off - static_cast<uint32_t>(n) * sizeof(Rec);
+    total = m_write_off / sizeof(Rec);
+    xSemaphoreGive(m_mtx);
+}
+
+int evlog::readAt(uint32_t idx, Rec* out, int cap)
+{
+    if (!m_part || cap <= 0) return 0;
+    xSemaphoreTake(m_mtx, portMAX_DELAY);
+    const uint32_t on_flash = m_write_off / sizeof(Rec);
     int got = 0;
-    for (int i = 0; i < n; ++i)
+    for (int i = 0; i < cap && idx + i < on_flash; ++i)
     {
         Rec r;
-        if (ESP_OK != esp_partition_read(m_part, first + i * sizeof(Rec), &r, sizeof(r))) break;
+        if (ESP_OK != esp_partition_read(m_part, (idx + i) * sizeof(Rec), &r, sizeof(r))) break;
         if (recValid(r)) out[got++] = r;   // a torn record is skipped, not fatal
     }
     xSemaphoreGive(m_mtx);

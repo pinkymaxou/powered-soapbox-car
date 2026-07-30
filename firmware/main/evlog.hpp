@@ -44,10 +44,12 @@ void init();                          // find the partition, scan, log Boot — 
 void push(Ev code, uint32_t data);    // control-task safe: RAM ring only, never blocks
 void maintain();                      // drain RAM → flash if disarmed; call at a few Hz (leds task)
 
-// Read the last `cap` persisted records into `out` (oldest first); returns the count.
-// `total` (optional) receives the number of records on flash; `pending` the RAM ones
-// not yet drained (non-zero means "disarm and refresh to see the rest").
-int  read(Rec* out, int cap, uint32_t* total = nullptr, uint32_t* pending = nullptr);
+// Chunked read API — the web reply is encoded STRAIGHT from flash in small bites, so no
+// task keeps a records-buffer alive in permanent BSS (a 1.6 KB one died in the RAM audit).
+// stats() snapshots the journal; readAt() copies records [idx, idx+cap) — records are
+// immutable once written and only ever appended, so a snapshot stays valid across chunks.
+void stats(uint32_t& total, uint32_t& pending);   // records on flash / raised-not-drained
+int  readAt(uint32_t idx, Rec* out, int cap);     // valid records copied (torn ones skipped)
 bool clear();                         // erase the partition (refused while armed)
 
 } // namespace evlog

@@ -97,10 +97,17 @@
 // ACL buffer large enough for Ethernet frame in BNEP/PAN
 #define HCI_ACL_PAYLOAD_SIZE (1691 + 4)
 
+// KART: this host talks to ONE HID gamepad (~80-byte reports at ~125 Hz), yet the stock
+// numbers sized the port's hci_ringbuffer_storage at 22.3 KB of static DRAM — 20 in-flight
+// 1 KB ACL packets (BNEP/PAN-grade throughput) plus 10 SCO buffers, which are AUDIO
+// (headsets); a gamepad host never opens a SCO link. Controller-to-host flow control is
+// enabled, so these figures are ADVERTISED to the controller and it paces itself — cutting
+// them is what flow control is for, not an overrun risk. 6 × 1 KB still covers SDP/HID
+// descriptor bursts during pairing many times over. Ring: 22 324 B → 7 226 B.
 #define HCI_HOST_ACL_PACKET_LEN 1024
-#define HCI_HOST_ACL_PACKET_NUM 20
-#define HCI_HOST_SCO_PACKET_LEN 60
-#define HCI_HOST_SCO_PACKET_NUM 10
+#define HCI_HOST_ACL_PACKET_NUM 6
+#define HCI_HOST_SCO_PACKET_LEN 0
+#define HCI_HOST_SCO_PACKET_NUM 0
 
 #else
 

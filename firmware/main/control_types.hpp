@@ -99,7 +99,10 @@ constexpr int     MAG_READ_TICKS    = 50;      // poll STATUS at CTRL_HZ/50 ≈ 
 // the file that grows every time a parameter is added — can static_assert against it and
 // FAIL THE BUILD instead of failing the socket. It has bitten once: four params with long
 // help text pushed the config past the old 6144 and the page just lost its connection.
-constexpr size_t PB_REPLY_CAP = 10240;
+// 8192, not more: this is permanent BSS and every static kilobyte comes straight out of
+// the heap pool (RAM audit 2026-07-31). The config measures 6568 B wire; the compile-time
+// worst-case guard in config_params.cpp still enforces the fit on every param added.
+constexpr size_t PB_REPLY_CAP = 8192;
 
 constexpr int   VBAT_SAG_DEBOUNCE_MS = 500;
 constexpr int   LVC_POWEROFF_MS      = 30000;  // auto power cutoff (powerOff) after 30 s below the threshold

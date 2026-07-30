@@ -163,10 +163,12 @@ size_t encodeMsg(const Msg& msg)
         ESP_LOGE(TAG, "Protobuf encoding: %s", PB_GET_ERROR(&os));
         return 0;
     }
-    if (os.bytes_written > (REPLY_CAP * 4) / 5)
+    if (os.bytes_written > (REPLY_CAP * 9) / 10)
     {
-        // Margin < 20 % (the config grows by ~190 B per added parameter): enlarge REPLY_CAP
-        // BEFORE encoding silently fails on the page side.
+        // Margin < 10 % (the config grows by ~190 B per added parameter): enlarge REPLY_CAP
+        // BEFORE encoding silently fails on the page side. 90 %, not 80: the config sits at
+        // 6568/8192 = 80.2 % by design (the arena was cut to reclaim RAM), and the REAL
+        // guard is compile-time in config_params.cpp — this log is just early warning.
         ESP_LOGW(TAG, "Protobuf response at %u/%u bytes: low margin",
                  static_cast<unsigned>(os.bytes_written), static_cast<unsigned>(REPLY_CAP));
     }
@@ -547,34 +549,41 @@ bool encIp6(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
 }
 
 // ── Event log ("why did it disarm") ──
-// Last EVLOG_REPLY_MAX flash records, oldest → newest, callback-encoded from a static
-// buffer. All-varint entries, so the wire bound is exact and compile-time checkable.
-// 100, not more: this buffer is permanent BSS and every static kilobyte comes straight
-// out of the heap pool, which page-load already drives to the floor (heap_min 864 B seen).
+// Last EVLOG_REPLY_MAX flash records, oldest → newest, encoded STRAIGHT from flash in
+// 16-record bites on the httpd stack — the first version buffered them all in 1.6 KB of
+// permanent BSS, and on this board every static kilobyte is spent heap. Safe without a
+// lock across chunks: records are immutable once written and only ever appended, so the
+// window snapshot from stats() stays valid while we read.
 constexpr int EVLOG_REPLY_MAX = 100;
 static_assert(EVLOG_REPLY_MAX * (EvlogEntry_size + 3) + 32 <= hw::PB_REPLY_CAP,
               "Evlog reply no longer fits the arena: lower EVLOG_REPLY_MAX");
-evlog::Rec m_ev_buf[EVLOG_REPLY_MAX];
 
 struct EvArg
 {
-    const evlog::Rec* recs;
-    int               n;
+    uint32_t first;   // absolute index of the first record to send
+    uint32_t count;   // how many from there
 };
 
 bool encEvlog(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
 {
     const EvArg* a = static_cast<const EvArg*>(*arg);
-    for (int i = 0; i < a->n; ++i)
+    evlog::Rec chunk[16];
+    for (uint32_t done = 0; done < a->count;)
     {
-        const evlog::Rec& r = a->recs[i];
-        EvlogEntry e = EvlogEntry_init_zero;
-        e.t_ms = r.t_ms;
-        e.boot = r.head & 0xFFFF;
-        e.code = (r.head >> 16) & 0xFF;
-        e.data = r.data;
-        if (!pb_encode_tag_for_field(os, field)) return false;
-        if (!pb_encode_submessage(os, EvlogEntry_fields, &e)) return false;
+        const int want = static_cast<int>((a->count - done) < 16 ? (a->count - done) : 16);
+        const int got = evlog::readAt(a->first + done, chunk, want);
+        for (int i = 0; i < got; ++i)
+        {
+            const evlog::Rec& r = chunk[i];
+            EvlogEntry e = EvlogEntry_init_zero;
+            e.t_ms = r.t_ms;
+            e.boot = r.head & 0xFFFF;
+            e.code = (r.head >> 16) & 0xFF;
+            e.data = r.data;
+            if (!pb_encode_tag_for_field(os, field)) return false;
+            if (!pb_encode_submessage(os, EvlogEntry_fields, &e)) return false;
+        }
+        done += static_cast<uint32_t>(want);   // advance by the ASK, torn records just drop
     }
     return true;
 }
@@ -582,9 +591,10 @@ bool encEvlog(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
 size_t buildEvlogPb()
 {
     uint32_t total = 0, pending = 0;
+    evlog::stats(total, pending);
     EvArg a;
-    a.recs = m_ev_buf;
-    a.n = evlog::read(m_ev_buf, EVLOG_REPLY_MAX, &total, &pending);
+    a.count = (total < EVLOG_REPLY_MAX) ? total : EVLOG_REPLY_MAX;
+    a.first = total - a.count;
     Msg msg = Msg_init_zero;
     msg.which_body = Msg_evlog_tag;
     msg.body.evlog.ev.funcs.encode = encEvlog;
