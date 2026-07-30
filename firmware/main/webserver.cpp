@@ -200,13 +200,19 @@ constexpr int HIST_FAST_N   = 120;  // 10 min @ 5 s
 constexpr int HIST_FAST_DT  = 5;
 constexpr int HIST_SPEED_N  = 60;   // 1 min @ 1 s (dedicated speed chart, small)
 constexpr int HIST_BATT_N   = 120;  // 30 min @ 15 s
-// Hist is callback-encoded too, but its size is fully known: 3 varints + 7 byte arrays of
-// fixed length. Bound it here so growing a window cannot quietly overflow the arena.
+// Hist is callback-encoded too, but its size is fully known: 3 varints + 8 byte arrays of
+// fixed length. Bound it so growing a window cannot quietly overflow its buffer — and bound
+// it against the RIGHT buffer: Hist encodes into m_hist_bin (its own 1 s cache, sent as-is),
+// NOT into the m_reply arena. The first version of this guard checked hw::PB_REPLY_CAP
+// (10240) while the actual buffer was 1024 bytes — a guard that could never fire, in front
+// of an encode that fails silently (no frame, charts just stop updating).
 constexpr size_t HIST_PB_MAX = 3 * 6                       // dt_fast / dt_spd / dt_batt
                              + 8 * 3                       // one tag + length varint each
                              + 6 * HIST_FAST_N             // accel, pwml, pwmr, rpml, rpmr, loop
                              + HIST_SPEED_N + HIST_BATT_N; // spd, batt
-static_assert(HIST_PB_MAX <= hw::PB_REPLY_CAP, "Hist no longer fits the reply arena");
+constexpr size_t HIST_BIN_CAP = 1024;   // measured full ≈ 900 bytes (780 of samples + headers)
+static_assert(HIST_PB_MAX + 8 <= HIST_BIN_CAP,   // +8: Msg envelope tag + length
+              "The history series no longer fit m_hist_bin: grow HIST_BIN_CAP");
 constexpr int HIST_BATT_DT  = 15;
 struct
 {
@@ -263,8 +269,9 @@ void histSample(void*)
         m_hist.rpml.push(rpmU8(st.m_rpm_l));                             // rpm left wheel
         m_hist.rpmr.push(rpmU8(st.m_rpm_r));                             // rpm right wheel
         // Worst tick over the window, in 50 µs units so a byte spans 12.5 ms. Reading it
-        // RESETS the peak, so each point is the true worst of its own 5 s slot.
-        const uint32_t lm = Controller::loopMaxUs();
+        // RESETS the peak — our own PeakHist slot, so the System tab's sysdyn poll (which
+        // reads PeakSysDyn) cannot steal a spike from this chart, nor we from it.
+        const uint32_t lm = Controller::loopMaxUs(EspController::PeakHist);
         m_hist.loop.push(static_cast<uint8_t>(lm / 50 > 250 ? 250 : lm / 50));
     }
     if (0 == (m_hist.tick % HIST_BATT_DT))
@@ -278,7 +285,7 @@ void histSample(void*)
 // History: linearize the rings into static buffers then protobuf "bytes"
 // encoding (1 byte/sample → ~850 bytes when the rings are full, vs ~17 KB
 // for the original JSON). Binary cache rebuilt at most once/s, shared between clients.
-uint8_t m_hist_bin[1024];   // measured full ≈ 900 bytes (780 of samples + headers)
+uint8_t m_hist_bin[HIST_BIN_CAP];   // sized and guarded next to the HIST_* windows above
 size_t  m_hist_bin_len = 0;
 int64_t m_hist_bin_us = -1;
 
@@ -519,7 +526,10 @@ bool encIp6(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
 {
     esp_netif_t* netif = static_cast<esp_netif_t*>(*arg);
     if (!netif) return true;
-    esp_ip6_addr_t a[5];
+    // Sized by the SAME config lwIP fills it from: esp_netif_get_all_ip6 writes up to
+    // LWIP_IPV6_NUM_ADDRESSES entries with no cap parameter, so a hard-coded array (it was
+    // [5], config is 3) becomes a silent stack overflow the day the sdkconfig is raised.
+    esp_ip6_addr_t a[CONFIG_LWIP_IPV6_NUM_ADDRESSES];
     const int n = esp_netif_get_all_ip6(netif, a);
     for (int i = 0; i < n; ++i)
     {
@@ -543,8 +553,8 @@ size_t buildSysDynPb()
     msg.body.sysdyn.heap_free = esp_get_free_heap_size();
     msg.body.sysdyn.heap_min  = esp_get_minimum_free_heap_size();
     msg.body.sysdyn.ledc_fix  = board::ledcClkFixCount();
-    msg.body.sysdyn.loop_max_us = Controller::loopMaxUs();
-    msg.body.sysdyn.sens_max_us = Controller::sensMaxUs();
+    msg.body.sysdyn.loop_max_us = Controller::loopMaxUs(EspController::PeakSysDyn);
+    msg.body.sysdyn.sens_max_us = Controller::sensMaxUs(EspController::PeakSysDyn);
     return encodeMsg(msg);
 }
 
@@ -694,9 +704,19 @@ esp_err_t wsHandler(httpd_req_t* req)
     {
         return ESP_FAIL;
     }
-    if (0 == frame.len || frame.len > BODY_CAP)
+    if (0 == frame.len)
     {
         return ESP_OK;
+    }
+    if (frame.len > BODY_CAP)
+    {
+        // Returning ESP_OK here left the oversized payload UNREAD in the socket: httpd then
+        // parsed those bytes as the next frame header and the connection quietly desynced.
+        // A frame this big is a protocol violation (our largest real request is ~600 B) —
+        // fail, so httpd closes the socket and the client reconnects clean.
+        ESP_LOGW(TAG, "WS frame of %u bytes (cap %u): closing the socket",
+                 static_cast<unsigned>(frame.len), static_cast<unsigned>(BODY_CAP));
+        return ESP_FAIL;
     }
     frame.payload = m_body;
     if (ESP_OK != httpd_ws_recv_frame(req, &frame, frame.len))
@@ -740,8 +760,13 @@ esp_err_t wsHandler(httpd_req_t* req)
         // silently blank the stored one — a working station config lost by clicking Save.
         // Refuse instead. The 8-character floor is WPA2's: a shorter key is accepted here,
         // then fails much later in the 4-way handshake with only a cryptic reason code.
+        // Armed → refused: saving writes NVS, and a flash write suspends the cache — the
+        // 500 Hz control loop freezes for the duration, while someone is DRIVING. The "set"
+        // path defers its save to the disarm edge for exactly this reason; Wi-Fi credentials
+        // have no reason to be that patient, so just say no and let the user stop first.
         const char* err = nullptr;
-        if ('\0' == rq.ssid[0])              err = "SSID required.";
+        if (statusSnapshot().m_arming)       err = "Kart armed: stop and disarm before saving Wi-Fi.";
+        else if ('\0' == rq.ssid[0])         err = "SSID required.";
         else if ('\0' == rq.pass[0])         err = "Password required: retype it, the page never pre-fills it.";
         else if (std::strlen(rq.pass) < 8)   err = "Password too short: WPA2 requires at least 8 characters.";
         if (err)

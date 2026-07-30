@@ -23,8 +23,8 @@ constexpr int CONV_TIMEOUT_MS = 20;   // margin beyond the slowest conversion ti
 // I2C TRANSACTION timeout — a different thing entirely, and it must be SHORT. A read is
 // 3 bytes at 400 kHz, about 0.1 ms; 20 ms was 200x that, and with 8 oversamples a chip that
 // had stopped answering blocked the 500 Hz control loop for 160 ms — 80 missed ticks, enough
-// to alias the encoders. hw::I2C_XFER_TIMEOUT_MS (4 ms) is the same bound the AS5600 reads
-// use, and for the same reason.
+// to alias the encoders. hw::I2C_XFER_TIMEOUT_MS is the same bound the AS5600 reads use,
+// and for the same reason (its value and the sizing rationale live in control_types.hpp).
 constexpr int XFER_TIMEOUT_MS = hw::I2C_XFER_TIMEOUT_MS;
 
 // Approximate conversion time (ms) per rate, for the single-shot timing.

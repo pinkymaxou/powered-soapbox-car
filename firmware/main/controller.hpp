@@ -13,10 +13,16 @@
 class EspController
 {
 public:
+    // The loop/sensor peaks are RESET-ON-READ, and they have TWO independent readers: the
+    // 5 s history slots and the System-tab sysdyn poll. One shared accumulator let either
+    // reader steal the other's peak — with the System tab open, the worst-tick chart only
+    // showed what happened since the last sysdyn poll. One peak slot per consumer fixes it.
+    enum Peak { PeakHist = 0, PeakSysDyn = 1, PEAK_N = 2 };
+
     void init();       // hardware (board/input) + wiring of the core callbacks
-    void tickOnce();                  // one complete step: inputs → tick() → host decisions → publish
-    uint32_t loopMaxUs(bool reset);   // worst tick duration (µs) since the last call
-    uint32_t sensMaxUs(bool reset);   // worst SENSOR-READ duration (µs) — I2C cost alone
+    void tickOnce();               // one complete step: inputs → tick() → host decisions → publish
+    uint32_t loopMaxUs(int who);   // worst tick duration (µs) since `who` last read it
+    uint32_t sensMaxUs(int who);   // worst SENSOR-READ duration (µs) — I2C cost alone
 
 private:
     SensorReadings readSensors();                 // sensor callback: encoders + Vbat (in battery VOLTS)
@@ -31,8 +37,8 @@ private:
     PowerOffAdvisor m_poweroff;  // power cutoff on prolonged LVC (host decision)
     IdleOffAdvisor m_idle_off;   // power cutoff after N minutes disarmed (host decision)
     bool           m_was_armed = false;   // armed→disarmed edge → configFlushPending
-    uint32_t       m_loop_max_us = 0;     // worst tick duration since the last read
-    uint32_t       m_sens_max_us = 0;     // worst readSensors() duration
+    uint32_t       m_loop_max_us[PEAK_N] = {};   // worst tick duration, one slot per reader
+    uint32_t       m_sens_max_us[PEAK_N] = {};   // worst readSensors() duration, same
     int            m_vbat_tick = 0;        // rate-limit the ADS1115 read (shares bus 0 w/ left enc)
     float          m_pin_v = -1.f;         // last ADC pin voltage (cached between 20 Hz reads)
 };
@@ -41,8 +47,10 @@ private:
 // (5 s watchdog) that calls tickOnce() in a loop. Nothing else.
 namespace Controller
 {
-uint32_t loopMaxUs();   // worst tick (µs) since the last call — diagnostic, resets on read
-uint32_t sensMaxUs();   // worst sensor-read (µs) — separates I2C cost from preemption
+// `who` = EspController::PeakHist or PeakSysDyn: each reader owns its peak slot (resets it
+// on read) so the history chart and the System tab can no longer steal each other's worst tick.
+uint32_t loopMaxUs(int who);
+uint32_t sensMaxUs(int who);
 void init();    // to call after configInit
 void start();
 } // namespace Controller

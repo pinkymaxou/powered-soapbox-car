@@ -37,7 +37,8 @@ SensorReadings EspController::readSensors()
     s.vbat_ok = (m_pin_v >= 0.f);
     s.vbat_v = s.vbat_ok ? m_pin_v * hw::VBAT_DIV_RATIO : -1.f;
     const uint32_t d = static_cast<uint32_t>(esp_timer_get_time() - t0);
-    if (d > m_sens_max_us) m_sens_max_us = d;
+    for (uint32_t& peak : m_sens_max_us)
+        if (d > peak) peak = d;
     return s;
 }
 
@@ -139,20 +140,23 @@ void EspController::tickOnce()
     publish(t);
 
     const uint32_t dur = static_cast<uint32_t>(esp_timer_get_time() - t_begin);
-    if (dur > m_loop_max_us) m_loop_max_us = dur;
+    for (uint32_t& peak : m_loop_max_us)
+        if (dur > peak) peak = dur;
 }
 
-uint32_t EspController::loopMaxUs(bool reset)
+uint32_t EspController::loopMaxUs(int who)
 {
-    const uint32_t v = m_loop_max_us;
-    if (reset) m_loop_max_us = 0;
+    if (who < 0 || who >= PEAK_N) return 0;
+    const uint32_t v = m_loop_max_us[who];
+    m_loop_max_us[who] = 0;
     return v;
 }
 
-uint32_t EspController::sensMaxUs(bool reset)
+uint32_t EspController::sensMaxUs(int who)
 {
-    const uint32_t v = m_sens_max_us;
-    if (reset) m_sens_max_us = 0;
+    if (who < 0 || who >= PEAK_N) return 0;
+    const uint32_t v = m_sens_max_us[who];
+    m_sens_max_us[who] = 0;
     return v;
 }
 
@@ -181,14 +185,14 @@ void init()
     m_controller.init();
 }
 
-uint32_t loopMaxUs()
+uint32_t loopMaxUs(int who)
 {
-    return m_controller.loopMaxUs(true);
+    return m_controller.loopMaxUs(who);
 }
 
-uint32_t sensMaxUs()
+uint32_t sensMaxUs(int who)
 {
-    return m_controller.sensMaxUs(true);
+    return m_controller.sensMaxUs(who);
 }
 
 void start()

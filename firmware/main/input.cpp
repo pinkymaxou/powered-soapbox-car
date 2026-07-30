@@ -201,9 +201,15 @@ input::State input::get()
     // RAW stick (always provided, even uncalibrated) for the real-time display.
     s.rx = std::clamp(m_raw_x.load(), -1.f, 1.f);
     s.ry = std::clamp(m_raw_y.load(), -1.f, 1.f);
-    if (!m_calibrated.load())
+    // Calibrated axes forced to 0 while NOT calibrated — and also while COLLECTING the
+    // extremes. Recalibration happens on an already-calibrated pad, and the wizard tells the
+    // driver to push both sticks to their stops: if the kart were still armed, those sweeps
+    // would be live full-throttle commands. Zeroing here plus calibrated()==false below (which
+    // raises the blocking NOCAL fault → disarm + brake) closes both ends: starting a
+    // calibration disarms the kart, and it cannot be re-armed until the wizard finishes.
+    if (!m_calibrated.load() || 1 == m_cal_state.load())
     {
-        return s;   // CALIBRATED axes at 0 while not calibrated (the controller refuses to run)
+        return s;
     }
     const float hx = m_hx.load(), hy = m_hy.load();
     s.x = (hx > 0.05f) ? (m_raw_x.load() - m_cx.load()) / hx : 0.f;
@@ -277,7 +283,10 @@ void input::calFinish()
 
 void input::calCancel() { m_cal_state.store(0); }
 int  input::calState()  { return m_cal_state.load(); }
-bool input::calibrated(){ return m_calibrated.load(); }
+// Reported NOT calibrated during collection, on purpose: the controller turns that into the
+// blocking NOCAL fault, so a calibration started while driving disarms the kart at the next
+// tick and arming stays refused until calFinish/calCancel (see the matching gate in get()).
+bool input::calibrated(){ return m_calibrated.load() && 1 != m_cal_state.load(); }
 bool        input::pairing() { return m_pairing.load(); }
 const char* input::name()    { return m_name; }
 int         input::battery() { return m_battery.load(); }
