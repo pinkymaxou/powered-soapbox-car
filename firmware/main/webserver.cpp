@@ -120,11 +120,14 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
 // nanopb encodes BY STREAM with callbacks: the strings (PARAMS, gamepad name…) and the
 // history series go directly from their original pointers — zero copy,
 // zero allocation, frames ~3× smaller than JSON.
-constexpr size_t REPLY_CAP = 10240;   // largest response: the config — 6568 B MEASURED at 30
-                                      // params (2026-07-29), so ~64 % used and room for ~19
-                                      // more before the 80 % warning below starts firing.
-                                      // It HAS overflowed once: 4 params with long help text
-                                      // pushed past the old 6144 and the socket just died.
+// Single arena for every reply. The SIZE lives in control_types.hpp so config_params.cpp can
+// static_assert the config against it — see the guard at the bottom of that file, which is
+// what actually protects us, since the config is callback-encoded and nanopb cannot size it.
+// Measured 6568 B at 30 params (2026-07-29): ~64 % used, room for ~19 more.
+constexpr size_t REPLY_CAP = hw::PB_REPLY_CAP;
+// The messages nanopb CAN size are checked here, cheaply and exactly.
+static_assert(Status_size <= REPLY_CAP, "Status no longer fits the reply arena");
+static_assert(SysDyn_size <= REPLY_CAP, "SysDyn no longer fits the reply arena");
 pb_byte_t m_reply[REPLY_CAP];
 
 // Generic callback: encodes a C string (arg = const char*).
@@ -196,6 +199,13 @@ constexpr int HIST_FAST_N   = 120;  // 10 min @ 5 s
 constexpr int HIST_FAST_DT  = 5;
 constexpr int HIST_SPEED_N  = 60;   // 1 min @ 1 s (dedicated speed chart, small)
 constexpr int HIST_BATT_N   = 120;  // 30 min @ 15 s
+// Hist is callback-encoded too, but its size is fully known: 3 varints + 7 byte arrays of
+// fixed length. Bound it here so growing a window cannot quietly overflow the arena.
+constexpr size_t HIST_PB_MAX = 3 * 6                       // dt_fast / dt_spd / dt_batt
+                             + 7 * 3                       // one tag + length varint each
+                             + 5 * HIST_FAST_N             // accel, pwml, pwmr, rpml, rpmr
+                             + HIST_SPEED_N + HIST_BATT_N; // spd, batt
+static_assert(HIST_PB_MAX <= hw::PB_REPLY_CAP, "Hist no longer fits the reply arena");
 constexpr int HIST_BATT_DT  = 15;
 struct
 {

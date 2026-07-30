@@ -4,6 +4,7 @@
 // and hw:: constants — without any ESP-IDF dependency.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 // Round a float to the nearest int (half away from zero).
@@ -87,6 +88,12 @@ constexpr uint8_t AS5600_MD         = 0x20;    // STATUS bit 5: magnet detected 
 constexpr uint8_t AS5600_ML         = 0x10;    // STATUS bit 4: AGC max → magnet too WEAK / too far
 constexpr uint8_t AS5600_MH         = 0x08;    // STATUS bit 3: AGC min → magnet too STRONG / too close
 constexpr int     MAG_READ_TICKS    = 50;      // poll STATUS at CTRL_HZ/50 ≈ 10 Hz (not every tick)
+
+// Protobuf reply arena (webserver.cpp). Declared HERE, not there, so config_params.cpp —
+// the file that grows every time a parameter is added — can static_assert against it and
+// FAIL THE BUILD instead of failing the socket. It has bitten once: four params with long
+// help text pushed the config past the old 6144 and the page just lost its connection.
+constexpr size_t PB_REPLY_CAP = 10240;
 
 constexpr int   VBAT_SAG_DEBOUNCE_MS = 500;
 constexpr int   LVC_POWEROFF_MS      = 30000;  // auto power cutoff (powerOff) after 30 s below the threshold

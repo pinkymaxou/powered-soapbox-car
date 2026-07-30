@@ -12,7 +12,7 @@
 // Each value/field is TYPED: {.f=…} for Float params, {.i=…} for Int/Bool (see CfgVal/CfgField).
 // NB: the LVC thresholds are NOT here — 12 V or 24 V battery detected at startup,
 // thresholds hard-coded per type (hw::VBAT12_*/VBAT24_*).
-const ParamDesc PARAMS[] =
+extern constexpr ParamDesc PARAMS[] =
 {
     {"speed_limit_ms",  "Speed limit (m/s)",   "Speed & power",
      "Maximum speed in FORWARD (m/s). Beyond it, the PID limiter holds the kart back (encoders required). It is also the speed at which the turn is most limited by the rollover protection.",
@@ -161,3 +161,48 @@ void KartConfig::clampAll()
     // (The LVC thresholds are no longer parameters: hard-coded according to the battery
     // 12/24 V detected at startup — hw::VBAT12_*/VBAT24_*, consistency guaranteed.)
 }
+
+// ───────────── Compile-time guard on the protobuf reply buffer ─────────────
+// The webserver encodes every reply into one static arena of hw::PB_REPLY_CAP bytes. The
+// biggest reply BY FAR is the config: PARAMS, with four strings per entry. It is encoded
+// through nanopb CALLBACKS, so nanopb cannot emit a *_size for it — but this file can, since
+// PARAMS is right here. Bound it and fail the BUILD, rather than discovering at runtime that
+// `get` returns nothing and the page's socket dies (which is exactly what happened when four
+// params with long help text pushed past the old 6144-byte arena).
+namespace
+{
+constexpr size_t cstrLen(const char* s)
+{
+    size_t n = 0;
+    while ('\0' != s[n]) ++n;
+    return n;
+}
+
+// Worst case for one ParamMeta inside Config, protobuf wire format:
+//   submessage header  = tag(1) + length varint(2, messages stay < 16 kB)
+//   each of the 4 strings = tag(1) + length varint(2) + the bytes
+//   each of the 4 typed oneofs = tag(2, fields go up to 19) + payload(5, int32 varint worst case)
+constexpr size_t paramPbBytes(const ParamDesc& p)
+{
+    return 3 + 4 * 3 + cstrLen(p.name) + cstrLen(p.desc) + cstrLen(p.cat) + cstrLen(p.help)
+             + 4 * 7;
+}
+
+constexpr size_t configPbBytes()
+{
+    size_t n = 0;
+    for (const ParamDesc& p : PARAMS) n += paramPbBytes(p);
+    return n;
+}
+
+// Vals: repeated ParamVal, one per parameter. ParamVal_size comes from nanopb (28 B), plus
+// the submessage header. Hard-coded here to keep this file free of the generated header.
+constexpr size_t valsPbBytes() { return (sizeof(PARAMS) / sizeof(PARAMS[0])) * (3 + 28); }
+} // namespace
+
+static_assert(configPbBytes() <= hw::PB_REPLY_CAP,
+              "Config no longer fits in hw::PB_REPLY_CAP. Adding a parameter grew it past the "
+              "arena: raise PB_REPLY_CAP in control_types.hpp (and mind the static RAM), or "
+              "shorten some help texts. Do NOT ignore this — at runtime the encode fails "
+              "silently and the web page loses its WebSocket on load.");
+static_assert(valsPbBytes() <= hw::PB_REPLY_CAP, "Vals no longer fits in hw::PB_REPLY_CAP.");

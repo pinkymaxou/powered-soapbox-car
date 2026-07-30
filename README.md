@@ -621,12 +621,15 @@ flowchart LR
 > the page, and requires a deliberate re-arm on START — releasing the mushroom button never
 > resumes drive on its own.
 >
-> ⚠️ **What the e-stop actually does to the motors: freewheel, not brake.** Cutting the 40 A
-> relay unpowers the driver, its bridge goes open and the windings are left floating. On the
-> flat that coasts to a stop; on a slope it is the `coupure_pente*` runaway. If you want the
-> mushroom button to *stop* the kart rather than merely stop driving it, it needs a second pole
-> that **shorts the motor windings** — the dynamic brake the firmware normally applies, done
-> mechanically for the case where the electronics are dead.
+> **What the e-stop does to the motors: freewheel, not brake** — cutting the 40 A relay
+> unpowers the driver, its bridge goes open and the windings float. **Accepted**, because the
+> kart is built for FLAT ground and the 1:17 gearbox is not meaningfully back-drivable: the
+> wheel would have to spin the motor seventeen times faster than itself, and printed spur
+> gears are not efficient in reverse. It coasts to a stop quickly rather than rolling away.
+> ⚠️ That reasoning is what makes it acceptable, so it stops being true on a slope — see the
+> `coupure_pente*` scenarios. If the kart is ever used on a gradient, the mushroom button
+> needs a second pole that **shorts the motor windings** (the dynamic brake the firmware
+> normally applies, done mechanically for when the electronics are dead).
 >
 > ⚠️ **Put the voltage divider on the LOGIC rail**, not the motor rail. On the motor rail it
 > would read 0 V the moment the e-stop is pressed, and the kart would report a dead battery
