@@ -4,6 +4,7 @@ idf_component_register(
         "controller.cpp"
         "controller_core.cpp"
         "ads1115.cpp"
+        "evlog.cpp"
         "hardware.cpp"
         "input.cpp"
         "input_bp32.c"
@@ -22,6 +23,7 @@ idf_component_register(
         esp_driver_i2c
         esp_driver_rmt
         esp_app_format
+        esp_partition
         spi_flash
         nvs_flash
         esp_timer

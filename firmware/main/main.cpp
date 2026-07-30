@@ -2,6 +2,7 @@
 // All the motor control is in controller.cpp.
 #include "config.hpp"
 #include "controller.hpp"
+#include "evlog.hpp"
 #include "hardware.hpp"
 #include "leds.hpp"
 #include "mdns_svc.hpp"
@@ -23,6 +24,7 @@ extern "C" void app_main()
     }
 
     configInit();        // settings table (NVS)
+    evlog::init();       // persistent event log ("why did it disarm") — logs this boot
     wifiSoftAPInit();    // "Kart-Config" access point
     webServerStart();    // HTTP/WebSocket server
     mdnsStart();         // advertises http://kart.local (after the server: the port is open)

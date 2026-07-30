@@ -166,6 +166,12 @@ table.pins td:first-child{font-family:ui-monospace,monospace;color:var(--green);
 .note{color:var(--muted);font-size:13px;line-height:1.5;margin-top:12px}
 /* "Kart armed" lock notice: shown next to the buttons the firmware refuses while armed. */
 .locknote{color:var(--amber)}
+/* Event log (System tab): compact monospace journal, newest first. */
+.evlog{max-height:320px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+ font-size:13px;line-height:1.6;margin-top:8px}
+.evrow{padding:2px 0;border-bottom:1px solid var(--line)}
+.evrow .evt{color:var(--muted);margin-right:10px}
+.evboot{color:var(--accent)}
 
 /* Documentation tab */
 .dochead{font-size:15px;font-weight:700;margin:18px 0 2px;color:var(--txt)}

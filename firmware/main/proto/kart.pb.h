@@ -210,6 +210,22 @@ typedef struct _Ok {
     char dummy_field;
 } Ok;
 
+/* Persistent event log ("why did it disarm"): last entries, oldest → newest.
+ code mirrors evlog::Ev (1 Boot, 2 Arm, 3 Disarm, 4 Fault, 5 IdleOff, 6 LvcOff);
+ data is the fault mask for Disarm/Fault/LvcOff, the reset reason for Boot. */
+typedef struct _EvlogEntry {
+    uint32_t t_ms; /* uptime of that boot, in ms */
+    uint32_t boot; /* boot counter (persisted): groups entries per power cycle */
+    uint32_t code;
+    uint32_t data;
+} EvlogEntry;
+
+typedef struct _Evlog {
+    pb_callback_t ev; /* capped server-side (last EVLOG_REPLY_MAX records) */
+    uint32_t total; /* records on flash */
+    uint32_t pending; /* raised but not yet drained (kart armed) — refresh later */
+} Evlog;
+
 /* Envelope: a single frame type on the WebSocket (binary), the oneof does the dispatch. */
 typedef struct _Msg {
     pb_size_t which_body;
@@ -223,6 +239,7 @@ typedef struct _Msg {
         SysInfo sysinfo;
         SysDyn sysdyn;
         Ok ok;
+        Evlog evlog;
     } body;
 } Msg;
 
@@ -262,6 +279,8 @@ extern "C" {
 
 
 
+
+
 /* Initializer values for message structs */
 #define Req_init_default                         {"", "", "", 0, {{NULL}, NULL}}
 #define ParamVal_init_default                    {"", 0, {0}}
@@ -276,6 +295,8 @@ extern "C" {
 #define SysInfo_init_default                     {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define SysDyn_init_default                      {0, 0, 0, 0, 0, 0}
 #define Ok_init_default                          {0}
+#define EvlogEntry_init_default                  {0, 0, 0, 0}
+#define Evlog_init_default                       {{{NULL}, NULL}, 0, 0}
 #define Msg_init_default                         {0, {Status_init_default}}
 #define Req_init_zero                            {"", "", "", 0, {{NULL}, NULL}}
 #define ParamVal_init_zero                       {"", 0, {0}}
@@ -290,6 +311,8 @@ extern "C" {
 #define SysInfo_init_zero                        {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define SysDyn_init_zero                         {0, 0, 0, 0, 0, 0}
 #define Ok_init_zero                             {0}
+#define EvlogEntry_init_zero                     {0, 0, 0, 0}
+#define Evlog_init_zero                          {{{NULL}, NULL}, 0, 0}
 #define Msg_init_zero                            {0, {Status_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -403,6 +426,13 @@ extern "C" {
 #define SysDyn_ledc_fix_tag                      4
 #define SysDyn_loop_max_us_tag                   5
 #define SysDyn_sens_max_us_tag                   6
+#define EvlogEntry_t_ms_tag                      1
+#define EvlogEntry_boot_tag                      2
+#define EvlogEntry_code_tag                      3
+#define EvlogEntry_data_tag                      4
+#define Evlog_ev_tag                             1
+#define Evlog_total_tag                          2
+#define Evlog_pending_tag                        3
 #define Msg_status_tag                           1
 #define Msg_config_tag                           2
 #define Msg_vals_tag                             3
@@ -412,6 +442,7 @@ extern "C" {
 #define Msg_sysinfo_tag                          7
 #define Msg_sysdyn_tag                           8
 #define Msg_ok_tag                               9
+#define Msg_evlog_tag                            10
 
 /* Struct field encoding specification for nanopb */
 #define Req_FIELDLIST(X, a) \
@@ -582,6 +613,22 @@ X(a, STATIC,   SINGULAR, UINT32,   sens_max_us,       6)
 #define Ok_CALLBACK NULL
 #define Ok_DEFAULT NULL
 
+#define EvlogEntry_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   t_ms,              1) \
+X(a, STATIC,   SINGULAR, UINT32,   boot,              2) \
+X(a, STATIC,   SINGULAR, UINT32,   code,              3) \
+X(a, STATIC,   SINGULAR, UINT32,   data,              4)
+#define EvlogEntry_CALLBACK NULL
+#define EvlogEntry_DEFAULT NULL
+
+#define Evlog_FIELDLIST(X, a) \
+X(a, CALLBACK, REPEATED, MESSAGE,  ev,                1) \
+X(a, STATIC,   SINGULAR, UINT32,   total,             2) \
+X(a, STATIC,   SINGULAR, UINT32,   pending,           3)
+#define Evlog_CALLBACK pb_default_field_callback
+#define Evlog_DEFAULT NULL
+#define Evlog_ev_MSGTYPE EvlogEntry
+
 #define Msg_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (body,status,body.status),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (body,config,body.config),   2) \
@@ -591,7 +638,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (body,pad,body.pad),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (body,wifi,body.wifi),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (body,sysinfo,body.sysinfo),   7) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (body,sysdyn,body.sysdyn),   8) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (body,ok,body.ok),   9)
+X(a, STATIC,   ONEOF,    MESSAGE,  (body,ok,body.ok),   9) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (body,evlog,body.evlog),  10)
 #define Msg_CALLBACK NULL
 #define Msg_DEFAULT NULL
 #define Msg_body_status_MSGTYPE Status
@@ -603,6 +651,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (body,ok,body.ok),   9)
 #define Msg_body_sysinfo_MSGTYPE SysInfo
 #define Msg_body_sysdyn_MSGTYPE SysDyn
 #define Msg_body_ok_MSGTYPE Ok
+#define Msg_body_evlog_MSGTYPE Evlog
 
 extern const pb_msgdesc_t Req_msg;
 extern const pb_msgdesc_t ParamVal_msg;
@@ -617,6 +666,8 @@ extern const pb_msgdesc_t Ip6_msg;
 extern const pb_msgdesc_t SysInfo_msg;
 extern const pb_msgdesc_t SysDyn_msg;
 extern const pb_msgdesc_t Ok_msg;
+extern const pb_msgdesc_t EvlogEntry_msg;
+extern const pb_msgdesc_t Evlog_msg;
 extern const pb_msgdesc_t Msg_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -633,6 +684,8 @@ extern const pb_msgdesc_t Msg_msg;
 #define SysInfo_fields &SysInfo_msg
 #define SysDyn_fields &SysDyn_msg
 #define Ok_fields &Ok_msg
+#define EvlogEntry_fields &EvlogEntry_msg
+#define Evlog_fields &Evlog_msg
 #define Msg_fields &Msg_msg
 
 /* Maximum encoded size of messages (where known) */
@@ -645,7 +698,9 @@ extern const pb_msgdesc_t Msg_msg;
 /* Wifi_size depends on runtime parameters */
 /* Ip6_size depends on runtime parameters */
 /* SysInfo_size depends on runtime parameters */
+/* Evlog_size depends on runtime parameters */
 /* Msg_size depends on runtime parameters */
+#define EvlogEntry_size                          24
 #define KART_PB_H_MAX_SIZE                       Status_size
 #define Ok_size                                  0
 #define ParamVal_size                            28

@@ -1,5 +1,9 @@
 # Table de partitions — flash 4 Mo, app ~2,75 Mo (Wi-Fi + BT), sans OTA.
+# ⚠️ Les offsets existants ne bougent JAMAIS : les déplacer efface la NVS
+# (réglages + appairage manette). « evlog » a été AJOUTÉ dans l'espace libre
+# après l'app, précisément pour cette raison.
 # Name,     Type, SubType, Offset,   Size
 nvs,        data, nvs,     0x9000,   0x6000
 phy_init,   data, phy,     0xf000,   0x1000
 factory,    app,  factory, 0x10000,  0x2C0000
+evlog,      data, 0x40,    0x2D0000, 0x10000

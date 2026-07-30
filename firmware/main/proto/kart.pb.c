@@ -45,6 +45,12 @@ PB_BIND(SysDyn, SysDyn, AUTO)
 PB_BIND(Ok, Ok, AUTO)
 
 
+PB_BIND(EvlogEntry, EvlogEntry, AUTO)
+
+
+PB_BIND(Evlog, Evlog, AUTO)
+
+
 PB_BIND(Msg, Msg, 2)
 
 

@@ -38,6 +38,8 @@ private:
     IdleOffAdvisor m_idle_off;   // power cutoff after N minutes disarmed (host decision)
     uint32_t       m_loop_max_us[PEAK_N] = {};   // worst tick duration, one slot per reader
     uint32_t       m_sens_max_us[PEAK_N] = {};   // worst readSensors() duration, same
+    bool           m_ev_armed = false;     // arm/disarm edges → event log
+    unsigned       m_ev_faults = 0;        // fault rising edges → event log
     int            m_vbat_tick = 0;        // rate-limit the ADS1115 read (shares bus 0 w/ left enc)
     float          m_pin_v = -1.f;         // last ADC pin voltage (cached between 20 Hz reads)
 };

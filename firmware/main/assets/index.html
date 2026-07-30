@@ -390,6 +390,17 @@
  <section id="sys" class="panel" hidden>
   <button class="alt" onclick="loadSys()">↻ Refresh</button>
   <table class="pins" id="systbl"><tr><td>Loading…</td></tr></table>
+  <hr>
+  <h3>🪵 Event log</h3>
+  <p class="note">"Why did it disarm?" — every arm/disarm (with the fault mask of that very tick),
+   fault raised mid-run, boot and power-off is journaled to a dedicated flash partition: it
+   survives reboots and power cuts. Events raised <b>while driving</b> wait in RAM and land on
+   flash at the disarm (flash writes are never allowed to freeze the control loop mid-run).</p>
+  <div class="row">
+   <button class="alt" onclick="loadEvlog()">↻ Refresh</button>
+   <button class="danger" onclick="clearEvlog()">🗑 Clear</button>
+  </div>
+  <div id="evlog" class="evlog">—</div>
  </section>
 
 </div>
@@ -449,10 +460,15 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
   heap_min:{type:"uint32",id:3},ledc_fix:{type:"uint32",id:4},
   loop_max_us:{type:"uint32",id:5}}},
  Ok:{fields:{}},
- Msg:{oneofs:{body:{oneof:["status","config","vals","hist","pad","wifi","sysinfo","sysdyn","ok"]}},
+ EvlogEntry:{fields:{t_ms:{type:"uint32",id:1},boot:{type:"uint32",id:2},
+  code:{type:"uint32",id:3},data:{type:"uint32",id:4}}},
+ Evlog:{fields:{ev:{rule:"repeated",type:"EvlogEntry",id:1},total:{type:"uint32",id:2},
+  pending:{type:"uint32",id:3}}},
+ Msg:{oneofs:{body:{oneof:["status","config","vals","hist","pad","wifi","sysinfo","sysdyn","ok","evlog"]}},
   fields:{status:{type:"Status",id:1},config:{type:"Config",id:2},vals:{type:"Vals",id:3},
    hist:{type:"Hist",id:4},pad:{type:"Pad",id:5},wifi:{type:"Wifi",id:6},
-   sysinfo:{type:"SysInfo",id:7},sysdyn:{type:"SysDyn",id:8},ok:{type:"Ok",id:9}}}
+   sysinfo:{type:"SysInfo",id:7},sysdyn:{type:"SysDyn",id:8},ok:{type:"Ok",id:9},
+   evlog:{type:"Evlog",id:10}}}
 }});
 const PB_REQ=PB_ROOT.lookupType("Req"), PB_MSG=PB_ROOT.lookupType("Msg");
 function sendReq(o){if(ws&&ws.readyState===1)ws.send(PB_REQ.encode(PB_REQ.create(o)).finish());}
@@ -466,6 +482,7 @@ function pbDecode(buf){
  if(which==='hist')for(const k of['accel','pwml','pwmr','rpml','rpmr','spd','batt'])
    m[k]=m[k]?Array.from(m[k]):[];
  if(which==='config'||which==='vals')m.params=m.params||[];
+ if(which==='evlog')m.ev=m.ev||[];
  return m;
 }
 let ws,timer,histTimer,built=false;
@@ -801,7 +818,7 @@ const FAULTS_DESC=[
  {b:6, t:'Encoder: direction reversed',          d:'The wheel turns clearly opposite to the command: sensor or motor wired backwards. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
  {b:8, t:'LEFT encoder absent (AS5600)',         d:'No response from the left sensor on the I2C bus (chip unplugged/miswired). Shown regardless of use_encoders; blocks driving only when use_encoders=1.', grave:true, z:['wl'], cond:true},
  {b:9, t:'RIGHT encoder absent (AS5600)',        d:'No response from the right sensor on the I2C bus (chip unplugged/miswired). Shown regardless of use_encoders; blocks driving only when use_encoders=1.', grave:true, z:['wr'], cond:true},
- {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 250 ms: communication lost. Immediate disarm and braking.', grave:true, z:['pad']},
+ {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 750 ms: communication lost. Immediate disarm and braking.', grave:true, z:['pad']},
  {b:7, t:'Encoder: erratic reading',             d:'Measured speed physically impossible for the kart. Faulty sensor or magnet. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
  {b:11,t:'LEFT encoder: magnet out of range',    d:'The left AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wl'], cond:true},
  {b:13,t:'Motor power absent (e-stop?)',        d:'The 40 A relay is not feeding the motor driver while the logic rail is still alive — normally that means the emergency stop is pressed. Can also be a blown fuse, a released relay, or the sense opto unplugged. Release the e-stop, then rearm with START. Only reported when pwr_sense_en=1.', grave:true, z:['batt']},
@@ -879,6 +896,7 @@ function connect(){
    else if(m.type==='wifi')showWifi(m);
    else if(m.type==='sysinfo')showSys(m);
    else if(m.type==='sysdyn')showSysDyn(m);
+   else if(m.type==='evlog')showEvlog(m);
    else if(m.type==='pad')showPad(m);};
  ws.onclose=()=>{clearInterval(timer);clearInterval(histTimer);document.getElementById('status').textContent='Reconnecting…';setTimeout(connect,1000);};
 }
@@ -941,8 +959,36 @@ function showWifi(m){
  if(confirm("Saved. Reboot now to apply?"))sendReq({type:'reboot'});
 }
 function loadWifi(){sendReq({type:'wifiget'});}
-let sysBuilt=false;
-function loadSys(){sendReq({type:sysBuilt?'sysdyn':'sysinfo'});}
+let sysBuilt=false,evLoaded=false;
+function loadSys(){sendReq({type:sysBuilt?'sysdyn':'sysinfo'});
+ if(!evLoaded){evLoaded=true;loadEvlog();}}   // event log: once on first open, then manual
+// ── Event log ("why did it disarm") — codes mirror evlog::Ev (evlog.hpp) ──
+const EV_DESC={1:'BOOT',2:'ARM',3:'DISARM',4:'FAULT RAISED',5:'IDLE POWER-OFF',6:'LVC POWER-OFF'};
+// esp_reset_reason_t values (esp_system.h)
+const RESET_DESC={0:'unknown',1:'power-on',2:'external',3:'software',4:'panic',5:'interrupt watchdog',
+ 6:'task watchdog',7:'other watchdog',8:'deep-sleep',9:'brownout',10:'SDIO'};
+function evMaskTxt(mask){
+ const n=FAULTS_DESC.filter(f=>mask>>>f.b&1).map(f=>f.t);
+ return n.length?(' — '+n.join(' · ')):(' — mask 0x'+(mask>>>0).toString(16));
+}
+function showEvlog(m){
+ const el=document.getElementById('evlog');
+ const head=`${m.total} record(s) on flash`+
+   (m.pending?` · <b>${m.pending} pending</b> (raised while armed — disarm, then refresh)`:'');
+ if(!m.ev.length){el.innerHTML='<p class="note">'+head+'</p>(empty)';return;}
+ const rows=m.ev.map(e=>{
+  let txt=EV_DESC[e.code]||('code '+e.code);
+  if(e.code===1)txt+=' — reset: '+(RESET_DESC[e.data]||e.data);
+  else if(e.code===3)txt+=(e.data?evMaskTxt(e.data):' — manual or inactivity timeout');
+  else if(e.code===4||e.code===6)txt+=evMaskTxt(e.data);
+  else if(e.code===5)txt+=' — after '+e.data+' min disarmed';
+  return `<div class="evrow${e.code===1?' evboot':''}">`+
+         `<span class="evt">boot ${e.boot} · T+${(e.t_ms/1000).toFixed(1)}s</span>${txt}</div>`;
+ });
+ el.innerHTML='<p class="note">'+head+'</p>'+rows.reverse().join('');   // newest first
+}
+function loadEvlog(){sendReq({type:'evlog'});}
+function clearEvlog(){if(confirm('Erase the whole event log?'))sendReq({type:'evlogclear'});}
 function upt(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
  return (d?d+'d ':'')+h+'h '+m+'m '+(s%60)+'s';}
 const heapTxt=m=>`${(m.heap_free/1024).toFixed(1)} KB (min ${(m.heap_min/1024).toFixed(1)} KB)`;

@@ -160,6 +160,22 @@ message SysDyn {
 
 message Ok {}
 
+// Persistent event log ("why did it disarm"): last entries, oldest → newest.
+// code mirrors evlog::Ev (1 Boot, 2 Arm, 3 Disarm, 4 Fault, 5 IdleOff, 6 LvcOff);
+// data is the fault mask for Disarm/Fault/LvcOff, the reset reason for Boot.
+message EvlogEntry {
+  uint32 t_ms = 1;              // uptime of that boot, in ms
+  uint32 boot = 2;              // boot counter (persisted): groups entries per power cycle
+  uint32 code = 3;
+  uint32 data = 4;
+}
+
+message Evlog {
+  repeated EvlogEntry ev = 1;   // capped server-side (last EVLOG_REPLY_MAX records)
+  uint32 total = 2;             // records on flash
+  uint32 pending = 3;           // raised but not yet drained (kart armed) — refresh later
+}
+
 // Envelope: a single frame type on the WebSocket (binary), the oneof does the dispatch.
 message Msg {
   oneof body {
@@ -172,5 +188,6 @@ message Msg {
     SysInfo sysinfo = 7;
     SysDyn  sysdyn = 8;
     Ok      ok = 9;
+    Evlog   evlog = 10;
   }
 }

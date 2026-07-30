@@ -20,6 +20,7 @@
 
 #include "config.hpp"
 #include "controller.hpp"
+#include "evlog.hpp"
 #include "hardware.hpp"
 #include "input.hpp"
 #include "mdns_svc.hpp"
@@ -545,6 +546,52 @@ bool encIp6(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
     return true;
 }
 
+// ── Event log ("why did it disarm") ──
+// Last EVLOG_REPLY_MAX flash records, oldest → newest, callback-encoded from a static
+// buffer. All-varint entries, so the wire bound is exact and compile-time checkable.
+constexpr int EVLOG_REPLY_MAX = 200;
+static_assert(EVLOG_REPLY_MAX * (EvlogEntry_size + 3) + 32 <= hw::PB_REPLY_CAP,
+              "Evlog reply no longer fits the arena: lower EVLOG_REPLY_MAX");
+evlog::Rec m_ev_buf[EVLOG_REPLY_MAX];
+
+struct EvArg
+{
+    const evlog::Rec* recs;
+    int               n;
+};
+
+bool encEvlog(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
+{
+    const EvArg* a = static_cast<const EvArg*>(*arg);
+    for (int i = 0; i < a->n; ++i)
+    {
+        const evlog::Rec& r = a->recs[i];
+        EvlogEntry e = EvlogEntry_init_zero;
+        e.t_ms = r.t_ms;
+        e.boot = r.head & 0xFFFF;
+        e.code = (r.head >> 16) & 0xFF;
+        e.data = r.data;
+        if (!pb_encode_tag_for_field(os, field)) return false;
+        if (!pb_encode_submessage(os, EvlogEntry_fields, &e)) return false;
+    }
+    return true;
+}
+
+size_t buildEvlogPb()
+{
+    uint32_t total = 0, pending = 0;
+    EvArg a;
+    a.recs = m_ev_buf;
+    a.n = evlog::read(m_ev_buf, EVLOG_REPLY_MAX, &total, &pending);
+    Msg msg = Msg_init_zero;
+    msg.which_body = Msg_evlog_tag;
+    msg.body.evlog.ev.funcs.encode = encEvlog;
+    msg.body.evlog.ev.arg = &a;
+    msg.body.evlog.total = total;
+    msg.body.evlog.pending = pending;
+    return encodeMsg(msg);
+}
+
 size_t buildSysDynPb()
 {
     Msg msg = Msg_init_zero;
@@ -778,6 +825,8 @@ esp_err_t wsHandler(httpd_req_t* req)
         return wsReply(req, buildWifiPb());
     }
     if (0 == strcmp(cmd, "wifiget"))   { return wsReply(req, buildWifiPb()); }
+    if (0 == strcmp(cmd, "evlog"))     { return wsReply(req, buildEvlogPb()); }
+    if (0 == strcmp(cmd, "evlogclear")){ evlog::clear(); return wsReply(req, buildEvlogPb()); }
     if (0 == strcmp(cmd, "vals"))      { return wsReply(req, buildValsPb()); }
     if (0 == strcmp(cmd, "sysdyn"))    { return wsReply(req, buildSysDynPb()); }
     if (0 == strcmp(cmd, "hist"))

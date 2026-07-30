@@ -2,6 +2,7 @@
 #include "controller.hpp"
 
 #include "config.hpp"
+#include "evlog.hpp"
 #include "hardware.hpp"
 #include "rtos.hpp"
 
@@ -130,10 +131,32 @@ void EspController::tickOnce()
     const CtrlTelemetry t = m_ctrl.telemetry();
     const RumbleCmd r = m_rumble.update(t, m_pad_in, now);
     if (r.active) input::rumble(r.strong, r.weak, r.duration_ms);
-    if (m_poweroff.update(t, now)) board::powerOff();
+    if (m_poweroff.update(t, now))
+    {
+        evlog::push(evlog::Ev::LvcOff, t.faults);
+        evlog::kick();   // the hold capacitor gives ~1 s: get the record onto flash NOW
+        board::powerOff();
+    }
     // Idle cutoff: fires ONCE. If the power does not actually drop (hold capacitor, or a
     // self-holding relay), we stay alive with the countdown parked at 0 rather than retrying.
-    if (m_idle_off.update(t.armed, cfg_idle_min, now)) board::powerOff();
+    if (m_idle_off.update(t.armed, cfg_idle_min, now))
+    {
+        evlog::push(evlog::Ev::IdleOff, static_cast<uint32_t>(cfg_idle_min));
+        evlog::kick();
+        board::powerOff();
+    }
+
+    // Event log: arm/disarm edges and fault bits raised mid-run. The Disarm record carries
+    // the WHOLE fault mask of its tick — that mask IS the answer to "why did it stop": the
+    // culprit bit (pad stale, e-stop, encoder…) rises on the very tick that disarms, so a
+    // separate rising-edge record would always miss it. Mask 0 = manual or inactivity.
+    // push() is a RAM ring write — the flash cost lives in evlog's drain task, disarmed only.
+    if (t.armed && !m_ev_armed) evlog::push(evlog::Ev::Arm, 0);
+    if (!t.armed && m_ev_armed) evlog::push(evlog::Ev::Disarm, t.faults);
+    const unsigned rising = t.faults & ~m_ev_faults;
+    if (t.armed && 0 != rising) evlog::push(evlog::Ev::Fault, rising);
+    m_ev_armed = t.armed;
+    m_ev_faults = t.faults;
 
     publish(t);
 
