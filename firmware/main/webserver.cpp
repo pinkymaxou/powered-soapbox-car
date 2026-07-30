@@ -549,7 +549,9 @@ bool encIp6(pb_ostream_t* os, const pb_field_t* field, void* const* arg)
 // ── Event log ("why did it disarm") ──
 // Last EVLOG_REPLY_MAX flash records, oldest → newest, callback-encoded from a static
 // buffer. All-varint entries, so the wire bound is exact and compile-time checkable.
-constexpr int EVLOG_REPLY_MAX = 200;
+// 100, not more: this buffer is permanent BSS and every static kilobyte comes straight
+// out of the heap pool, which page-load already drives to the floor (heap_min 864 B seen).
+constexpr int EVLOG_REPLY_MAX = 100;
 static_assert(EVLOG_REPLY_MAX * (EvlogEntry_size + 3) + 32 <= hw::PB_REPLY_CAP,
               "Evlog reply no longer fits the arena: lower EVLOG_REPLY_MAX");
 evlog::Rec m_ev_buf[EVLOG_REPLY_MAX];

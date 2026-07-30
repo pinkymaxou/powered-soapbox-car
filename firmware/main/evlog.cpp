@@ -17,7 +17,6 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "freertos/task.h"
 
 static const char* TAG = "evlog";
 
@@ -26,10 +25,10 @@ namespace
 constexpr uint32_t MAGIC = 0xEBu;
 constexpr uint32_t BLANK = 0xFFFFFFFFu;
 
-// RAM ring, single producer (control task) / single consumer (drain task). Powers of two
-// only: the indices are free-running and masked. 64 pending events is far beyond anything
-// the control task can produce between two 500 ms drains.
-constexpr uint32_t RING_N = 64;
+// RAM ring, single producer (control task) / single consumer (maintain(), leds task).
+// Powers of two only: the indices are free-running and masked. 32 pending events is far
+// beyond what one drive can produce — each needs an arm/disarm/fault EDGE, not a tick.
+constexpr uint32_t RING_N = 32;
 struct PendingRec { uint8_t code; uint32_t t_ms; uint32_t data; };
 PendingRec            m_ring[RING_N];
 std::atomic<uint32_t> m_head{0};   // written by push()
@@ -39,7 +38,6 @@ const esp_partition_t* m_part = nullptr;
 uint32_t          m_write_off = 0;       // next free byte offset in the partition
 uint16_t          m_boot_seq = 0;        // this boot's sequence number
 SemaphoreHandle_t m_mtx = nullptr;       // flash offset + read/clear vs drain
-TaskHandle_t      m_task = nullptr;
 
 uint32_t recHead(evlog::Ev code, uint16_t boot)
 {
@@ -93,26 +91,24 @@ int drainLocked()
     }
 }
 
-// Drain task: every 500 ms — or immediately on kick() — flush the ring, but ONLY while
-// the kart is disarmed: esp_partition_write suspends the flash cache, which freezes the
-// 500 Hz control loop, and that is exactly the family of stall this project hunts down.
-// Events raised while driving simply wait in RAM; the disarm that ends the run is itself
-// an event, so the drain that follows it carries the whole story out at once.
-void drainTask(void*)
-{
-    for (;;)
-    {
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(500));
-        KartStatus st;
-        if (statusTrySnapshot(st) && st.m_arming) continue;   // busy? next tick will tell
-        if (m_head.load(std::memory_order_acquire) == m_tail.load(std::memory_order_relaxed))
-            continue;
-        xSemaphoreTake(m_mtx, portMAX_DELAY);
-        drainLocked();
-        xSemaphoreGive(m_mtx);
-    }
-}
 } // namespace
+
+// Drain the ring to flash, ONLY while the kart is disarmed: esp_partition_write suspends
+// the flash cache, which freezes the 500 Hz control loop, and that is exactly the family
+// of stall this project hunts down. Events raised while driving simply wait in RAM; the
+// disarm that ends the run is itself an event, so the drain that follows carries the whole
+// story out at once. Hosted by the LED task's 20 Hz loop — the empty-ring check below is
+// two atomic loads, so the piggy-back costs nothing when there is nothing to do.
+void evlog::maintain()
+{
+    if (!m_part) return;
+    if (m_head.load(std::memory_order_acquire) == m_tail.load(std::memory_order_relaxed)) return;
+    KartStatus st;
+    if (statusTrySnapshot(st) && st.m_arming) return;   // status busy? the next call will tell
+    xSemaphoreTake(m_mtx, portMAX_DELAY);
+    drainLocked();
+    xSemaphoreGive(m_mtx);
+}
 
 void evlog::init()
 {
@@ -153,8 +149,6 @@ void evlog::init()
     boot.data = static_cast<uint32_t>(esp_reset_reason());
     boot.chk  = boot.head ^ boot.t_ms ^ boot.data ^ 0xA5A5A5A5u;
     flashAppend(&boot, 1);
-
-    xTaskCreatePinnedToCore(drainTask, "evlog", 3072, nullptr, 2, &m_task, 0);
 }
 
 void evlog::push(Ev code, uint32_t data)
@@ -167,11 +161,6 @@ void evlog::push(Ev code, uint32_t data)
     p.t_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
     p.data = data;
     m_head.store(head + 1, std::memory_order_release);
-}
-
-void evlog::kick()
-{
-    if (m_task) xTaskNotifyGive(m_task);
 }
 
 int evlog::read(Rec* out, int cap, uint32_t* total, uint32_t* pending)

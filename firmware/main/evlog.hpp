@@ -8,9 +8,10 @@
 //
 // The control task only ever pushes into a RAM ring (single producer, lock-free) — it
 // NEVER touches flash, in keeping with the "nothing writes flash while driving" rule.
-// A low-priority task drains the ring to the partition ONLY while the kart is disarmed;
-// kick() forces an immediate drain for the events that precede a power-off, so they land
-// on flash during the hold-capacitor's grace.
+// maintain(), called from the LED task's 20 Hz loop, drains the ring to the partition ONLY
+// while the kart is disarmed. No dedicated task: the first version had one, and its 3 KB
+// stack helped push an already-tight heap to heap_min = 864 bytes — the page choked. The
+// 50 ms cadence still lands a pre-power-off record well inside the hold-capacitor's ~1 s.
 #pragma once
 
 #include <cstdint>
@@ -41,7 +42,7 @@ static_assert(16 == sizeof(Rec), "Rec must stay 16 bytes (flash layout)");
 
 void init();                          // find the partition, scan, log Boot — BEFORE the tasks
 void push(Ev code, uint32_t data);    // control-task safe: RAM ring only, never blocks
-void kick();                          // ask the drain task to flush NOW (pre-power-off)
+void maintain();                      // drain RAM → flash if disarmed; call at a few Hz (leds task)
 
 // Read the last `cap` persisted records into `out` (oldest first); returns the count.
 // `total` (optional) receives the number of records on flash; `pending` the RAM ones

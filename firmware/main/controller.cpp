@@ -131,10 +131,11 @@ void EspController::tickOnce()
     const CtrlTelemetry t = m_ctrl.telemetry();
     const RumbleCmd r = m_rumble.update(t, m_pad_in, now);
     if (r.active) input::rumble(r.strong, r.weak, r.duration_ms);
+    // Both power-off records reach flash in time: the LED task drains the ring every 50 ms
+    // (kart disarmed in both cases) and the hold capacitor gives ~1 s of grace after powerOff.
     if (m_poweroff.update(t, now))
     {
         evlog::push(evlog::Ev::LvcOff, t.faults);
-        evlog::kick();   // the hold capacitor gives ~1 s: get the record onto flash NOW
         board::powerOff();
     }
     // Idle cutoff: fires ONCE. If the power does not actually drop (hold capacitor, or a
@@ -142,7 +143,6 @@ void EspController::tickOnce()
     if (m_idle_off.update(t.armed, cfg_idle_min, now))
     {
         evlog::push(evlog::Ev::IdleOff, static_cast<uint32_t>(cfg_idle_min));
-        evlog::kick();
         board::powerOff();
     }
 

@@ -5,6 +5,7 @@
 #include "leds.hpp"
 
 #include "config.hpp"
+#include "evlog.hpp"
 #include "input.hpp"
 #include "pinout.hpp"
 #include "rtos.hpp"
@@ -109,6 +110,10 @@ void ledsTask(void*)
     while (true)
     {
         render(configSnapshot());
+        // Piggy-backed housekeeping: drain the event log's RAM ring to flash (disarmed
+        // only, no-op when empty). Hosted here instead of a dedicated task on purpose —
+        // that task's 3 KB stack helped starve the heap to 864 bytes free at page load.
+        evlog::maintain();
         vTaskDelayUntil(&last, pdMS_TO_TICKS(REFRESH_MS));
     }
 }
