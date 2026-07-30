@@ -32,12 +32,13 @@ CONFIG_ESP_WIFI_RX_IRAM_OPT=n
 # each) or 5.7 kB TCP buffers per socket — the page-load burst used to drive the heap
 # under 1 kB. chart.js (69 kB) still serves in ~0.5 s with the halved TCP buffers.
 #
-# MAX_DEVICES stays at 4 even for a one-gamepad kart — tried 2, pairing struggled: every
-# device DISCOVERED during the inquiry scan claims a g_devices slot (uni_bt_bredr.c), so
-# with the connected pad holding one slot, a single stray neighbour exhausted the table
-# ("no more slots") before the right pad got in. ~5.8 kB per slot is the price of a
-# reliable pairing scan in a busy 2.4 GHz room.
-CONFIG_BLUEPAD32_MAX_DEVICES=4
+# MAX_DEVICES=2 for a one-gamepad kart (~5.8 kB of DRAM per slot). Mind the mechanism
+# before cutting further: every device DISCOVERED during the inquiry scan claims a
+# g_devices slot (uni_bt_bredr.c), and the connected pad holds one — so 2 leaves exactly
+# one slot for the scan. A pairing failure here was once blamed on that and turned out to
+# be a mishandled sync procedure on the pad; pairing at 2 slots was then VERIFIED working
+# on the bench in a busy 2.4 GHz room (2026-07-31). 1 would break reconnection races.
+CONFIG_BLUEPAD32_MAX_DEVICES=2
 CONFIG_BLUEPAD32_PLATFORM_CUSTOM=y
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=16
