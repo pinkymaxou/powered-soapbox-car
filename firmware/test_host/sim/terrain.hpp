@@ -66,7 +66,9 @@ constexpr float SHED_HALF = 2.0f;                 // 4 m × 4 m footprint
 constexpr float SHED_WALL = 0.15f;
 constexpr float SHED_H = 2.4f;
 constexpr float BACKROOMS_FLOOR = -8.f;           // you fall this far. Mind the step.
-constexpr float BACKROOMS_ROLL_N = 95.f;          // damp carpet: ~3x the rolling resistance
+// Damp carpet. 95 N left only ~9 N of the ~104 N of drive force — the kart crawled.
+// 50 N still reads as "heavy carpet" (~0.55 m/s² instead of ~0.9) but stays drivable.
+constexpr float BACKROOMS_ROLL_N = 50.f;
 
 // Inside the four walls, i.e. past the doorway (the door is the whole -x face).
 inline bool inShed(float x, float y)
