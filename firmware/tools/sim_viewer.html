@@ -70,6 +70,7 @@
 </div>
 <div id="tipflash"></div><div id="tipmsg">⚠️ ROLLOVER</div>
 <div id="massinfo">masses / CG: —</div>
+<div id="brOverlay" style="display:none;position:fixed;inset:0;pointer-events:none;z-index:40;box-shadow:inset 0 0 220px 60px rgba(90,78,20,.75)"><div style="position:absolute;top:14px;left:50%;transform:translateX(-50%);font:700 15px ui-monospace,monospace;color:#f2e3a0;text-shadow:0 0 10px #000;letter-spacing:3px">LEVEL 0 &nbsp;·&nbsp; THE BACKROOMS</div><div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);font:400 12px ui-monospace,monospace;color:#cbbd77;text-shadow:0 0 8px #000">damp carpet · buzzing fluorescents · no exit &nbsp;—&nbsp; press R to restart</div></div>
 <div id="desc"></div>
 <div id="charts">
  <h3>Vehicle speed (m/s)</h3><canvas id="cv" height="110"></canvas>
@@ -327,6 +328,88 @@ const trees = new THREE.Group();
   }
 }
 trees.visible = false;
+
+// ── 🚪 The shed — MIRROR of the constants in test_host/sim/terrain.hpp ──
+// Drive through the doorway (the whole -x face) and the floor stops being there.
+const SHED_CX = 24, SHED_CY = -6, SHED_HALF = 2.0, SHED_H = 2.4;
+const shed = new THREE.Group();
+{
+  const planks = canvasTex(128, (g, s) => {
+    g.fillStyle = '#6b5334'; g.fillRect(0, 0, s, s);
+    g.strokeStyle = '#4e3c26'; g.lineWidth = 2;
+    for (let i = 0; i <= s; i += 16){ g.beginPath(); g.moveTo(0, i); g.lineTo(s, i); g.stroke(); }
+  }, 2);
+  const wood = new THREE.MeshStandardMaterial({map: planks, roughness: .95});
+  const dark = new THREE.MeshStandardMaterial({color: 0x0b0b06, roughness: 1});
+  const W = SHED_HALF * 2, T = 0.12;
+  const wall = (w, h, d, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wood);
+    m.position.set(x, y, z); shed.add(m); return m;
+  };
+  wall(T, SHED_H, W, SHED_CX + SHED_HALF, SHED_H/2, SHED_CY);              // back (+x)
+  wall(W, SHED_H, T, SHED_CX, SHED_H/2, SHED_CY - SHED_HALF);              // side -y
+  wall(W, SHED_H, T, SHED_CX, SHED_H/2, SHED_CY + SHED_HALF);              // side +y
+  wall(T, SHED_H*0.28, W, SHED_CX - SHED_HALF, SHED_H*0.86, SHED_CY);      // lintel over the door
+  // The doorway itself: a black plane, so it reads as a hole even in daylight.
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.3, SHED_H*0.72), dark);
+  door.rotation.y = -Math.PI/2;
+  door.position.set(SHED_CX - SHED_HALF + 0.01, SHED_H*0.36, SHED_CY);
+  shed.add(door);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(SHED_HALF*1.6, 0.9, 4), wood);
+  roof.rotation.y = Math.PI/4;
+  roof.position.set(SHED_CX, SHED_H + 0.45, SHED_CY);
+  shed.add(roof);
+  shed.position.y = terrainH(SHED_CX, SHED_CY);
+}
+shed.visible = false;
+scene.add(shed);
+
+// ── 🚪 The Backrooms — shown once you have fallen through ──
+// Endless damp carpet, yellow wallpaper, buzzing fluorescents. No exit.
+const backrooms = new THREE.Group();
+const BACKROOMS_FLOOR = -8;
+{
+  const carpet = canvasTex(128, (g, s) => {
+    g.fillStyle = '#8a7a3c'; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 2600; i++){
+      g.fillStyle = ['#7d6f36','#968545','#6f6230'][i % 3];
+      g.fillRect(Math.random()*s, Math.random()*s, 2, 2);
+    }
+  }, 60);
+  const paper = canvasTex(128, (g, s) => {
+    g.fillStyle = '#c8b464'; g.fillRect(0, 0, s, s);
+    g.strokeStyle = '#b6a257'; g.lineWidth = 3;
+    for (let i = 0; i <= s; i += 12){ g.beginPath(); g.moveTo(i, 0); g.lineTo(i, s); g.stroke(); }
+  }, 8);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(400, 400),
+                               new THREE.MeshStandardMaterial({map: carpet, roughness: 1}));
+  floor.rotation.x = -Math.PI/2;
+  floor.position.y = BACKROOMS_FLOOR;
+  backrooms.add(floor);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(400, 400),
+                              new THREE.MeshStandardMaterial({color: 0xd8cf9a, roughness: 1}));
+  ceil.rotation.x = Math.PI/2;
+  ceil.position.y = BACKROOMS_FLOOR + 3.2;
+  backrooms.add(ceil);
+  // A lattice of wall segments: never a straight line of sight, always another corner.
+  const wallMat = new THREE.MeshStandardMaterial({map: paper, roughness: 1});
+  for (let i = -5; i <= 5; i++){
+    for (let j = -5; j <= 5; j++){
+      if ((i + j) % 2 === 0) continue;
+      const w = new THREE.Mesh(new THREE.BoxGeometry(((i+j) % 4 === 1) ? 14 : 0.3, 3.2,
+                                                     ((i+j) % 4 === 1) ? 0.3 : 14), wallMat);
+      w.position.set(i * 20, BACKROOMS_FLOOR + 1.6, j * 20);
+      backrooms.add(w);
+    }
+  }
+}
+backrooms.visible = false;
+scene.add(backrooms);
+const buzz = new THREE.PointLight(0xfff2b0, 1.1, 60);
+buzz.position.set(0, BACKROOMS_FLOOR + 3, 0);
+buzz.visible = false;
+scene.add(buzz);
+let inBackrooms = false;
 scene.add(trees);
 
 // ── Kart (design proportions: track 0.84, wheels Ø0.254, nose, bench) ──
@@ -538,6 +621,10 @@ function play(){
       vlim = m.vlim || 3.3;
       terrain.visible = !!m.terrain;
       trees.visible = !!m.terrain;
+      shed.visible = !!m.terrain;
+      inBackrooms = false; backrooms.visible = false; buzz.visible = false;
+      scene.fog = new THREE.Fog(0xa8c8e8, 40, 170);
+      document.getElementById('brOverlay').style.display = 'none';
       document.getElementById('tlwrap').style.display = m.terrain ? 'flex' : 'none';
       document.getElementById('olwrap').style.display = m.terrain ? 'flex' : 'none';
       grid.visible = !m.terrain;
@@ -578,6 +665,21 @@ function animate(){
     if (c.position.x > 150) c.position.x = -150;
   }
   if (cur) sky.position.set(cur.x, 0, cur.y);   // the dome follows the kart (infinite horizon)
+  // 🚪 One way. The floor was not there.
+  if (cur && !!cur.backrooms !== inBackrooms){
+    inBackrooms = !!cur.backrooms;
+    backrooms.visible = inBackrooms;
+    buzz.visible = inBackrooms;
+    terrain.visible = trees.visible = shed.visible = !inBackrooms;
+    sky.visible = !inBackrooms;
+    scene.fog = inBackrooms ? new THREE.Fog(0xb9a95c, 8, 55)
+                            : new THREE.Fog(0xa8c8e8, 40, 170);
+    document.getElementById('brOverlay').style.display = inBackrooms ? 'block' : 'none';
+  }
+  if (inBackrooms && cur){
+    buzz.position.set(cur.x, BACKROOMS_FLOOR + 3, cur.y);
+    buzz.intensity = (Math.random() < 0.04) ? 0.15 : 1.1;   // the lights are not well
+  }
   if (cur){
     const gz = cur.z || 0;
     kart.position.set(cur.x, gz, cur.y);

@@ -43,6 +43,43 @@ and check the tooth-in-tooth meshing with the motor pinion.
 - Firmware: `GEAR_RATIO = 1.28` (magnet at the gearbox output). Calculated alternatives:
   25→34 = 1:17.0; 30→42 = 1:17.5; 25→36 = 1:18.0.
 
+### Where to put the gearbox output sprocket
+
+![Chain layout](schematics/chain_layout.png)
+
+> Regenerable: `. .venv-schem/bin/activate && python doc/schematics/chain_layout.py`
+
+**Never vertical.** With one sprocket directly above the other, gravity pulls the slack *along*
+the run instead of into the teeth, and every millimetre of wear elongation accumulates at the
+**bottom** sprocket where nothing holds the chain seated — it rides up the teeth and skips. Chain
+makers all say the same: keep the line of centres **within 45° of horizontal** (60° absolute
+maximum, and then only with a tensioner).
+
+**The constraint is the distance, not the direction.** Any position on a circle of radius C around
+the wheel axle works, as long as it stays out of the two vertical 45° sectors. That is a lot of
+freedom for dodging a frame member — the gearbox can go forward, back, or diagonally up.
+
+| entraxe C | links (even) | wrap on 25T | slack at 1 % |
+|---|---|---|---|
+| 130 mm | 56 | 170.7° | 1.3 mm |
+| 150 mm | 62 | 171.9° | 1.5 mm |
+| **165 mm** | **64** | **172.6°** | **1.7 mm** |
+| 180 mm | 68 | 173.3° | 1.8 mm |
+| 300 mm | 92 | 176.0° | 3.0 mm |
+
+- **A short centre distance costs almost nothing here.** The 30–50 pitch guideline is written for
+  fast, heavily loaded industrial drives. This chain runs at **1.3 m/s** and **10 % of its working
+  load** (126 N of 1200 N). Going from 300 to 150 mm multiplies articulations per km by 1.5 — noise
+  at that duty. Wrap stays above 170° throughout, because the two sprockets are nearly the same size.
+- **What a short centre distance really costs is tension sensitivity**: 1.7 mm of nominal slack is
+  hard to set by eye, and 1 % of elongation on a 610 mm chain is 6 mm — a large relative change. You
+  will re-tension more often. That is the whole trade.
+- **Even link count is mandatory**: an odd count needs a cranked offset link, roughly 20 % weaker.
+- **Slack ~1 % of C, not the usual 2 %** — reverse is always allowed on this kart, so both runs take
+  turns being the tight side and there is no permanent slack side to be generous with.
+- **Slot the mount ±15 mm**: two links quantise the centre distance in ~9.5 mm steps, and 3 % of wear
+  elongation on a 610 mm chain moves it another ~9 mm.
+
 ![Gearbox schematic](schematics/gearbox.png)
 
 > Regenerable: `. .venv-schem/bin/activate && python doc/schematics/gearbox.py`
