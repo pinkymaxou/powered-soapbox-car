@@ -144,6 +144,17 @@ extern "C" void inputbp_on_conn(int connected, const char* name, int batt)
     }
     m_connected.store(0 != connected);
     m_battery.store(batt);
+    if (0 == connected)
+    {
+        // Purge the last report: a stick frozen at its final deflection, or an estop/start
+        // bit latched by the dying report, must not outlive the gamepad (get() also guards).
+        m_raw_x.store(0.f);  m_raw_y.store(0.f);
+        m_rx2.store(0.f);    m_ry2.store(0.f);
+        m_zl.store(0.f);     m_zr.store(0.f);
+        m_estop.store(false);
+        m_start.store(false);
+        m_buttons.store(0);
+    }
     if (connected)
     {
         m_pairing.store(false);   // pairing done once connected
@@ -191,6 +202,15 @@ input::State input::get()
 {
     input::State s;
     s.connected = m_connected.load();
+    // Disconnected → EVERYTHING neutral (State's defaults: axes 0/0, triggers 0, no
+    // buttons). Without this, the last HID report kept echoing through the telemetry —
+    // the page showed a stick frozen mid-deflection, and a latched estop/start from the
+    // dying report survived its own gamepad. The stored atomics are also zeroed on the
+    // disconnect event (inputbp_on_conn); this guard is what makes the invariant local.
+    if (!s.connected)
+    {
+        return s;
+    }
     s.estop = m_estop.load();
     s.start = m_start.load();
     s.buttons = m_buttons.load();

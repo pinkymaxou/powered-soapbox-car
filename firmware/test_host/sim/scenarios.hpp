@@ -225,7 +225,7 @@ inline std::vector<Scenario> allScenarios()
     // Heartbeat: the gamepad stops transmitting at full speed.
     v.push_back({
         "heartbeat_perte",
-        "Gamepad reports cut at full speed: disarm ≤ 250 ms + braking",
+        "Gamepad reports cut at full speed: disarm ≤ heartbeat timeout + braking",
         9.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;

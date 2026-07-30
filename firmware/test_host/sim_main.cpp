@@ -139,7 +139,8 @@ void testScenarios()
     {
         const RunResult r = run(get("heartbeat_perte"));
         CHECK(r.ever_armed);
-        CHECK(r.t_disarmed_after >= 5.f && r.t_disarmed_after < 5.35f);   // ≤ 250 ms + margin
+        // Reports cut at t=5 s; disarm within PAD_HB_TIMEOUT_US (750 ms) + margin.
+        CHECK(r.t_disarmed_after >= 5.f && r.t_disarmed_after < 5.f + hw::PAD_HB_TIMEOUT_US * 1e-6f + 0.1f);
         CHECK(std::fabs(r.final_v) < 0.3f);                               // braked (dynamic)
     }
 

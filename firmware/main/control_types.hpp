@@ -143,9 +143,13 @@ constexpr float ARM_CENTER_MAX   = 0.08f;    // stick considered "centered" to a
 constexpr float PUSH_MIN         = 0.5f;     // stick considered "pushed" (rumble if blocked)
 constexpr int64_t RUMBLE_BLOCK_INTERVAL_US = 800000;   // repetition of the "blocked" rumble
 // Gamepad heartbeat: gamepads stream their HID reports continuously (~10-20 ms).
-// Link "connected" but silent > 250 ms = communication lost → IMMEDIATE disarm + braking
-// (the Bluetooth supervision timeout, by contrast, takes several seconds).
-constexpr int64_t PAD_HB_TIMEOUT_US  = 250000;
+// Link "connected" but silent past this = communication lost → disarm + braking (the
+// Bluetooth supervision timeout, by contrast, takes several seconds). 750 ms, raised from
+// 250 ms after real-world driving: Wi-Fi/BT share the one radio, and coexistence can starve
+// the HID stream for a few hundred ms — long enough to false-trip the old bound mid-run.
+// At 3.3 m/s top speed, 750 ms is still ~2.5 m of travel before the brake, versus several
+// seconds if we waited for the BT supervision timeout.
+constexpr int64_t PAD_HB_TIMEOUT_US  = 750000;
 } // namespace hw
 
 // ───────────────────────── Configuration (named fields, persisted) ─────────────────────────
@@ -246,7 +250,7 @@ constexpr unsigned ENC_REV   = 1u << 6;   // encoder/motor wired backwards
 constexpr unsigned ENC_MAD   = 1u << 7;   // aberrant speed measurement
 constexpr unsigned ENC_L_ABS = 1u << 8;   // left AS5600 absent (I2C silent) — if use_encoders=1
 constexpr unsigned ENC_R_ABS = 1u << 9;   // right AS5600 absent — if use_encoders=1
-constexpr unsigned PAD_STALE = 1u << 10;  // gamepad "connected" but silent > 250 ms (heartbeat)
+constexpr unsigned PAD_STALE = 1u << 10;  // gamepad "connected" but silent (heartbeat, PAD_HB_TIMEOUT_US)
 constexpr unsigned MAG_L     = 1u << 11;  // left AS5600 magnet out of field (absent/too far/too close)
 constexpr unsigned MAG_R     = 1u << 12;  // right AS5600 magnet out of field
 // MOTOR power rail dead while the logic rail is alive — which, in the two-rail wiring, is
