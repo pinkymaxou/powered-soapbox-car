@@ -2,7 +2,6 @@
 #include "config.hpp"
 
 #include <algorithm>
-#include <atomic>
 #include "esp_log.h"
 #include "nvs.h"
 
@@ -129,35 +128,19 @@ KartConfig configSnapshot()
     return cfg;
 }
 
-namespace
-{
-std::atomic<bool> m_save_pending{false};   // deferred save (kart armed at the time of the set)
-}
-
 void configUpdate(const KartConfig& cfg, bool persist)
 {
+    // No armed check here anymore: the web "set" handler REFUSES the whole request while
+    // the kart is armed, so this only ever runs disarmed. That retired the old deferred-save
+    // machinery (values applied live, NVS flushed by the control task on the disarm edge) —
+    // changing control parameters mid-drive was a dubious feature to begin with, and the
+    // flash write it deferred (cache suspended = every flash-resident task frozen, control
+    // loop included) now simply cannot coincide with driving.
     xSemaphoreTake(g_cfg_mtx, portMAX_DELAY);
     g_cfg = cfg;
     g_cfg.clampAll();
-    if (persist)
-    {
-        // Kart ARMED → defer the NVS write: flash writes suspend the cache and
-        // freeze the control loop for several tens of ms — not while driving.
-        // The values are already ACTIVE (g_cfg); persistence will follow on disarm.
-        if (statusSnapshot().m_arming) m_save_pending.store(true);
-        else                          configSave();
-    }
+    if (persist) configSave();
     xSemaphoreGive(g_cfg_mtx);
-}
-
-// Called by the control loop on the armed → disarmed transition.
-void configFlushPending()
-{
-    if (!m_save_pending.exchange(false)) return;
-    xSemaphoreTake(g_cfg_mtx, portMAX_DELAY);
-    configSave();
-    xSemaphoreGive(g_cfg_mtx);
-    ESP_LOGI(TAG, "Deferred settings persisted (kart disarmed)");
 }
 
 bool configGetWifi(char* ssid, size_t ssid_size, char* pass, size_t pass_size, bool* enabled)

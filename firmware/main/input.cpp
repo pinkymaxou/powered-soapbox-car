@@ -223,8 +223,24 @@ input::State input::get()
     return s;
 }
 
+// Pairing / unpairing / starting a calibration are all REFUSED while the kart is armed.
+// All three erase or rewrite NVS (flash write = the cache suspends and the control loop
+// freezes mid-drive), pairing/unpairing yanks the very device that is steering, and the
+// calibration wizard asks for full-stop stick sweeps. The web page greys the buttons out;
+// this is the guard that holds when it doesn't.
+namespace
+{
+bool refusedArmed(const char* what)
+{
+    if (!statusSnapshot().m_arming) return false;
+    ESP_LOGW(TAG, "%s refused: kart armed — disarm first", what);
+    return true;
+}
+} // namespace
+
 void input::startPairing()
 {
+    if (refusedArmed("Pairing")) return;
     m_pairing.store(true);
     calClear();        // a new gamepad = calibration to redo
     inputbp_pair();    // opens the BT scan/pairing
@@ -233,6 +249,7 @@ void input::startPairing()
 
 void input::unpair()
 {
+    if (refusedArmed("Unpairing")) return;
     m_connected.store(false);
     m_pairing.store(false);
     m_name[0] = '\0';
@@ -244,6 +261,7 @@ void input::unpair()
 
 void input::calStart()
 {
+    if (refusedArmed("Calibration")) return;   // calstate stays 0 → page stays at rest
     if (!padDataFresh())
     {
         ESP_LOGW(TAG, "Calibration refused: no recent data from the gamepad");

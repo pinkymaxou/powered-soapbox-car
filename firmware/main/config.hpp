@@ -57,8 +57,7 @@ void       configInit();
 bool       configLoad();
 bool       configSave();
 KartConfig configSnapshot();
-void       configUpdate(const KartConfig& c, bool persist);
-void       configFlushPending();   // persists a deferred "set" (to call once disarmed)
+void       configUpdate(const KartConfig& c, bool persist);   // caller must refuse while armed
 
 bool configGetWifi(char* ssid, size_t ssid_size, char* pass, size_t pass_size, bool* enabled = nullptr);
 void configSetWifi(const char* ssid, const char* pass, bool enabled);

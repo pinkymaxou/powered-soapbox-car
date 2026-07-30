@@ -134,8 +134,6 @@ void EspController::tickOnce()
     // Idle cutoff: fires ONCE. If the power does not actually drop (hold capacitor, or a
     // self-holding relay), we stay alive with the countdown parked at 0 rather than retrying.
     if (m_idle_off.update(t.armed, cfg_idle_min, now)) board::powerOff();
-    if (m_was_armed && !t.armed) configFlushPending();   // deferred "set" received while driving
-    m_was_armed = t.armed;
 
     publish(t);
 

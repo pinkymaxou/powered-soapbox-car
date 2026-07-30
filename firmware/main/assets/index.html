@@ -39,7 +39,7 @@
  <section id="cfg" class="panel" hidden>
   <button class="alt" onclick="reload()">Reload</button>
   <form id="f"></form>
-  <button type="button" onclick="save()">💾 Save</button>
+  <button type="button" id="cfgsave" onclick="save()">💾 Save</button>
  </section>
 
  <section id="faults" class="panel">
@@ -133,8 +133,8 @@
     <div class="padraw" id="padraw">btns —</div></div>
   </div>
   <div class="row">
-   <button onclick="padPair()">🔗 Pair a gamepad</button>
-   <button class="danger" onclick="padUnpair()">✖ Unpair</button>
+   <button id="padpairbtn" onclick="padPair()">🔗 Pair a gamepad</button>
+   <button class="danger" id="padunpairbtn" onclick="padUnpair()">✖ Unpair</button>
   </div>
   <p class="note">⚠️ Pairing <b>erases the calibration</b>: you will have to recalibrate. The gamepad must be in pairing mode (often hold the sync button).</p>
   <hr>
@@ -691,6 +691,8 @@ function showStatus(s){
  const zl=document.getElementById('zlf'); if(zl) zl.style.width=((s.pad_zl||0)*100).toFixed(0)+'%';
  const zr=document.getElementById('zrf'); if(zr) zr.style.width=((s.pad_zr||0)*100).toFixed(0)+'%';
  const pr=document.getElementById('padraw'); if(pr) pr.textContent='btns 0x'+((s.pad_btns||0)>>>0).toString(16).padStart(5,'0');
+ const nowArmed=!!s.arming;
+ if(nowArmed!==armedLock){armedLock=nowArmed;updateLocks();}
  const why=document.getElementById('why');
  if(s.state===STATE.RUN){ why.hidden=true; }   // ARMED/Run = can drive
  else{
@@ -900,10 +902,22 @@ function showPad(m){
  document.getElementById('calstatus').textContent='Calibration: '+cal+(m.pairing?'  ·  pairing open':'');
  // Calibration in progress → "Start" greyed out; otherwise "Finish"/"Cancel"
  // are (they only make sense during collection).
- const encours=(m.calstate===1);
- document.getElementById('calstartbtn').disabled=encours;
- document.getElementById('calfinishbtn').disabled=!encours;
- document.getElementById('calcancelbtn').disabled=!encours;
+ calBusy=(m.calstate===1);
+ document.getElementById('calfinishbtn').disabled=!calBusy;
+ document.getElementById('calcancelbtn').disabled=!calBusy;
+ updateLocks();
+}
+// Save / pairing / calibration-start are REFUSED by the firmware while the kart is armed
+// (NVS writes freeze the control loop; the wizard asks for full-stick sweeps). Greying the
+// buttons out here just makes the refusal legible — the firmware is the real guard.
+let armedLock=false, calBusy=false;
+function updateLocks(){
+ const lk=(id,dis)=>{const e=document.getElementById(id); if(!e)return;
+  e.disabled=dis; e.title=(dis&&armedLock)?'Disarm the kart first':'';};
+ lk('cfgsave',armedLock);
+ lk('padpairbtn',armedLock);
+ lk('padunpairbtn',armedLock);
+ lk('calstartbtn',armedLock||calBusy);
 }
 function reboot(){if(confirm("Reboot the system? It will restart DISARMED."))sendReq({type:'reboot'});}
 let wifiSaving=false;

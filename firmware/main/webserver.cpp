@@ -788,7 +788,16 @@ esp_err_t wsHandler(httpd_req_t* req)
     }
     if (0 == strcmp(cmd, "set"))
     {
-        if (draft.touched) configUpdate(draft.cfg, true);   // applied by decSetParam
+        // REFUSED while armed: applying would retune the control loop mid-drive and the
+        // save writes flash (cache suspended = control loop frozen). This retired the old
+        // deferred-flush machinery — nothing writes NVS while driving anymore, full stop.
+        // The page greys its Save button out; the vals reply below re-fills the form with
+        // the real (unchanged) values, so a bypassed click visibly reverts.
+        if (draft.touched)
+        {
+            if (statusSnapshot().m_arming) ESP_LOGW(TAG, "set refused: kart armed");
+            else                           configUpdate(draft.cfg, true);
+        }
         return wsReply(req, buildValsPb());
     }
     if (0 == strcmp(cmd, "sysinfo"))   { return wsReply(req, buildSysInfoPb()); }

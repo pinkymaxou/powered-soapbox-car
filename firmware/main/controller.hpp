@@ -1,7 +1,7 @@
 // controller.hpp — HARDWARE binding of the control core. EspController fills the two
 // KartController callbacks (sensors ← board::, motor outputs → board::) and pushes it
 // the inputs (gamepad, START button, web config); ALL the business logic is in the
-// core. The host decisions (rumble, power cutoff, deferred persistence) are
+// core. The host decisions (rumble, power cutoff) are
 // derived from the telemetry via advisors.hpp. The Controller namespace is only the BOOTSTRAP:
 // it initializes the instance, creates the 500 Hz FreeRTOS task and runs tickOnce() in it.
 #pragma once
@@ -36,7 +36,6 @@ private:
     RumbleAdvisor  m_rumble;     // haptic feedback (host decision)
     PowerOffAdvisor m_poweroff;  // power cutoff on prolonged LVC (host decision)
     IdleOffAdvisor m_idle_off;   // power cutoff after N minutes disarmed (host decision)
-    bool           m_was_armed = false;   // armed→disarmed edge → configFlushPending
     uint32_t       m_loop_max_us[PEAK_N] = {};   // worst tick duration, one slot per reader
     uint32_t       m_sens_max_us[PEAK_N] = {};   // worst readSensors() duration, same
     int            m_vbat_tick = 0;        // rate-limit the ADS1115 read (shares bus 0 w/ left enc)
