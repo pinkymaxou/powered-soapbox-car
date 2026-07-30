@@ -20,6 +20,12 @@ constexpr uint16_t CFG_MODE_SINGLE = 0x0100;  // 1 = single-shot, 0 = continuous
 constexpr uint16_t CFG_COMP_OFF    = 0x0003;  // COMP_QUE = 11b: comparator disabled (bits 1..0)
 
 constexpr int CONV_TIMEOUT_MS = 20;   // margin beyond the slowest conversion time
+// I2C TRANSACTION timeout — a different thing entirely, and it must be SHORT. A read is
+// 3 bytes at 400 kHz, about 0.1 ms; 20 ms was 200x that, and with 8 oversamples a chip that
+// had stopped answering blocked the 500 Hz control loop for 160 ms — 80 missed ticks, enough
+// to alias the encoders. hw::I2C_XFER_TIMEOUT_MS (4 ms) is the same bound the AS5600 reads
+// use, and for the same reason.
+constexpr int XFER_TIMEOUT_MS = hw::I2C_XFER_TIMEOUT_MS;
 
 // Approximate conversion time (ms) per rate, for the single-shot timing.
 int convMs(Ads1115::Rate rate)
@@ -53,13 +59,13 @@ uint16_t Ads1115::buildConfig(uint8_t channel, Gain gain, Rate rate, bool contin
 bool Ads1115::writeReg(uint8_t reg, uint16_t value)
 {
     const uint8_t buf[3] = {reg, static_cast<uint8_t>(value >> 8), static_cast<uint8_t>(value & 0xFF)};
-    return ESP_OK == i2c_master_transmit(m_dev, buf, sizeof(buf), CONV_TIMEOUT_MS);
+    return ESP_OK == i2c_master_transmit(m_dev, buf, sizeof(buf), XFER_TIMEOUT_MS);
 }
 
 bool Ads1115::readReg(uint8_t reg, uint16_t& value)
 {
     uint8_t rx[2] = {0, 0};
-    if (ESP_OK != i2c_master_transmit_receive(m_dev, &reg, 1, rx, 2, CONV_TIMEOUT_MS))
+    if (ESP_OK != i2c_master_transmit_receive(m_dev, &reg, 1, rx, 2, XFER_TIMEOUT_MS))
     {
         return false;
     }

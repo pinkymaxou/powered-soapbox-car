@@ -19,6 +19,7 @@
 #include <cstring>
 
 #include "config.hpp"
+#include "controller.hpp"
 #include "hardware.hpp"
 #include "input.hpp"
 #include "mdns_svc.hpp"
@@ -202,14 +203,15 @@ constexpr int HIST_BATT_N   = 120;  // 30 min @ 15 s
 // Hist is callback-encoded too, but its size is fully known: 3 varints + 7 byte arrays of
 // fixed length. Bound it here so growing a window cannot quietly overflow the arena.
 constexpr size_t HIST_PB_MAX = 3 * 6                       // dt_fast / dt_spd / dt_batt
-                             + 7 * 3                       // one tag + length varint each
-                             + 5 * HIST_FAST_N             // accel, pwml, pwmr, rpml, rpmr
+                             + 8 * 3                       // one tag + length varint each
+                             + 6 * HIST_FAST_N             // accel, pwml, pwmr, rpml, rpmr, loop
                              + HIST_SPEED_N + HIST_BATT_N; // spd, batt
 static_assert(HIST_PB_MAX <= hw::PB_REPLY_CAP, "Hist no longer fits the reply arena");
 constexpr int HIST_BATT_DT  = 15;
 struct
 {
     Ring<uint8_t, HIST_FAST_N>  accel, pwml, pwmr, rpml, rpmr;   // rpml/rpmr: wheel rpm (0..250)
+    Ring<uint8_t, HIST_FAST_N>  loop;   // worst 500 Hz tick, in units of 50 µs (0..250 = 12.5 ms)
     Ring<uint8_t, HIST_SPEED_N> spd;
     Ring<uint8_t, HIST_BATT_N>  batt;
     int tick = 0;
@@ -260,6 +262,10 @@ void histSample(void*)
         m_hist.pwmr.push(pctU8(fabsf(st.m_out_r) * 100.f));              // %
         m_hist.rpml.push(rpmU8(st.m_rpm_l));                             // rpm left wheel
         m_hist.rpmr.push(rpmU8(st.m_rpm_r));                             // rpm right wheel
+        // Worst tick over the window, in 50 µs units so a byte spans 12.5 ms. Reading it
+        // RESETS the peak, so each point is the true worst of its own 5 s slot.
+        const uint32_t lm = Controller::loopMaxUs();
+        m_hist.loop.push(static_cast<uint8_t>(lm / 50 > 250 ? 250 : lm / 50));
     }
     if (0 == (m_hist.tick % HIST_BATT_DT))
     {
@@ -284,19 +290,19 @@ const pb_byte_t* buildHistPb(size_t& len)
         len = m_hist_bin_len;
         return m_hist_bin;
     }
-    static uint8_t lin_fast[5][HIST_FAST_N];
+    static uint8_t lin_fast[6][HIST_FAST_N];
     static uint8_t lin_spd[HIST_SPEED_N];
     static uint8_t lin_batt[HIST_BATT_N];
-    BytesArg args[7];
+    BytesArg args[8];
     xSemaphoreTake(m_hist_mtx, portMAX_DELAY);
-    const Ring<uint8_t, HIST_FAST_N>* fast[5] = {&m_hist.accel, &m_hist.pwml, &m_hist.pwmr,
-                                        &m_hist.rpml, &m_hist.rpmr};
-    for (int k = 0; k < 5; ++k)
+    const Ring<uint8_t, HIST_FAST_N>* fast[6] = {&m_hist.accel, &m_hist.pwml, &m_hist.pwmr,
+                                        &m_hist.rpml, &m_hist.rpmr, &m_hist.loop};
+    for (int k = 0; k < 6; ++k)
     {
         args[k] = {lin_fast[k], static_cast<size_t>(fast[k]->copyTo(lin_fast[k], HIST_FAST_N))};
     }
-    args[5] = {lin_spd, static_cast<size_t>(m_hist.spd.copyTo(lin_spd, HIST_SPEED_N))};
-    args[6] = {lin_batt, static_cast<size_t>(m_hist.batt.copyTo(lin_batt, HIST_BATT_N))};
+    args[6] = {lin_spd, static_cast<size_t>(m_hist.spd.copyTo(lin_spd, HIST_SPEED_N))};
+    args[7] = {lin_batt, static_cast<size_t>(m_hist.batt.copyTo(lin_batt, HIST_BATT_N))};
     xSemaphoreGive(m_hist_mtx);
 
     Msg msg = Msg_init_zero;
@@ -305,8 +311,9 @@ const pb_byte_t* buildHistPb(size_t& len)
     h.dt_fast = HIST_FAST_DT;
     h.dt_spd = 1;
     h.dt_batt = HIST_BATT_DT;
-    pb_callback_t* fields[7] = {&h.accel, &h.pwml, &h.pwmr, &h.rpml, &h.rpmr, &h.spd, &h.batt};
-    for (int k = 0; k < 7; ++k)
+    pb_callback_t* fields[8] = {&h.accel, &h.pwml, &h.pwmr, &h.rpml, &h.rpmr, &h.loop,
+                                &h.spd, &h.batt};
+    for (int k = 0; k < 8; ++k)
     {
         fields[k]->funcs.encode = encBytes;
         fields[k]->arg = &args[k];
@@ -536,6 +543,8 @@ size_t buildSysDynPb()
     msg.body.sysdyn.heap_free = esp_get_free_heap_size();
     msg.body.sysdyn.heap_min  = esp_get_minimum_free_heap_size();
     msg.body.sysdyn.ledc_fix  = board::ledcClkFixCount();
+    msg.body.sysdyn.loop_max_us = Controller::loopMaxUs();
+    msg.body.sysdyn.sens_max_us = Controller::sensMaxUs();
     return encodeMsg(msg);
 }
 

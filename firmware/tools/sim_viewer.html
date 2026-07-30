@@ -365,50 +365,129 @@ shed.visible = false;
 scene.add(shed);
 
 // ── 🚪 The Backrooms — shown once you have fallen through ──
-// Endless damp carpet, yellow wallpaper, buzzing fluorescents. No exit.
+// Level 0: mono-yellow wallpaper over a dark baseboard, damp stained carpet, an acoustic
+// drop ceiling on a T-bar grid, and fluorescents that buzz. No exit.
 const backrooms = new THREE.Group();
 const BACKROOMS_FLOOR = -8;
+const BR_H = 3.2;                       // ceiling height
+const brLights = [];
 {
-  const carpet = canvasTex(128, (g, s) => {
+  // Damp carpet: mustard base, fibre speckle, then large soft stains on top.
+  const carpet = canvasTex(256, (g, s) => {
     g.fillStyle = '#8a7a3c'; g.fillRect(0, 0, s, s);
-    for (let i = 0; i < 2600; i++){
-      g.fillStyle = ['#7d6f36','#968545','#6f6230'][i % 3];
+    for (let i = 0; i < 9000; i++){
+      g.fillStyle = ['#7d6f36','#968545','#6f6230','#a2905097'][i & 3];
       g.fillRect(Math.random()*s, Math.random()*s, 2, 2);
     }
-  }, 60);
-  const paper = canvasTex(128, (g, s) => {
-    g.fillStyle = '#c8b464'; g.fillRect(0, 0, s, s);
-    g.strokeStyle = '#b6a257'; g.lineWidth = 3;
-    for (let i = 0; i <= s; i += 12){ g.beginPath(); g.moveTo(i, 0); g.lineTo(i, s); g.stroke(); }
-  }, 8);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(400, 400),
+    for (let i = 0; i < 14; i++){            // damp patches
+      const x = Math.random()*s, y = Math.random()*s, r = 12 + Math.random()*34;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(70,60,26,.55)');
+      grd.addColorStop(1, 'rgba(70,60,26,0)');
+      g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    }
+  }, 55);
+
+  // Wallpaper: vertical striping, mottling, and a DARK BASEBOARD along the bottom —
+  // vertical repeat stays 1 so the baseboard lands at floor level, once, on every wall.
+  const paper = canvasTex(256, (g, s) => {
+    g.fillStyle = '#c9b566'; g.fillRect(0, 0, s, s);
+    for (let x = 0; x < s; x += 8){          // subtle vertical stripe
+      g.fillStyle = (x % 16 === 0) ? '#c2ad5e' : '#cdba6d';
+      g.fillRect(x, 0, 4, s);
+    }
+    for (let i = 0; i < 550; i++){           // age mottling
+      g.fillStyle = 'rgba(150,132,66,.14)';
+      g.fillRect(Math.random()*s, Math.random()*s, 3 + Math.random()*9, 2);
+    }
+    for (let i = 0; i < 7; i++){             //水 damp bleed from the bottom
+      const x = Math.random()*s, w = 18 + Math.random()*40;
+      const grd = g.createLinearGradient(0, s, 0, s*0.55);
+      grd.addColorStop(0, 'rgba(96,82,34,.5)'); grd.addColorStop(1, 'rgba(96,82,34,0)');
+      g.fillStyle = grd; g.fillRect(x, s*0.55, w, s*0.45);
+    }
+    g.fillStyle = '#6d5c2a'; g.fillRect(0, s - 26, s, 26);       // baseboard
+    g.fillStyle = '#5a4b22'; g.fillRect(0, s - 28, s, 3);        // its top edge
+  });
+  paper.repeat.set(6, 1);
+  paper.wrapS = paper.wrapT = THREE.RepeatWrapping;
+
+  // Acoustic drop ceiling: speckled tiles on a T-bar grid.
+  const tiles = canvasTex(256, (g, s) => {
+    g.fillStyle = '#d9d2ae'; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 5000; i++){
+      g.fillStyle = 'rgba(120,112,86,.30)';
+      g.fillRect(Math.random()*s, Math.random()*s, 2, 2);
+    }
+    g.strokeStyle = '#9a9478'; g.lineWidth = 6;
+    g.strokeRect(0, 0, s, s);                                     // T-bar
+  }, 45);
+
+  // Tight, low, endless. Grid step 8 m and a 3 m ceiling — the Backrooms are corridors,
+  // not a hangar. Texture repeats are set so a carpet tile is ~1 m and a ceiling tile ~0.6 m.
+  const S = 8, N = 7, EXT = 2 * N * S;
+  carpet.repeat.set(EXT, EXT);            // ~1 m per tile
+  tiles.repeat.set(EXT / 0.61, EXT / 0.61);
+  for (const tx of [carpet, tiles]) tx.anisotropy = 8;
+
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(EXT, EXT),
                                new THREE.MeshStandardMaterial({map: carpet, roughness: 1}));
   floor.rotation.x = -Math.PI/2;
   floor.position.y = BACKROOMS_FLOOR;
   backrooms.add(floor);
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(400, 400),
-                              new THREE.MeshStandardMaterial({color: 0xd8cf9a, roughness: 1}));
+
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(EXT, EXT),
+                              new THREE.MeshStandardMaterial({map: tiles, roughness: 1}));
   ceil.rotation.x = Math.PI/2;
-  ceil.position.y = BACKROOMS_FLOOR + 3.2;
+  ceil.position.y = BACKROOMS_FLOOR + BR_H;
   backrooms.add(ceil);
-  // A lattice of wall segments: never a straight line of sight, always another corner.
+
+  // Every wall segment is one grid step long, so a single shared wallpaper texture maps
+  // correctly on all of them (8 repeats across, 1 up — the baseboard lands at the floor).
+  paper.repeat.set(4, 1);
   const wallMat = new THREE.MeshStandardMaterial({map: paper, roughness: 1});
-  for (let i = -5; i <= 5; i++){
-    for (let j = -5; j <= 5; j++){
-      if ((i + j) % 2 === 0) continue;
-      const w = new THREE.Mesh(new THREE.BoxGeometry(((i+j) % 4 === 1) ? 14 : 0.3, 3.2,
-                                                     ((i+j) % 4 === 1) ? 0.3 : 14), wallMat);
-      w.position.set(i * 20, BACKROOMS_FLOOR + 1.6, j * 20);
-      backrooms.add(w);
+  const geoX = new THREE.BoxGeometry(S, BR_H, 0.22);
+  const geoZ = new THREE.BoxGeometry(0.22, BR_H, S);
+  const put = (geo, x, z) => {
+    const m = new THREE.Mesh(geo, wallMat);
+    m.position.set(x, BACKROOMS_FLOOR + BR_H/2, z);
+    backrooms.add(m);
+  };
+  for (let i = -N; i <= N; i++){
+    for (let j = -N; j <= N; j++){
+      const h = (((i * 73856093) ^ (j * 19349663)) >>> 0);
+      if (h % 10 < 6) put(geoX, i*S + S/2, j*S);        // segment along X
+      if ((h >> 4) % 10 < 6) put(geoZ, i*S, j*S + S/2);  // segment along Z
+    }
+  }
+
+  // One recessed fluorescent per cell, flush with the tiles; a scattering of dead ones.
+  const lampOn  = new THREE.MeshBasicMaterial({color: 0xfff8dc});
+  const lampOff = new THREE.MeshBasicMaterial({color: 0x8f8a6f});
+  const geoLamp = new THREE.PlaneGeometry(1.9, 0.5);
+  for (let i = -N; i <= N; i++){
+    for (let j = -N; j <= N; j++){
+      const dead = (((i * 31 + j * 17) >>> 0) % 9 === 0);
+      const panel = new THREE.Mesh(geoLamp, dead ? lampOff : lampOn);
+      panel.rotation.x = Math.PI/2;
+      panel.position.set(i*S + S/2, BACKROOMS_FLOOR + BR_H - 0.015, j*S + S/2);
+      backrooms.add(panel);
     }
   }
 }
 backrooms.visible = false;
 scene.add(backrooms);
-const buzz = new THREE.PointLight(0xfff2b0, 1.1, 60);
-buzz.position.set(0, BACKROOMS_FLOOR + 3, 0);
-buzz.visible = false;
-scene.add(buzz);
+
+// Ambient + two travelling fluorescents. The flicker is per-light and irregular.
+const brAmbient = new THREE.AmbientLight(0xd8c67a, 0.55);
+brAmbient.visible = false;
+scene.add(brAmbient);
+for (let i = 0; i < 2; i++){
+  const l = new THREE.PointLight(0xfff2b0, 1.0, 44);
+  l.visible = false;
+  brLights.push(l);
+  scene.add(l);
+}
 let inBackrooms = false;
 scene.add(trees);
 
@@ -622,7 +701,8 @@ function play(){
       terrain.visible = !!m.terrain;
       trees.visible = !!m.terrain;
       shed.visible = !!m.terrain;
-      inBackrooms = false; backrooms.visible = false; buzz.visible = false;
+      inBackrooms = false; backrooms.visible = false;
+      brAmbient.visible = false; brLights.forEach(l => l.visible = false);
       scene.fog = new THREE.Fog(0xa8c8e8, 40, 170);
       document.getElementById('brOverlay').style.display = 'none';
       document.getElementById('tlwrap').style.display = m.terrain ? 'flex' : 'none';
@@ -669,7 +749,8 @@ function animate(){
   if (cur && !!cur.backrooms !== inBackrooms){
     inBackrooms = !!cur.backrooms;
     backrooms.visible = inBackrooms;
-    buzz.visible = inBackrooms;
+    brAmbient.visible = inBackrooms;
+    brLights.forEach(l => l.visible = inBackrooms);
     terrain.visible = trees.visible = shed.visible = !inBackrooms;
     sky.visible = !inBackrooms;
     scene.fog = inBackrooms ? new THREE.Fog(0xb9a95c, 8, 55)
@@ -677,8 +758,12 @@ function animate(){
     document.getElementById('brOverlay').style.display = inBackrooms ? 'block' : 'none';
   }
   if (inBackrooms && cur){
-    buzz.position.set(cur.x, BACKROOMS_FLOOR + 3, cur.y);
-    buzz.intensity = (Math.random() < 0.04) ? 0.15 : 1.1;   // the lights are not well
+    // Two fluorescents ride along with the kart so the corridor is always lit somewhere,
+    // each flickering on its own schedule — one steady tube next to a dying one.
+    brLights.forEach((l, i) => {
+      l.position.set(cur.x + (i ? 9 : -9), BACKROOMS_FLOOR + BR_H - 0.1, cur.y + (i ? -7 : 7));
+      l.intensity = (Math.random() < (i ? 0.10 : 0.02)) ? 0.12 : 1.0;
+    });
   }
   if (cur){
     const gz = cur.z || 0;

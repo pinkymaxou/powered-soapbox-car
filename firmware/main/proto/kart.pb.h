@@ -146,6 +146,7 @@ typedef struct _Hist {
     pb_callback_t rpmr;
     pb_callback_t spd; /* m/s ×10 */
     pb_callback_t batt; /* V ×10 */
+    pb_callback_t loop; /* worst 500 Hz tick per slot, in 50 µs units */
 } Hist;
 
 typedef struct _Pad {
@@ -201,6 +202,8 @@ typedef struct _SysDyn {
     uint32_t heap_free;
     uint32_t heap_min;
     uint32_t ledc_fix; /* LEDC clock sentinel */
+    uint32_t loop_max_us; /* worst 500 Hz tick since last read (budget 2000 µs) */
+    uint32_t sens_max_us; /* worst sensor read (I2C cost alone, no preemption) */
 } SysDyn;
 
 typedef struct _Ok {
@@ -266,12 +269,12 @@ extern "C" {
 #define ParamMeta_init_default                   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {0}, 0, {0}, 0, {0}, 0, {0}}
 #define Config_init_default                      {{{NULL}, NULL}}
 #define Vals_init_default                        {{{NULL}, NULL}}
-#define Hist_init_default                        {0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define Hist_init_default                        {0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Pad_init_default                         {0, {{NULL}, NULL}, 0, 0, 0, 0}
 #define Wifi_init_default                        {0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Ip6_init_default                         {{{NULL}, NULL}, {{NULL}, NULL}}
 #define SysInfo_init_default                     {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
-#define SysDyn_init_default                      {0, 0, 0, 0}
+#define SysDyn_init_default                      {0, 0, 0, 0, 0, 0}
 #define Ok_init_default                          {0}
 #define Msg_init_default                         {0, {Status_init_default}}
 #define Req_init_zero                            {"", "", "", 0, {{NULL}, NULL}}
@@ -280,12 +283,12 @@ extern "C" {
 #define ParamMeta_init_zero                      {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {0}, 0, {0}, 0, {0}, 0, {0}}
 #define Config_init_zero                         {{{NULL}, NULL}}
 #define Vals_init_zero                           {{{NULL}, NULL}}
-#define Hist_init_zero                           {0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define Hist_init_zero                           {0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Pad_init_zero                            {0, {{NULL}, NULL}, 0, 0, 0, 0}
 #define Wifi_init_zero                           {0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Ip6_init_zero                            {{{NULL}, NULL}, {{NULL}, NULL}}
 #define SysInfo_init_zero                        {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
-#define SysDyn_init_zero                         {0, 0, 0, 0}
+#define SysDyn_init_zero                         {0, 0, 0, 0, 0, 0}
 #define Ok_init_zero                             {0}
 #define Msg_init_zero                            {0, {Status_init_zero}}
 
@@ -357,6 +360,7 @@ extern "C" {
 #define Hist_rpmr_tag                            8
 #define Hist_spd_tag                             9
 #define Hist_batt_tag                            10
+#define Hist_loop_tag                            11
 #define Pad_conn_tag                             1
 #define Pad_name_tag                             2
 #define Pad_batt_tag                             3
@@ -397,6 +401,8 @@ extern "C" {
 #define SysDyn_heap_free_tag                     2
 #define SysDyn_heap_min_tag                      3
 #define SysDyn_ledc_fix_tag                      4
+#define SysDyn_loop_max_us_tag                   5
+#define SysDyn_sens_max_us_tag                   6
 #define Msg_status_tag                           1
 #define Msg_config_tag                           2
 #define Msg_vals_tag                             3
@@ -502,7 +508,8 @@ X(a, CALLBACK, SINGULAR, BYTES,    pwmr,              6) \
 X(a, CALLBACK, SINGULAR, BYTES,    rpml,              7) \
 X(a, CALLBACK, SINGULAR, BYTES,    rpmr,              8) \
 X(a, CALLBACK, SINGULAR, BYTES,    spd,               9) \
-X(a, CALLBACK, SINGULAR, BYTES,    batt,             10)
+X(a, CALLBACK, SINGULAR, BYTES,    batt,             10) \
+X(a, CALLBACK, SINGULAR, BYTES,    loop,             11)
 #define Hist_CALLBACK pb_default_field_callback
 #define Hist_DEFAULT NULL
 
@@ -564,7 +571,9 @@ X(a, CALLBACK, SINGULAR, STRING,   mdns,             23)
 X(a, STATIC,   SINGULAR, INT64,    uptime_s,          1) \
 X(a, STATIC,   SINGULAR, UINT32,   heap_free,         2) \
 X(a, STATIC,   SINGULAR, UINT32,   heap_min,          3) \
-X(a, STATIC,   SINGULAR, UINT32,   ledc_fix,          4)
+X(a, STATIC,   SINGULAR, UINT32,   ledc_fix,          4) \
+X(a, STATIC,   SINGULAR, UINT32,   loop_max_us,       5) \
+X(a, STATIC,   SINGULAR, UINT32,   sens_max_us,       6)
 #define SysDyn_CALLBACK NULL
 #define SysDyn_DEFAULT NULL
 
@@ -641,7 +650,7 @@ extern const pb_msgdesc_t Msg_msg;
 #define Ok_size                                  0
 #define ParamVal_size                            28
 #define Status_size                              173
-#define SysDyn_size                              29
+#define SysDyn_size                              41
 
 #ifdef __cplusplus
 } /* extern "C" */

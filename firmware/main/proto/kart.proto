@@ -98,6 +98,7 @@ message Hist {
   bytes  rpmr = 8;
   bytes  spd = 9;               // m/s ×10
   bytes  batt = 10;             // V ×10
+  bytes  loop = 11;             // worst 500 Hz tick per slot, in 50 µs units
 }
 
 message Pad {
@@ -153,6 +154,8 @@ message SysDyn {
   uint32 heap_free = 2;
   uint32 heap_min = 3;
   uint32 ledc_fix = 4;          // LEDC clock sentinel
+  uint32 loop_max_us = 5;       // worst 500 Hz tick since last read (budget 2000 µs)
+  uint32 sens_max_us = 6;       // worst sensor read (I2C cost alone, no preemption)
 }
 
 message Ok {}

@@ -14,7 +14,9 @@ class EspController
 {
 public:
     void init();       // hardware (board/input) + wiring of the core callbacks
-    void tickOnce();   // one complete step: pushed inputs → tick() → host decisions → publication
+    void tickOnce();                  // one complete step: inputs → tick() → host decisions → publish
+    uint32_t loopMaxUs(bool reset);   // worst tick duration (µs) since the last call
+    uint32_t sensMaxUs(bool reset);   // worst SENSOR-READ duration (µs) — I2C cost alone
 
 private:
     SensorReadings readSensors();                 // sensor callback: encoders + Vbat (in battery VOLTS)
@@ -29,6 +31,8 @@ private:
     PowerOffAdvisor m_poweroff;  // power cutoff on prolonged LVC (host decision)
     IdleOffAdvisor m_idle_off;   // power cutoff after N minutes disarmed (host decision)
     bool           m_was_armed = false;   // armed→disarmed edge → configFlushPending
+    uint32_t       m_loop_max_us = 0;     // worst tick duration since the last read
+    uint32_t       m_sens_max_us = 0;     // worst readSensors() duration
     int            m_vbat_tick = 0;        // rate-limit the ADS1115 read (shares bus 0 w/ left enc)
     float          m_pin_v = -1.f;         // last ADC pin voltage (cached between 20 Hz reads)
 };
@@ -37,6 +41,8 @@ private:
 // (5 s watchdog) that calls tickOnce() in a loop. Nothing else.
 namespace Controller
 {
+uint32_t loopMaxUs();   // worst tick (µs) since the last call — diagnostic, resets on read
+uint32_t sensMaxUs();   // worst sensor-read (µs) — separates I2C cost from preemption
 void init();    // to call after configInit
 void start();
 } // namespace Controller

@@ -37,6 +37,15 @@ i2c_master_bus_handle_t   m_bus[2] = {nullptr, nullptr};   // bus 0 = L wheel, b
 i2c_master_dev_handle_t   m_as[2]  = {nullptr, nullptr};   // AS5600 per bus
 int                       m_angle_last[2] = {-1, -1};      // last raw angle per sensor
 Ads1115                   m_ads;                           // external ADC (bus 0), Vbat on A0
+// Vbat read tolerance: consecutive FAILED windows before the voltage is declared unknown.
+// 10 windows at 20 Hz ≈ 0.5 s of silence — long enough to ride out a bus glitch, short
+// enough that a genuinely unplugged sensor is reported before it matters. Recovery is
+// immediate: one good read resets the count.
+constexpr int VBAT_FAIL_LIMIT = 10;
+int                       m_vbat_fails = 0;
+long                      m_vbat_acc = 0;
+int                       m_vbat_n = 0;
+float                     m_vbat_last = -1.f;   // last good reading, held during the tolerance
 
 // LEDC clock SENTINEL — diagnostic + auto-repair of the suspected race:
 // recurring "Interrupt WDT" crash with the PC frozen on a LEDC register WRITE, under
@@ -172,6 +181,29 @@ void initEncoders()
     }
 }
 
+// Scans both buses and logs every device that answers. Without this, "ADS1115 absent" is
+// indistinguishable from "ADS1115 answering at the wrong address" — the ADDR pin picks
+// 0x48..0x4B, and a floating one lands anywhere. Known: 0x36 = AS5600, 0x48..0x4B = ADS1115.
+void i2cScan()
+{
+    for (int b = 0; b < 2; ++b)
+    {
+        if (!m_bus[b]) continue;
+        char found[96] = "";
+        size_t n = 0;
+        for (uint8_t addr = 0x08; addr < 0x78; ++addr)
+        {
+            if (ESP_OK != i2c_master_probe(m_bus[b], addr, 5)) continue;
+            const char* what = (0x36 == addr) ? " AS5600"
+                             : (addr >= 0x48 && addr <= 0x4B) ? " ADS1115" : "";
+            n += snprintf(found + n, sizeof(found) - n, " 0x%02X%s", addr, what);
+            if (n >= sizeof(found) - 16) break;
+        }
+        if (0 == n) ESP_LOGW(TAG, "I2C bus %d: NOTHING answers (wiring/pull-ups/power?)", b);
+        else        ESP_LOGI(TAG, "I2C bus %d:%s", b, found);
+    }
+}
+
 // Presence of each AS5600: last I2C read succeeded? (refreshed at 500 Hz by the
 // control loop via angleDelta → feeds the "encoder absent" faults per wheel).
 std::atomic<bool> m_enc_present[2] = {false, false};
@@ -182,14 +214,33 @@ std::atomic<bool> m_mag_ok[2] = {true, true};
 int m_mag_tick = 0;
 
 // Raw 12-bit angle (0..4095) of sensor `i`. Returns -1 if absent/error.
+// BACK OFF on a sensor that has gone silent. A missing AS5600 costs a full I2C timeout on
+// EVERY tick, and measured on the bench that alone stretched the worst 500 Hz tick to 4-9.5 ms
+// against a 2 ms budget — the loop running at a fifth of its rate because one wheel was
+// unplugged. Once a sensor is known absent we stop asking every tick and probe it at 5 Hz
+// instead; the amortised cost collapses and recovery is still automatic and prompt.
+// The two sensors retry on OPPOSITE phases so two dead encoders never time out on one tick.
+constexpr unsigned ENC_RETRY_TICKS = 100;   // 500 Hz / 100 = 5 Hz while absent
+unsigned m_enc_retry[2] = {0, 0};
+
 int readAngleRaw(int i)
 {
     if (!m_as[i]) return -1;
+    if (!m_enc_present[i].load())
+    {
+        // Absent: only spend a timeout on the retry tick (phase 0 for the left, 50 for the
+        // right), and skip the bus entirely the rest of the time.
+        // Phases 7 and 57: 50 ticks apart so the two never collide with each other, and
+        // neither is a multiple of VBAT_READ_TICKS (25) so neither lands on a battery read.
+        const unsigned phase = m_enc_retry[i]++ % ENC_RETRY_TICKS;
+        if (phase != (i ? 57u : 7u)) return -1;
+    }
     const uint8_t reg = hw::AS5600_REG_RAWANG;
     uint8_t buf[2] = {0, 0};
     if (ESP_OK != i2c_master_transmit_receive(m_as[i], &reg, 1, buf, 2, hw::I2C_XFER_TIMEOUT_MS))
     {
         m_enc_present[i].store(false);
+        m_angle_last[i] = -1;   // the next good read re-anchors instead of inventing a jump
         return -1;
     }
     m_enc_present[i].store(true);
@@ -259,6 +310,7 @@ void board::init()
     initLED();
     initMotors();
     initEncoders();   // 2 I2C buses + 2 AS5600 sensors
+    i2cScan();        // log what ACTUALLY answers, before anything is declared absent
     initExtAdc();     // ADS1115 on bus 0 (after the buses are created)
     initButton();
     board::led(false);
@@ -269,6 +321,37 @@ void board::led(bool on)
     gpio_set_level(pins::LED, on ? 1 : 0);
 }
 
+// ONE sample per call, averaged over ADC_OVERSAMPLE calls. Called every tick: the 8 reads
+// that used to be done back-to-back cost ~3 ms on that single tick — measured, with every
+// read SUCCEEDING, so it was never about failures. Spread out, the peak drops to one
+// transaction while the averaging and the ~20 Hz output cadence are unchanged.
+float board::vbatSample()
+{
+    if (!m_ads.ok()) return -1.0f;
+    int16_t raw = 0;
+    if (m_ads.readRaw(raw))
+    {
+        m_vbat_fails = 0;
+        m_vbat_acc += raw;
+        if (++m_vbat_n >= hw::ADC_OVERSAMPLE)
+        {
+            m_vbat_last = m_ads.toVolts(static_cast<int16_t>(m_vbat_acc / m_vbat_n));
+            m_vbat_acc = 0;
+            m_vbat_n = 0;
+        }
+        return m_vbat_last;
+    }
+    // Failed read: hold the last good value, and only admit "unknown" past the threshold.
+    if (++m_vbat_fails < VBAT_FAIL_LIMIT) return m_vbat_last;
+    if (VBAT_FAIL_LIMIT == m_vbat_fails)
+    {
+        ESP_LOGW(TAG, "ADS1115 silent for %d reads → Vbat unknown (auto-recovers)", VBAT_FAIL_LIMIT);
+    }
+    m_vbat_acc = 0;
+    m_vbat_n = 0;
+    return -1.0f;
+}
+
 float board::vbatVolts(int n)
 {
     if (!m_ads.ok())
@@ -276,22 +359,39 @@ float board::vbatVolts(int n)
         return -1.0f;   // sensor absent → voltage unknown (the controller skips the LVC)
     }
     // Average of n readings of the conversion register (continuous mode) → voltage at pin A0.
+    // BAIL OUT on the first failure instead of hammering the remaining n-1 times: if the chip
+    // has gone quiet, each attempt costs a full I2C timeout, and this runs inside the 500 Hz
+    // control loop. One failed read is enough to know this window is a write-off.
     long acc = 0;
     int  got = 0;
     for (int k = 0; k < n; ++k)
     {
         int16_t raw = 0;
-        if (m_ads.readRaw(raw))
-        {
-            acc += raw;
-            ++got;
-        }
+        if (!m_ads.readRaw(raw)) break;
+        acc += raw;
+        ++got;
     }
-    if (0 == got)
+    if (got > 0)
     {
-        return 0.0f;
+        m_vbat_fails = 0;                     // any good read clears the count immediately
+        m_vbat_last = m_ads.toVolts(static_cast<int16_t>(acc / got));
+        return m_vbat_last;
     }
-    return m_ads.toVolts(static_cast<int16_t>(acc / got));
+    // The window failed. Do NOT cry wolf on one glitch — a single dropped transaction on a
+    // shared bus is normal. Hold the last good value and keep counting; only past the
+    // threshold (~0.5 s at 20 Hz) do we admit the voltage is unknown.
+    // Returning 0.0 here used to be a real bug: 0 is a perfectly valid voltage to the caller,
+    // so vbat_ok stayed true, NO_VBAT was never raised, and the LVC read "0 V" — below every
+    // cutoff — disarmed the kart and cut the power 30 s later, blaming a flat battery.
+    if (++m_vbat_fails < VBAT_FAIL_LIMIT)
+    {
+        return m_vbat_last;
+    }
+    if (VBAT_FAIL_LIMIT == m_vbat_fails)
+    {
+        ESP_LOGW(TAG, "ADS1115 silent for %d reads → Vbat unknown (auto-recovers)", VBAT_FAIL_LIMIT);
+    }
+    return -1.0f;
 }
 
 void board::motorsSet(float l, float r, uint32_t cap)
@@ -321,17 +421,28 @@ bool board::encRightMagOk() { return m_mag_ok[1].load(); }
 
 // Poll the AS5600 STATUS register (0x0B) for both buses at ~10 Hz (MAG_READ_TICKS). Magnet OK
 // = MD set AND not too weak (ML) AND not too strong (MH). On read failure, keep the last value.
+// STAGGERED, one bus per poll, and deliberately off the ticks where Vbat is read. Every I2C
+// call here can block for a full timeout if its sensor has gone quiet, so what matters is not
+// the average cost but how many of them can pile onto the SAME tick. Reading both buses
+// together, on a tick that was also a Vbat tick, put 5 potentially-timing-out transactions on
+// one tick; one bus at a time, phase-shifted, caps it at 3.
 void board::refreshMagStatus()
 {
-    if (0 != (m_mag_tick++ % hw::MAG_READ_TICKS)) return;
-    for (int i = 0; i < 2; ++i)
-    {
-        if (!m_as[i]) { m_mag_ok[i].store(false); continue; }
-        const uint8_t reg = hw::AS5600_REG_STATUS;
-        uint8_t s = 0;
-        if (ESP_OK == i2c_master_transmit_receive(m_as[i], &reg, 1, &s, 1, hw::I2C_XFER_TIMEOUT_MS))
-            m_mag_ok[i].store((s & hw::AS5600_MD) && !(s & hw::AS5600_ML) && !(s & hw::AS5600_MH));
-    }
+    const unsigned tick = m_mag_tick++;
+    // Phase 13 and 38: never a multiple of VBAT_READ_TICKS (25), so a magnet poll and a
+    // battery read can never land on the same tick.
+    const unsigned phase = tick % hw::MAG_READ_TICKS;
+    int i;
+    if (13 == phase)      i = 0;
+    else if (38 == phase) i = 1;
+    else                  return;
+
+    if (!m_as[i]) { m_mag_ok[i].store(false); return; }
+    if (!m_enc_present[i].load()) return;   // already known absent: do not pay a second timeout
+    const uint8_t reg = hw::AS5600_REG_STATUS;
+    uint8_t s = 0;
+    if (ESP_OK == i2c_master_transmit_receive(m_as[i], &reg, 1, &s, 1, hw::I2C_XFER_TIMEOUT_MS))
+        m_mag_ok[i].store((s & hw::AS5600_MD) && !(s & hw::AS5600_ML) && !(s & hw::AS5600_MH));
 }
 
 void board::pollButtons()

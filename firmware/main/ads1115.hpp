@@ -11,6 +11,8 @@
 
 #include "driver/i2c_master.h"
 
+#include "control_types.hpp"   // hw::I2C_XFER_TIMEOUT_MS
+
 class Ads1115
 {
 public:

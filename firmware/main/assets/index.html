@@ -25,6 +25,8 @@
   <canvas id="chart" width="520" height="180"></canvas>
   <div class="chart-title">🏎️ Vehicle speed (m/s, 0 while pivoting) — 1 min</div>
   <canvas id="spdchart" width="520" height="90"></canvas>
+  <div class="chart-title">⏱️ Worst control tick (ms) — 10 min · budget 2 ms</div>
+  <canvas id="loopchart" width="520" height="90"></canvas>
   <div class="chart-title" id="batttitle">🔋 Battery — 30 min</div>
   <canvas id="battchart" width="520" height="90"></canvas>
   <div id="bars"></div>
@@ -425,7 +427,8 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
  Vals:{fields:{params:{rule:"repeated",type:"ParamVal",id:1}}},
  Hist:{fields:{dt_fast:{type:"uint32",id:1},dt_spd:{type:"uint32",id:2},dt_batt:{type:"uint32",id:3},
   accel:{type:"bytes",id:4},pwml:{type:"bytes",id:5},pwmr:{type:"bytes",id:6},
-  rpml:{type:"bytes",id:7},rpmr:{type:"bytes",id:8},spd:{type:"bytes",id:9},batt:{type:"bytes",id:10}}},
+  rpml:{type:"bytes",id:7},rpmr:{type:"bytes",id:8},spd:{type:"bytes",id:9},batt:{type:"bytes",id:10},
+  loop:{type:"bytes",id:11}}},
  Pad:{fields:{conn:{type:"bool",id:1},name:{type:"string",id:2},batt:{type:"int32",id:3},
   calibrated:{type:"bool",id:4},calstate:{type:"int32",id:5},pairing:{type:"bool",id:6}}},
  Wifi:{fields:{enabled:{type:"bool",id:1},ssid:{type:"string",id:2},connected:{type:"bool",id:3},
@@ -440,7 +443,8 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
   ip_sta:{type:"string",id:20},ip6_ap:{rule:"repeated",type:"Ip6",id:21},
   ip6_sta:{rule:"repeated",type:"Ip6",id:22},mdns:{type:"string",id:23}}},
  SysDyn:{fields:{uptime_s:{type:"int64",id:1},heap_free:{type:"uint32",id:2},
-  heap_min:{type:"uint32",id:3},ledc_fix:{type:"uint32",id:4}}},
+  heap_min:{type:"uint32",id:3},ledc_fix:{type:"uint32",id:4},
+  loop_max_us:{type:"uint32",id:5}}},
  Ok:{fields:{}},
  Msg:{oneofs:{body:{oneof:["status","config","vals","hist","pad","wifi","sysinfo","sysdyn","ok"]}},
   fields:{status:{type:"Status",id:1},config:{type:"Config",id:2},vals:{type:"Vals",id:3},
@@ -494,7 +498,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 
 // ── Charts (Chart.js, embedded/served by the ESP32; data kept in RAM) ──
 // Main: accel + PWM in % over 10 min. Vehicle speed: m/s (0–5) over 1 min. Battery: V over 30 min.
-let chMain, chSpd, chBatt;
+let chMain, chSpd, chBatt, chLoop;
 const dset=(label,color,yID)=>({label,borderColor:color,backgroundColor:color,data:[],borderWidth:1.5,fill:false,tension:.15,yAxisID:yID||'y'});
 function mkChart(id,datasets,ymin,ymax,unit,dec,aspect,legend,y2){
  const scales={
@@ -517,6 +521,9 @@ function initCharts(){
    dset('RPM L','#ff9a9a','y2'),dset('RPM R','#9ff0be','y2')],0,100,'%',0,2.9,true,{max:1100,unit:' rpm'});
  chSpd =mkChart('spdchart',[dset('Speed','#f6f')],0,5,' m/s',1,5.8,false);
  chBatt=mkChart('battchart',[dset('Battery','#3d9')],battLow,battFull,' V',1,5.8,false);
+ // Worst tick per 5 s slot. The 2 ms budget is the reference: above it the 500 Hz loop
+ // really did run slower, which is how a sensor that stops answering shows itself.
+ chLoop=mkChart('loopchart',[dset('Worst tick','#f5a')],0,6,' ms',1,5.8,false);
 }
 function setSeries(ch,idx,arr){
  ch.data.datasets[idx].data=arr.map((y,i)=>({x:i,y}));
@@ -532,6 +539,7 @@ function applyHist(m){
  chMain.update('none');
  if(Array.isArray(m.spd)){ setSeries(chSpd,0,m.spd.map(v=>v/10)); chSpd.update('none'); }   // ×10 → m/s
  if(Array.isArray(m.batt)){ setSeries(chBatt,0,m.batt.map(v=>v/10)); chBatt.update('none'); } // ×10 → V
+ if(Array.isArray(m.loop)){ setSeries(chLoop,0,m.loop.map(v=>v*50/1000)); chLoop.update('none'); } // 50 µs → ms
 }
 
 const OUI=v=>v?'YES':'no';
@@ -917,8 +925,15 @@ function loadSys(){sendReq({type:sysBuilt?'sysdyn':'sysinfo'});}
 function upt(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
  return (d?d+'d ':'')+h+'h '+m+'m '+(s%60)+'s';}
 const heapTxt=m=>`${(m.heap_free/1024).toFixed(1)} KB (min ${(m.heap_min/1024).toFixed(1)} KB)`;
+// Worst 500 Hz tick since the last look. Budget is 2000 µs; a sensor that stops answering
+// costs one I²C timeout, so this is where that shows up.
+const loopTxt=us=>{const pct=(us/2000*100).toFixed(0);
+ const col=us>2000?'var(--red)':us>1200?'var(--amber)':'var(--green)';
+ return `<b style="color:${col}">${us} µs</b> <small>(${pct} % of the 2000 µs budget)</small>`;};
 function showSysDyn(m){
  const u=document.getElementById('sysup'),h=document.getElementById('sysheap');
+ const lp=document.getElementById('sysloop');
+ if(lp&&m.loop_max_us!==undefined)lp.innerHTML=loopTxt(m.loop_max_us);
  if(u)u.textContent=upt(m.uptime_s);
  if(h)h.textContent=heapTxt(m);
 }
@@ -931,6 +946,7 @@ function showSys(m){
   r('Chip',`${m.chip} rev ${m.rev} · ${m.cores} cores · ${m.flash_mb} MB flash`)+
   `<tr><th>Uptime</th><td id="sysup">${upt(m.uptime_s)}</td></tr>`+r('Last reset cause',m.reset)+
   `<tr><th>Free heap</th><td id="sysheap">${heapTxt(m)}</td></tr>`+
+  `<tr><th>Worst control tick</th><td id="sysloop">—</td></tr>`+
   r('Access point MAC',m.mac_ap)+r('Station MAC',m.mac_sta)+
   r('mDNS name',m.mdns?`<a href="http://${m.mdns}.local/">${m.mdns}.local</a>`:'—')+
   r('AP — SSID',m.ap_ssid)+r('AP — IPv4',m.ip_ap)+r('AP — IPv6',fmt6(m.ip6_ap))+

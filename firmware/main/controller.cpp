@@ -15,6 +15,10 @@
 // battery conversion, divider ratio, is done HERE, not in the core).
 SensorReadings EspController::readSensors()
 {
+    // Timed separately from the whole tick: loop_max_us is WALL CLOCK and so also counts
+    // preemption by Wi-Fi/BT, which would otherwise be blamed on the sensors. This one is
+    // the I2C cost alone.
+    const int64_t t0 = esp_timer_get_time();
     SensorReadings s;
     s.enc_delta_l = board::encLeftDelta();
     s.enc_delta_r = board::encRightDelta();
@@ -26,10 +30,14 @@ SensorReadings EspController::readSensors()
     // Read Vbat only at ~20 Hz (VBAT_READ_TICKS), not every tick: the ADS1115 shares I2C bus 0
     // with the LEFT AS5600, and polling it (×ADC_OVERSAMPLE) every tick jittered the left
     // encoder's read timing → RPM dips. The control loop only consumes Vbat at 20 Hz anyway.
-    if (0 == (m_vbat_tick++ % hw::VBAT_READ_TICKS)) m_pin_v = board::vbatVolts(hw::ADC_OVERSAMPLE);
+    // One ADS1115 read per tick for ADC_OVERSAMPLE ticks out of every VBAT_READ_TICKS, rather
+    // than all of them on one tick: same average, same ~20 Hz refresh, a fraction of the peak.
+    if ((m_vbat_tick++ % hw::VBAT_READ_TICKS) < hw::ADC_OVERSAMPLE) m_pin_v = board::vbatSample();
     s.motor_pwr = board::motorPowerLive();
     s.vbat_ok = (m_pin_v >= 0.f);
     s.vbat_v = s.vbat_ok ? m_pin_v * hw::VBAT_DIV_RATIO : -1.f;
+    const uint32_t d = static_cast<uint32_t>(esp_timer_get_time() - t0);
+    if (d > m_sens_max_us) m_sens_max_us = d;
     return s;
 }
 
@@ -105,6 +113,9 @@ void EspController::init()
 
 void EspController::tickOnce()
 {
+    // Worst tick since the last read, published in the telemetry. A sensor that goes quiet
+    // costs an I2C timeout, and this is what makes that cost VISIBLE instead of suspected.
+    const int64_t t_begin = esp_timer_get_time();
     board::pollButtons();               // sampling/debounce of the START button
     pushPad();
     m_ctrl.setStartButton(board::btnStart());
@@ -126,6 +137,23 @@ void EspController::tickOnce()
     m_was_armed = t.armed;
 
     publish(t);
+
+    const uint32_t dur = static_cast<uint32_t>(esp_timer_get_time() - t_begin);
+    if (dur > m_loop_max_us) m_loop_max_us = dur;
+}
+
+uint32_t EspController::loopMaxUs(bool reset)
+{
+    const uint32_t v = m_loop_max_us;
+    if (reset) m_loop_max_us = 0;
+    return v;
+}
+
+uint32_t EspController::sensMaxUs(bool reset)
+{
+    const uint32_t v = m_sens_max_us;
+    if (reset) m_sens_max_us = 0;
+    return v;
 }
 
 // ── Bootstrap: the instance, the 500 Hz task, the loop over tickOnce(). Nothing else. ──
@@ -151,6 +179,16 @@ namespace Controller
 void init()
 {
     m_controller.init();
+}
+
+uint32_t loopMaxUs()
+{
+    return m_controller.loopMaxUs(true);
+}
+
+uint32_t sensMaxUs()
+{
+    return m_controller.sensMaxUs(true);
 }
 
 void start()
