@@ -171,6 +171,10 @@ struct KartConfig
     float vlim_ki;
     float vlim_kd;
     float   turn_gain;      // share of the differential at full X stick (0..1)
+    int32_t mix_type;       // stick→motor mixing: 0 linear, 1 expo, 2 expo+speed-soft (mixer.hpp)
+    float   mix_expo_fwd;   // expo strength on the throttle axis (0 = linear, 1 = cubic)
+    float   mix_expo_turn;  // expo strength on the steering axis
+    float   mix_soft_hi;    // SOFT mixer: accelerating-throttle authority left at the speed limit (0..1)
     int32_t turn_limit_en;  // 1 = rollover protection active (speed→turn ramp); 0 = disabled (testing)
     float   turn_full_ms;   // below this speed (m/s), turn ±100% (pivot allowed) — rollover protection
     float   turn_hi;        // turn limit (0..1) reached at speed_limit_ms (1/v iso-a_lat curve)

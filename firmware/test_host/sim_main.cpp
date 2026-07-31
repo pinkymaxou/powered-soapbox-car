@@ -135,6 +135,19 @@ void testScenarios()
         CHECK(std::fabs(r.final_v) < 0.2f);   // stopped by the end of the scenario
     }
 
+    // Pluggable mixing: the feel curves must cost neither the top end nor the brake.
+    {
+        const RunResult r = run(get("mix_expo"));
+        CHECK(r.ever_armed && !r.ever_fault);
+        CHECK(r.max_v > 2.0f);              // expo(±1) = ±1: full stick keeps the top end
+    }
+    {
+        const RunResult r = run(get("mix_soft"));
+        CHECK(r.ever_armed && !r.ever_fault);
+        CHECK(r.max_v > 1.8f);              // tapered, yet it still properly drives
+        CHECK(r.final_v < 0.f);             // the plugging brake kept FULL authority through zero
+    }
+
     // Heartbeat: loss of reports at full speed → disarmed quickly, kart stops.
     {
         const RunResult r = run(get("heartbeat_perte"));

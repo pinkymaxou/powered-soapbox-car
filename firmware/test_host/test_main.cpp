@@ -8,6 +8,7 @@
 #include <string>
 
 #include "control_math.hpp"
+#include "mixer.hpp"
 #include "pid.hpp"
 #include "ringbuffer.hpp"
 
@@ -247,6 +248,63 @@ static void test_ring()
     CHECK(2 == lin[0] && 3 == lin[1]);
 }
 
+// Pluggable stick→motor mixing (mixer.hpp): the expo curve's contract, then each mixer.
+static void test_mixers()
+{
+    // The expo curve: endpoints exact, sign preserved, never AMPLIFIES (that is what lets
+    // the rollover clamp survive any mixer), monotonic, e=0 = identity.
+    CHECK(near(mixdet::expo(1.f, 0.7f), 1.f));
+    CHECK(near(mixdet::expo(-1.f, 0.7f), -1.f));
+    CHECK(near(mixdet::expo(0.4f, 0.f), 0.4f));                       // e=0 → identity
+    CHECK(near(mixdet::expo(0.5f, 1.f), 0.125f));                     // e=1 → pure cubic
+    CHECK(near(mixdet::expo(0.5f, 0.5f), 0.3125f));                   // the blend
+    CHECK(near(mixdet::expo(0.5f, 0.5f), -mixdet::expo(-0.5f, 0.5f)));// odd function
+    for (float x = 0.f; x <= 1.001f; x += 0.05f)
+    {
+        CHECK(std::fabs(mixdet::expo(x, 0.6f)) <= x + 1e-6f);         // |expo| ≤ |x|
+        if (x > 0.f) CHECK(mixdet::expo(x, 0.6f) > mixdet::expo(x - 0.05f, 0.6f));  // monotonic
+    }
+
+    KartConfig cfg{};
+    cfg.turn_gain = 1.f;
+    cfg.mix_expo_fwd = 0.5f;
+    cfg.mix_expo_turn = 0.5f;
+    cfg.mix_soft_hi = 0.6f;
+    cfg.speed_limit_ms = 3.3f;
+    cfg.rev_speed_ms = 1.0f;
+    float ll, lr, el, er, sl, sr;
+
+    // Type 0 ≡ the historical mixArcade, and any unknown type falls back to it.
+    mixerFor(0).mix(0.5f, 0.3f, 2.f, cfg, ll, lr);
+    float rl, rr;
+    ctl::mixArcade(0.5f, 0.3f, cfg.turn_gain, rl, rr);
+    CHECK(near(ll, rl) && near(lr, rr));
+    mixerFor(99).mix(0.5f, 0.3f, 2.f, cfg, el, er);
+    CHECK(near(el, ll) && near(er, lr));
+
+    // EXPO: softer than linear at half stick, identical at full stick.
+    mixerFor(1).mix(0.5f, 0.f, 0.f, cfg, el, er);
+    CHECK(near(el, 0.3125f) && near(er, 0.3125f));                    // 31% instead of 50%
+    mixerFor(1).mix(1.f, 0.f, 0.f, cfg, el, er);
+    CHECK(near(el, 1.f) && near(er, 1.f));                            // stops keep full power
+
+    // SOFT accelerating: authority tapers with speed — ×soft_hi at the limit.
+    mixerFor(2).mix(0.5f, 0.f, 0.f, cfg, sl, sr);
+    CHECK(near(sl, 0.3125f));                                         // standstill = plain expo
+    mixerFor(2).mix(0.5f, 0.f, cfg.speed_limit_ms, cfg, sl, sr);
+    CHECK(near(sl, 0.3125f * 0.6f));                                  // at Vmax: ×mix_soft_hi
+    mixerFor(2).mix(0.5f, 0.f, 0.5f * cfg.speed_limit_ms, cfg, sl, sr);
+    CHECK(near(sl, 0.3125f * 0.8f));                                  // halfway: linear taper
+    // SOFT braking (command opposes the motion): NEVER tapered, in both directions.
+    mixerFor(2).mix(-0.5f, 0.f, cfg.speed_limit_ms, cfg, sl, sr);     // reverse cmd, rolling fwd
+    CHECK(near(sl, -0.3125f));
+    mixerFor(2).mix(0.5f, 0.f, -cfg.rev_speed_ms, cfg, sl, sr);       // fwd cmd, rolling back
+    CHECK(near(sl, 0.3125f));
+    // Reverse taper uses the REVERSE limit as its reference.
+    mixerFor(2).mix(-0.5f, 0.f, -cfg.rev_speed_ms, cfg, sl, sr);
+    CHECK(near(sl, -0.3125f * 0.6f));
+}
+
 int main()
 {
     test_clampf();
@@ -260,6 +318,7 @@ int main()
     test_rev_detect();
     test_pid();
     test_ring();
+    test_mixers();
 
     if (0 == g_failures)
     {

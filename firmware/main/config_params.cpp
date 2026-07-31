@@ -34,6 +34,20 @@ extern constexpr ParamDesc PARAMS[] =
     {"turn_rate",       "Turn smoothness (D/s)",    "Gamepad",
      "Maximum slope of the turn command (full scale per second). Smooths abrupt stick moves.",
      PType::Float, {.f = 0.3f}, {.f = 3.0f}, {.f = 20.f}, {.f = &KartConfig::turn_rate}},
+    // Pluggable stick→motor mixing (mixer.hpp). The rollover protection, speed limiter and
+    // PWM caps apply outside the mixer regardless of the type chosen here.
+    {"mix_type",        "Mixing type (0/1/2)",     "Drive feel",
+     "How the stick maps to the motors. 0 = linear (historical). 1 = expo: gentle around center, full authority at the stops. 2 = expo + speed-soft: like 1, and the accelerating throttle gets gentler as the kart speeds up — braking always keeps full authority. 1 or 2 recommended for a child.",
+     PType::Int,   {.i = 0}, {.i = 0}, {.i = 2}, {.i = &KartConfig::mix_type}},
+    {"mix_expo_fwd",    "Expo throttle (0-1)",     "Drive feel",
+     "Exponential strength on the throttle axis (mixing types 1 and 2). 0 = linear, 1 = cubic (softest mid-range). Half-stick gives 31% drive at 0.5 instead of 50%.",
+     PType::Float, {.f = 0.f}, {.f = 0.5f}, {.f = 1.f}, {.f = &KartConfig::mix_expo_fwd}},
+    {"mix_expo_turn",   "Expo steering (0-1)",     "Drive feel",
+     "Exponential strength on the steering axis (mixing types 1 and 2). Tames twitchy steering around center without giving up the full pivot at the stops.",
+     PType::Float, {.f = 0.f}, {.f = 0.6f}, {.f = 1.f}, {.f = &KartConfig::mix_expo_turn}},
+    {"mix_soft_hi",     "Throttle left at Vmax",   "Drive feel",
+     "Mixing type 2 only: share of throttle authority left when the kart is at its speed limit (tapers linearly with measured speed; encoders required). Braking is never tapered.",
+     PType::Float, {.f = 0.2f}, {.f = 0.6f}, {.f = 1.f}, {.f = &KartConfig::mix_soft_hi}},
     // "iso-a_lat" rollover protection: turn ±100% below turn_full_ms (and everywhere
     // 1/v allows it), then limit ∝ 1/v up to turn_hi at speed_limit_ms (MEASURED speed),
     // and it keeps tightening beyond (runaway).

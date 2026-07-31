@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "mixer.hpp"
+
 namespace
 {
 using ctl::clampf;
@@ -324,7 +326,9 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         if (m_cfg.open_loop != 0)
         {
             // OPEN-LOOP TEST MODE: the mixed stick goes straight to the motors — NO forward/
-            // turn smoothing, NO rollover limit, NO speed-limiter PID, NO active (PID) braking.
+            // turn smoothing, NO rollover limit, NO speed-limiter PID, NO active (PID) braking,
+            // and always the plain LINEAR mix (a diagnostic mode must not depend on the
+            // feel curve selected in mix_type).
             // The output PWM cap (battery-voltage / manual duty) still bounds the drive, and
             // every safety gate (arming, heartbeat, e-stop, blocking faults) is unchanged
             // upstream. Releasing the stick engages DYNAMIC braking (motor short-circuit) — a
@@ -368,8 +372,13 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
                 m_turn_cmd = turn;   // keeps the state bounded (no ramp windup beyond the limit)
             }
 
-            // Differential arcade mixing (pivot in place possible if fwd≈0).
-            mixArcade(fwd, turn, m_cfg.turn_gain, out_l, out_r);
+            // Stick→motor mixing, pluggable (mixer.hpp): linear / expo / expo+speed-soft,
+            // chosen from the web config. `turn` is already rollover-clamped above, and expo
+            // only ever shrinks a magnitude, so no mixing type can widen that limit; the
+            // speed limiter and PWM caps below apply to every type alike. v_veh (not v_meas):
+            // without encoders the speed-adaptive type degrades to plain expo, like the
+            // other speed-driven safeties.
+            mixerFor(m_cfg.mix_type).mix(fwd, turn, v_veh, m_cfg, out_l, out_r);
 
             // Global speed cap (preserves the turn ratio) via PID on the average speed.
             // Target based on the MEASURED DIRECTION: forward → speed_limit_ms, reverse → rev_speed_ms. On the

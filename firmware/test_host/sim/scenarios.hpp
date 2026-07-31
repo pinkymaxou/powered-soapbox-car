@@ -111,6 +111,34 @@ inline std::vector<Scenario> allScenarios()
 {
     std::vector<Scenario> v;
 
+    // Pluggable stick→motor mixing (mixer.hpp): the child-friendly curves must soften the
+    // MIDDLE of the stick (proven exactly by the host unit tests) without costing the top
+    // end or the braking authority — which is what these two check behaviorally.
+    v.push_back({
+        "mix_expo",
+        "EXPO mixing: full stick still reaches full speed",
+        10.f,
+        [](KartConfig& c) { c.mix_type = 1; },
+        nullptr,
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = 1.f;
+            return c;
+        }});
+    v.push_back({
+        "mix_soft",
+        "SOFT mixing: tapered acceleration, braking keeps FULL authority",
+        12.f,
+        [](KartConfig& c) { c.mix_type = 2; },
+        nullptr,
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = (t < 8.f) ? 1.f : -1.f;   // drive at the taper, then hard plugging brake
+            return c;
+        }});
+
     // EXTREME — THE project test: full throttle then a hard-turn step, protection active.
     v.push_back({
         "virage_pleine_vitesse",
