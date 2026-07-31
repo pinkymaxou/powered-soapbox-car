@@ -459,6 +459,8 @@ const brLights = [];
     m.position.set(x, BACKROOMS_FLOOR + BR_H/2, z);
     backrooms.add(m);
   };
+  // ⚠️ C++ MIRROR: the SAME hash makes these walls SOLID in the physics
+  // (backroomsWallAt, test_host/sim/terrain.hpp) — change one side, change the other.
   for (let i = -N; i <= N; i++){
     for (let j = -N; j <= N; j++){
       const h = (((i * 73856093) ^ (j * 19349663)) >>> 0);

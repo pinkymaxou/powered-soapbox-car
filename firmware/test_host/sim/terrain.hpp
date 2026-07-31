@@ -78,4 +78,60 @@ inline bool inShed(float x, float y)
            (y > SHED_CY - ix) && (y < SHED_CY + ix);
 }
 
+// The shed's three solid walls (the -x face is the door). Collision only — before this,
+// the walls were viewer decor and you could fall into the Backrooms by clipping through
+// the BACK wall, which rather undermined the one-way-door gag.
+inline bool shedWallAt(float x, float y)
+{
+    const float dx = x - SHED_CX, dy = y - SHED_CY;
+    const float out = SHED_HALF + 0.25f;               // + kart body margin
+    const float in  = SHED_HALF - SHED_WALL - 0.25f;
+    if (std::fabs(dx) > out || std::fabs(dy) > out) return false;   // clear of the shed
+    if (std::fabs(dx) < in && std::fabs(dy) < in) return false;     // inside the room
+    return dx > -in;   // in the wall ring — except the -x band, which is the doorway
+}
+
+// ─────────────────────── Backrooms walls 🧱 (collision) ───────────────────────
+// Same PROCEDURAL layout as the viewer draws — ⚠️ JS MIRROR in tools/sim_viewer.html,
+// identical hash and constants; change one side, change the other. Grid of S-metre cell
+// lines; each line segment carries a wall or not from a hash of its indices. The JS only
+// RENDERS them; this is what makes them SOLID (Vehicle::wall_fn — walls you could drive
+// straight through broke the illusion). Both sides use int32 arithmetic: |i|,|j| ≤ N keeps
+// the products far from overflow, and the JS ^ operator coerces to int32 exactly the same.
+constexpr float BR_GRID_S    = 8.f;     // cell size (m)
+constexpr int   BR_GRID_N    = 7;       // segments exist for indices in [-N..N]
+constexpr float BR_WALL_HALF = 0.41f;   // collision half-thickness: 0.11 visual + kart margin
+
+inline uint32_t brHash(int i, int j)
+{
+    return static_cast<uint32_t>((i * 73856093) ^ (j * 19349663));
+}
+inline bool brWallX(int i, int j)   // segment along X: x ∈ [iS, (i+1)S], y = jS
+{
+    return brHash(i, j) % 10u < 6u;
+}
+inline bool brWallZ(int i, int j)   // segment along Y: x = iS, y ∈ [jS, (j+1)S]
+{
+    return (brHash(i, j) >> 4) % 10u < 6u;
+}
+
+inline bool backroomsWallAt(float x, float y)
+{
+    const int i0 = static_cast<int>(std::floor(x / BR_GRID_S));
+    const int j0 = static_cast<int>(std::floor(y / BR_GRID_S));
+    // The point sits in cell (i0, j0): test the two X-walls on its north/south lines and
+    // the two Z-walls on its west/east lines — never more than four candidates.
+    for (int j = j0; j <= j0 + 1; ++j)
+    {
+        if (i0 < -BR_GRID_N || i0 > BR_GRID_N || j < -BR_GRID_N || j > BR_GRID_N) continue;
+        if (brWallX(i0, j) && std::fabs(y - j * BR_GRID_S) < BR_WALL_HALF) return true;
+    }
+    for (int i = i0; i <= i0 + 1; ++i)
+    {
+        if (i < -BR_GRID_N || i > BR_GRID_N || j0 < -BR_GRID_N || j0 > BR_GRID_N) continue;
+        if (brWallZ(i, j0) && std::fabs(x - i * BR_GRID_S) < BR_WALL_HALF) return true;
+    }
+    return false;
+}
+
 } // namespace sim

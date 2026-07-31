@@ -433,6 +433,11 @@ int driveInteractive()
     veh.ground_fn = [&backrooms](float x, float y) {
         return backrooms ? BACKROOMS_FLOOR : terrainH(x, y);
     };   // jumps possible!
+    // Solid walls: the shed's three closed faces up top (enter by the DOOR or not at all),
+    // the procedural wall grid down below. Same layout the viewer draws (terrain.hpp).
+    veh.wall_fn = [&backrooms](float x, float y) {
+        return backrooms ? backroomsWallAt(x, y) : shedWallAt(x, y);
+    };
     PadCmd cmd;
     SimController ctrl(veh, [&cmd](float) { return cmd; });
 

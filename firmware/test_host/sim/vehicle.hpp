@@ -93,8 +93,7 @@ public:
             m_w = 0.f;
             m_roll += (m_roll > 0 ? 1.f : -1.f) * 2.5f * dt;
             if (std::fabs(m_roll) > 1.48f) m_roll = (m_roll > 0 ? 1.48f : -1.48f);
-            m_x += m_v * std::cos(m_h) * dt;
-            m_y += m_v * std::sin(m_h) * dt;
+            integrate(dt);
             m_t += dt;
             m_power_w = 0.f;
             m_il = m_ir = 0.f;
@@ -139,8 +138,7 @@ public:
         if (std::fabs(m_v) < 0.005f && std::fabs(dv) < 0.05f && brake) m_v = 0.f;   // at rest
 
         // Pose (for visualization and stopping distances)
-        m_x += m_v * std::cos(m_h) * dt;
-        m_y += m_v * std::sin(m_h) * dt;
+        integrate(dt);
         m_h += m_w * dt;
         m_t += dt;
 
@@ -207,6 +205,32 @@ public:
     }
 
     // Integrates the roll around the edge (φ > 0 = leaning LEFT — turning right).
+    // Position integration with optional WALL collision (wall_fn). Per-axis resolution:
+    // the blocked axis freezes while the other keeps sliding, and the speed is scaled by
+    // the achieved/attempted displacement ratio — a head-on hit dies within a few steps, a
+    // grazing hit barely notices. Two escape hatches keep it unstickable: AIRBORNE skips
+    // the test entirely (a falling or jumping kart passes over), and a start point already
+    // inside a wall never blocks, so landing on a wall self-heals on the first move.
+    void integrate(float dt)
+    {
+        const float dx = m_v * std::cos(m_h) * dt;
+        const float dy = m_v * std::sin(m_h) * dt;
+        float nx = m_x + dx, ny = m_y + dy;
+        if (wall_fn && !m_air && !wall_fn(m_x, m_y))
+        {
+            if (wall_fn(nx, m_y)) nx = m_x;   // X blocked → slide along Y
+            if (wall_fn(nx, ny))  ny = m_y;   // Y blocked (after the X resolution)
+            const float want = dx * dx + dy * dy;
+            if (want > 1e-12f)
+            {
+                const float got = (nx - m_x) * (nx - m_x) + (ny - m_y) * (ny - m_y);
+                m_v *= std::sqrt(got / want);
+            }
+        }
+        m_x = nx;
+        m_y = ny;
+    }
+
     void stepRoll(float dt)
     {
         const float al = aLat();
@@ -303,6 +327,10 @@ public:
     // Ground height under (x, y) — nullptr = flat (scenarios). Driving mode hooks up the
     // hilly terrain: the kart FOLLOWS it on the ground and TAKES OFF (ballistic) on the edges.
     std::function<float(float, float)> ground_fn;
+    // Walls — nullptr = open world (all CI scenarios). true = the point is inside a wall.
+    // Driving mode hooks up the shed and the Backrooms grid (terrain.hpp); see integrate()
+    // for how a hit resolves (slide along the free axis, speed bleeds on the blocked one).
+    std::function<bool(float, float)> wall_fn;
     EncMode enc_mode_l = EncMode::Ok;
     EncMode enc_mode_r = EncMode::Ok;
     bool    vbat_sensor = true;
