@@ -480,6 +480,15 @@ int driveInteractive()
             {
                 cfg.open_loop = (std::atof(line.c_str() + po + 5) != 0.0) ? 1 : 0;
             }
+            // Mixing selector (viewer dropdown): same parameter as the real kart
+            // (mix_type) — 0 linear, 1 expo, 2 expo + speed-soft. Applied on the fly,
+            // so the feel difference can be compared mid-drive.
+            const size_t pm = line.find("\"mx\":");
+            if (pm != std::string::npos)
+            {
+                const int mx = static_cast<int>(std::atof(line.c_str() + pm + 5));
+                cfg.mix_type = (mx >= 0 && mx <= 2) ? mx : 0;
+            }
             acc.erase(0, nl + 1);
         }
 
