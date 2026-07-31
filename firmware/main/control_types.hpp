@@ -99,10 +99,12 @@ constexpr int     MAG_READ_TICKS    = 50;      // poll STATUS at CTRL_HZ/50 ≈ 
 // the file that grows every time a parameter is added — can static_assert against it and
 // FAIL THE BUILD instead of failing the socket. It has bitten once: four params with long
 // help text pushed the config past the old 6144 and the page just lost its connection.
-// 8192, not more: this is permanent BSS and every static kilobyte comes straight out of
-// the heap pool (RAM audit 2026-07-31). The config measures 6568 B wire; the compile-time
-// worst-case guard in config_params.cpp still enforces the fit on every param added.
-constexpr size_t PB_REPLY_CAP = 8192;
+// Sized to the guard, not the other way around: this is permanent BSS and every static
+// kilobyte comes straight out of the heap pool (RAM audit 2026-07-31), so keep it snug —
+// but when the compile-time worst-case guard in config_params.cpp fires on a new param,
+// prefer growing this over butchering help texts (they are the kart's manual). 35 params
+// bound to 8645 B worst-case; the RAM diet left ~40 kB of heap headroom for the extra 1 kB.
+constexpr size_t PB_REPLY_CAP = 9216;
 
 constexpr int   VBAT_SAG_DEBOUNCE_MS = 500;
 constexpr int   LVC_POWEROFF_MS      = 30000;  // auto power cutoff (powerOff) after 30 s below the threshold
@@ -187,6 +189,7 @@ struct KartConfig
     int32_t vbat_check_en;  // 1 = the LVC can block driving and cut power; 0 = voltage shown only
     int32_t enc_inv_l;      // 1 = flip the LEFT encoder's sign (convention: +rpm = forward)
     int32_t enc_inv_r;      // 1 = flip the RIGHT encoder's sign
+    int32_t enc_rev_chk;    // 1 = runtime reversed-encoder watchdog (ENC_REV); 0 = commissioning-checked
     int32_t pwr_sense_en;   // 1 = the motor-power opto sense is wired and blocks when it reads dead
     int32_t idle_off_min;   // minutes disarmed before self power-off (0 = never)
     float   enc_per_wheel;  // encoder-shaft turns per WHEEL turn (mount: gearbox output 1.28, 1:5 shaft 3.41)

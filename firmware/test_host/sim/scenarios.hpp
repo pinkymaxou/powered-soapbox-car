@@ -275,6 +275,22 @@ inline std::vector<Scenario> allScenarios()
             c.y = 1.f;
             return c;
         }});
+    // Same wiring fault with the reversed-encoder watchdog DISABLED (enc_rev_chk=0, the
+    // commissioning-checked configuration): EncoderDir must NOT latch — and the STUCK net
+    // must still stop the kart, because one reversed wheel averages the vehicle speed to ~0
+    // while the command stays firm. Documents exactly what safety remains without the guard.
+    v.push_back({
+        "encodeur_inverse_sans_garde",
+        "Reversed encoder, watchdog OFF: the wheel-stuck net still stops it",
+        8.f,
+        [](KartConfig& c) { c.enc_rev_chk = 0; },
+        [](Vehicle& v) { v.enc_mode_l = EncMode::Reversed; },
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = 1.f;
+            return c;
+        }});
     v.push_back({
         "encodeur_absent",
         "Right AS5600 silent (I2C): Fault::EncoderAbsent, arming refused",

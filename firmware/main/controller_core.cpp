@@ -94,7 +94,12 @@ void KartController::updateEncSanity(int64_t now, bool braking, float out_l, flo
 {
     // RevDetect distinguishes a REAL reversal (opposed speed, stable/growing) from a
     // commanded DECELERATION — braking at the stick — where the opposed speed melts toward zero.
-    if (!braking)
+    // OPTIONAL (enc_rev_chk): its blind spot is plugging on a downhill — reverse stick while
+    // the slope holds the speed up looks exactly like a reversed sensor, and the latched full
+    // stop mid-descent is worse than what it guards against. An owner who verifies the rpm
+    // signs at commissioning (Dashboard, push the kart forward) can turn the watchdog off;
+    // ENC_MAD and ENC_STUCK stay as the runtime backstops either way.
+    if (!braking && 0 != m_cfg.enc_rev_chk)
     {
         constexpr int64_t win = static_cast<int64_t>(hw::ENC_REV_MS) * 1000;
         if (m_rev_l.update(out_l, sl, now, win, hw::ENC_REV_PWM, hw::ENC_REV_MPS, hw::ENC_REV_DECAY_MPS) ||

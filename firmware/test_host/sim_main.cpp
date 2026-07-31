@@ -163,6 +163,14 @@ void testScenarios()
         CHECK(Fault::EncoderDir == r.final_fault);
         CHECK(r.t_first_fault > 0.f && r.t_first_fault < T_DRIVE + 1.5f);
     }
+    // Watchdog OFF (commissioning-checked config): EncoderDir must not latch, and the
+    // STUCK net must still stop the kart (one reversed wheel → mean speed ≈ 0, firm cmd).
+    {
+        const RunResult r = run(get("encodeur_inverse_sans_garde"));
+        CHECK(Fault::EncoderDir != r.final_fault);
+        CHECK(Fault::Encoder == r.final_fault);
+        CHECK(r.t_first_fault > 0.f);
+    }
     {
         const RunResult r = run(get("encodeur_absent"));
         CHECK(Fault::EncoderAbsent == r.final_fault);
