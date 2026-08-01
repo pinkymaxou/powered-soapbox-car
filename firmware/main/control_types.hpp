@@ -19,7 +19,9 @@ namespace hw
 constexpr int   CTRL_HZ       = 500;   // control loop (FreeRTOS tick 1000 Hz)
 constexpr int   CTRL_DT_MS    = 1000 / CTRL_HZ;
 constexpr float CTRL_DT_S     = 1.0f / CTRL_HZ;
-constexpr int   WDT_TIMEOUT_S = 5;   // also set via sdkconfig (reboot if stalled > 5 s)
+constexpr int   WDT_TIMEOUT_S = 2;   // mirror of sdkconfig's CONFIG_ESP_TASK_WDT_TIMEOUT_S
+                                     // (the sdkconfig value is what actually arms it, with
+                                     // PANIC=y: a stalled control loop reboots, not warns)
 
 constexpr int PWM_FREQ_HZ = 18000;
 constexpr int PWM_MAX     = 4095;   // 12 bits (the LEDC resolution lives in hardware.cpp)

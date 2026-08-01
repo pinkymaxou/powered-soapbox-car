@@ -24,7 +24,7 @@ struct TaskCfg
 // 500 Hz control loop — isolated on the application core (1), HIGH priority so higher-priority
 // system work (timers, IPC, the Wi-Fi/BT stacks) can't stall it past the encoder's ½-turn
 // window (which would alias the absolute AS5600 angle). Below esp_timer(22)/Wi-Fi/BT(23)/IPC(24).
-// It yields every cycle (vTaskDelayUntil), so the high priority starves nothing. WDT 5 s.
+// It yields every cycle (vTaskDelayUntil), so the high priority starves nothing. WDT 2 s + PANIC.
 constexpr TaskCfg CONTROL{"control", 6144, 18, 1};
 
 // WS2812B strip display (~20 Hz) — network/system core, low priority.

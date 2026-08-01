@@ -103,10 +103,10 @@ flowchart TB
 - **Differential steering = zero mechanics**: no more steering wheel, column, kingpins, steering knuckles, tie rod or drag link → fewer parts to make, adjust and wear out; you **turn in software** (PWM difference between the 2 wheels). **Pivot in place** when forward motion ≈ 0.
 - **Free rear caster wheel**: a single unpowered pivoting caster wheel orients itself → simple geometry, no rear axle.
 - **Controlled stability**: a tricycle tips over faster than a 4-wheeler → low seat (16 cm), **wide front track** + **firmware rollover protection** (clamping the turn amplitude by speed **and** a slew-rate limiter on the turn).
-- **Flexible battery voltage (6–30 V driver)**: the motors are 12 V; the firmware **caps PWM AUTOMATICALLY at 12 V / measured Vbat** (smoothed ~1 s): motorcycle battery **12 V → ~100%**, 20 V pack → ~60%, **24 V → ~50%**. Changing battery = adjust the Vbat measurement **voltage divider** + recalibrate `vbat_div_ratio` (and the LVC thresholds) — **no code change**. A **manual** cap (`duty_cap`) remains available; ⚠️ **without the Vbat sensor (ADS1115), the auto cap is inactive** → set `duty_cap` by hand if the battery exceeds 12 V.
+- **Flexible battery voltage (6–30 V driver)**: the motors are 12 V; the firmware **caps PWM AUTOMATICALLY at 12 V / measured Vbat** (smoothed ~1 s): motorcycle battery **12 V → ~100%**, 20 V pack → ~60%, **24 V → ~50%**. Changing battery = adjust the Vbat measurement **voltage divider** (swap the two resistors and edit the `hw::VBAT_R_TOP`/`VBAT_R_BOTTOM` constants — deliberately NOT a web setting, a wrong ratio would silently drag the LVC along); the LVC thresholds are **hard-coded per battery type** (12/24 V, detected at startup). A **manual** cap (`duty_cap`) remains available; ⚠️ **without the Vbat sensor (ADS1115), the auto cap is inactive** → set `duty_cap` by hand if the battery exceeds 12 V.
 - **Free-rolling front wheels**: driven by **#35 chain** (sprocket bolted to the rim), they keep their original bearing — no through drive axle.
 - **Tech bay at the front**: batteries + driver + ESP32 are grouped **at the front, near the 2 motors** → **short power wiring** (fewer losses, fewer ~10 AWG wires to run), drive mass and energy concentrated over the drive axle. Longitudinal layout: **NOSE (tech bay + battery) → DRIVE AXLE → CABIN → REAR (free caster wheel)**. **The axle is set back ~32 cm into the body**: in a pivot in place (rotation about the middle of the axle) the swept envelope drops from ~1.27 m to **~0.95 m radius** (short turning radius), and the weight of the **battery centered in the nose** loads the drive wheels (traction + braking).
-- **Safety**: **central hardware emergency stop**, at the **top of the seatback** (within reach of both kids and an adult behind), **master kill switch** (in series in the latch gate, including the ESP32) **and** software gamepad emergency stop (button B); start via **momentary button** + low-side latch (2× MOSFET, the ESP keeps itself alive), one fuse per pack, **electric brake by default** (gamepad disconnect → immediate braking), low-voltage cutoff (LVC), **5 s watchdog**, **disarmed** start by default, guards over chains/sprockets, seatbelt, helmet.
+- **Safety**: **central hardware emergency stop**, at the **top of the seatback** (within reach of both kids and an adult behind), **master kill switch** (in series in the latch gate, including the ESP32) **and** software gamepad emergency stop (button B); start via **momentary button** + low-side latch (2× MOSFET, the ESP keeps itself alive), one fuse per pack, **electric brake by default** (gamepad disconnect → immediate braking), low-voltage cutoff (LVC), **2 s watchdog (PANIC)**, **disarmed** start by default, guards over chains/sprockets, seatbelt, helmet.
 
 ---
 
@@ -134,7 +134,7 @@ flowchart TB
 > a **T** frame: a **wide front crossmember** carrying the **axle bearings as close as possible to
 > the wheels** (≤ 3–5 cm, otherwise the threaded rod flexes), narrow rails behind. The space along
 > the axle between rail and wheel houses the **motor + gearbox + #35 chain** on each
-> side. ⚠️ The firmware rollover protection is an **empirical** ramp (`turn_full_ms`, `turn_hi`): re-tune it on the bench if the geometry changes.
+> side. ⚠️ The firmware rollover protection is an **empirical** ramp (`turn_full_ms`, `turn_alat_vmax`): re-tune it on the bench if the geometry changes.
 
 ---
 
@@ -259,9 +259,9 @@ flowchart TD
 2. **Pivot in place**: if forward motion ≈ 0 and you push the stick sideways, the two wheels turn **in opposite directions** → the kart **spins on itself** (the rear caster pivots to follow).
 3. **Rollover protection**: a tricycle tips easily, so the turn is protected on **two fronts**:
    - **Speed→turn ISO-a_lat limit (MEASURED speed)**: below `turn_full_ms` (~0.5 m/s) — and anywhere the curve allows — turning is permitted at **±100%** (full-power pivot in place, `turn_gain` default 1.0); above that, the limit decreases as **1/v** (same lateral acceleration at any speed) down to `turn_at_vmax` (**±20% by default**) at top speed, then keeps tightening in case of runaway. Calibrated by physics simulation: the old linear ramp tipped an **offset load** (a single child on one side, adult+child) as soon as the turn gain reached 100%; the iso-a_lat at 0.2 keeps ≥ +0.8 m/s² of margin. The faster you go, the less you can steer. **Reverse** has **its own speed limit** (`rev_speed_ms`, default 1 m/s), served by the same PID limiter as `speed_limit_ms` (target chosen by the measured direction).
-   - **Slew-rate limiter**: the turn command cannot change by more than `turn_rate` per second → an abrupt stick move is **smoothed** instead of causing a violent differential. Forward motion is smoothed the same way (`thr_ramp_per_s`).
+   - **Slew-rate limiter**: the turn command cannot change by more than `turn_rate` per second → an abrupt stick move is **smoothed** instead of causing a violent differential. The forward command is deliberately **not** slewed: softening the throttle is the job of the **mixing curves** (`mix_type` — expo, or expo + speed-soft for a child driver) and of the speed limiter.
 
-Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_hi`** (rollover ramp), **`turn_rate`** (turn smoothness), **`thr_ramp_per_s`** (forward smoothness). Details in [`firmware/README.md`](firmware/README.md).
+Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_alat_vmax`** (rollover ramp), **`turn_rate`** (turn smoothness), and the **Drive feel** group (`mix_type`, `mix_expo_fwd`, `mix_expo_turn`, `mix_soft_hi` — stick-to-motor feel, from linear to child-gentle). Details in [`firmware/README.md`](firmware/README.md).
 
 > **Consequence of skid steer:** in a tight turn, the wheels **scrub** slightly on the ground (sliding friction) — that's inherent to this type of steering. At moderate speed on flat ground, the effect stays acceptable.
 
@@ -393,7 +393,7 @@ flowchart LR
 
 ### AS5600 speed sensors (×2, on I²C)
 
-**AS5600** angle sensor: **contactless** magnetic, **12-bit absolute angle** (4096 points/turn) read over **I²C**, with a **diametric magnet** on the shaft end. There is **one AS5600 per front wheel**, **one per I²C bus** (each AS5600 having the fixed address **0x36**, they cannot coexist on the same bus). **Known kinematics** (see [`doc/reducteur.md`](doc/reducteur.md)): the magnet is on the **output of the 1:13.33 gearbox**, followed by **1.28:1 sprockets** → **the sensor makes 1.28 turns per wheel turn** ⇒ `GEAR_RATIO = 1.28`, **10″ wheel = 0.254 m**. The **vehicle speed** (m/s) = **signed average** of the 2 wheels (pivot in place → 0 m/s). The conversion is **fully determined**. They serve to:
+**AS5600** angle sensor: **contactless** magnetic, **12-bit absolute angle** (4096 points/turn) read over **I²C**, with a **diametric magnet** on the shaft end. There is **one AS5600 per front wheel**, **one per I²C bus** (each AS5600 having the fixed address **0x36**, they cannot coexist on the same bus). **Known kinematics** (see [`doc/reducteur.md`](doc/reducteur.md)): the magnet is on the **output of the 1:13.33 gearbox**, followed by **1.28:1 sprockets** → **the sensor makes 1.28 turns per wheel turn** ⇒ web parameter `enc_per_wheel = 1.28` (3.41 if the magnet moves to the 1:5 intermediate shaft), **10″ wheel = 0.254 m**. The **vehicle speed** (m/s) = **signed average** of the 2 wheels (pivot in place → 0 m/s). The conversion is **fully determined**. They serve to:
 - **Measure each wheel's speed** → reliable limiter; **PID brake** toward 0; **direction** (sign of Δangle, the DIR pin sets the convention); **safety** (stall: PWM active with no rotation > 1 s → fault).
 
 ✅ **3.3 V native** (VDD5V/VDD3V3 tied together) → **SDA/SCL directly on the ESP32, NO level-shift**. Wiring per sensor: **SDA, SCL, 3.3 V, GND** (+ magnet), **4.7 kΩ** pull-ups per bus.
@@ -426,7 +426,7 @@ The scale (center + half-amplitude per axis) is **persisted in NVS** (namespace 
 - **Start via momentary button** (primes the latch); **fuse/pack**, wiring ≥ the 2 motors' current.
 - **Battery architecture: 5S Li-ion** (~18.5 V nominal, 21 V full charge, ~15 V low) — adjustable cell count (default 5). Deep discharge: **pack BMS + LVC on the ESP32 side**.
 - **One 12 V pack, no paralleling** (this phase): it carries the whole ~40 A, so its internal resistance sets the sag under load — a motorcycle battery at ~0.05 Ω dips ~2 V at full throttle, which is why the LVC judges a smoothed voltage. ⚠️ **Never put packs in series** unless you also change the divider (24 V needs 100 k/12 k).
-- **Speed limiter** low at first; **battery secured/protected**; **guards**; **electric brake** + **auto disarm** + **5 s watchdog** + **PWM ~50%**. Cut power before servicing.
+- **Speed limiter** low at first; **battery secured/protected**; **guards**; **electric brake** + **auto disarm** + **2 s watchdog** + **PWM ~50%**. Cut power before servicing.
 
 ### Wiring diagram + ESP32 pinout
 
@@ -570,7 +570,8 @@ The same content as an **electrical schematic with standard symbols** (named-por
 
 A **voltage divider** brings Vbat below 3.3 V onto **the ADS1115's A0 input** (external 16-bit ADC,
 powered at 3.3 V) → software protection **on top of the BMS**. The divider is **sized to the
-chosen battery** (aim for < 3.3 V at the max voltage UNDER CHARGE), then you recalibrate `vbat_div_ratio`:
+chosen battery** (aim for < 3.3 V at the max voltage UNDER CHARGE); the firmware reconstructs
+Vbat from the **resistor constants** `hw::VBAT_R_TOP` / `VBAT_R_BOTTOM` (`control_types.hpp`):
 
 | Battery | Vmax (under charge) | Divider (top/bottom) | Ratio | A0 at Vmax |
 |---|---|---|---|---|
@@ -578,7 +579,7 @@ chosen battery** (aim for < 3.3 V at the max voltage UNDER CHARGE), then you rec
 | 20 V tool pack | ~21 V | **100 k / 15 k** | 0.130 | 2.74 V ✔ |
 | **24 V** (2×12 V in series) | ~29 V | **100 k / 12 k** | 0.107 | 3.10 V ✔ |
 
-- Reconstruction: **Vbat = V_adc ÷ ratio** — the exact ratio (resistor tolerances) is calibrated via **`vbat_div_ratio`** (web page).
+- Reconstruction: **Vbat = V_adc × (R_top + R_bottom) / R_bottom** — the ratio is a **compile-time constant**, deliberately NOT a web setting: a wrong value would silently misreport the battery and drag the LVC thresholds along. Swap the resistors ⇒ edit the two constants and reflash (the Documentation tab shows the live math on the divider diagram).
 - **Battery type detected automatically at startup**: the voltage must be **stable for 3 s** (deviation ≤ 0.5 V), then it is classified as **12 V or 24 V** (18 V threshold: a 12 V even under charge stays ≤ ~14.8 V, a 24 V even empty stays ≥ ~21 V). The type is **frozen until restart** (you never change battery with the system on). The **LVC thresholds are hardcoded per type** (lead-acid): 12 V → warning 11.5 / cutoff 10.5 / rearm 12.0; 24 V → 23.0 / 21.0 / 24.0. Until the type is classified: no LVC (the kart starts disarmed anyway).
 - Divider leakage ≈ 0.18 mA — since its return ground is **switched by the low-side latch**, **nothing when off**.
 - **Decoupling capacitor** on the ADC node; the ADS1115 (16-bit, PGA) gives a more stable measurement than the internal ADC.
@@ -886,7 +887,7 @@ flowchart LR
 
 **Phase 5 — Control electronics.** ESP32 + breakout; **buck 20→5 V** on the +20 rail (the ESP makes its own 3.3 V); **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
 
-**Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://kart.local` (or `http://192.168.4.1`). **Pair then calibrate the gamepad** (mandatory to drive); adjust **`vbat_div_ratio`** with a multimeter. Speed conversion **already determined** (AS5600 at the output of the 1:13.33 gearbox + 1.28:1 sprockets → `GEAR_RATIO=1.28`, 10″ wheel, **vehicle speed in m/s**) → **verify on the bench** + **fine-tune the PIDs** per wheel (limiter ≈ 0.54/0.50, brake ≈ 0.43/0.29/0.011 — in m/s). Set a **low speed limit** (`speed_limit_ms`) + **rollover protection** (`turn_gain`, `turn_full_ms`, `turn_hi`, `turn_rate`, `thr_ramp_per_s`) + check LVC. *(500 Hz loop, IPv6, System page: automatic.)*
+**Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://kart.local` (or `http://192.168.4.1`). **Pair then calibrate the gamepad** (mandatory to drive); check the measured Vbat against a multimeter (the divider ratio is fixed by the resistor constants — see the Documentation tab). Speed conversion **already determined** (AS5600 at the output of the 1:13.33 gearbox + 1.28:1 sprockets → `enc_per_wheel=1.28`, 10″ wheel, **vehicle speed in m/s**) → **verify on the bench** (both rpm signs POSITIVE pushing forward; fix with `enc_inv_l/r`) + **fine-tune the PIDs** (limiter ≈ 0.54/0.50, brake ≈ 0.43/0.29/0.011 — in m/s). Set a **low speed limit** (`speed_limit_ms`) + **rollover protection** (`turn_gain`, `turn_full_ms`, `turn_alat_vmax`, `turn_rate`) + a child-friendly **mixing** (`mix_type` 1 or 2) + check LVC. *(500 Hz loop, IPv6, System page with persistent event log: automatic.)*
 
 **Phase 7 — Progressive tests (wheels in the air).** Arm (physical or gamepad START), light forward → correct direction of **each wheel** (swap M1A/M1B if needed); push the stick right → turns right; test **default brake**, **pivot in place**, **disarm**, **gamepad emergency stop (B)** and **gamepad disconnect → braking**, **central hardware e-stop** (cuts everything); trigger the faults (simulated **LVC**, **sensor failure** by unplugging an AS5600) → must refuse/cut. Then on the ground: flat terrain, minimum speed, rollover protection active, 1 light child first, **progressive** limit.
 
@@ -915,10 +916,10 @@ Points to **address / validate before any real use**.
 - **Gamepad dependency**: if the gamepad disconnects, the kart **brakes** (safety), but the driver loses directional control until reconnection → drive within Bluetooth range, gamepad charged.
 
 **Firmware / sensors**
-- **2 AS5600 sensors** (I²C, 12-bit angle, one per bus): speed = derivative at **500 Hz**, wrap handled, **3.3 V native**. **Known** kinematics → exact hardcoded constants (`AS5600_CPR=4096`, `GEAR_RATIO=1.28`, `WHEEL_DIAM_M=0.254`). **Fully determined conversion**; still to **verify on the bench**.
-- **Sensor failure detection**: PWM active (>10%) but 0 rotation > 1 s → fault (covers motor stall / thrown or broken chain), per wheel.
-- **Pre-tuned PIDs** (extrapolated from the model) — limiter 0.15/0.14, brake 0.12/0.08/0.003; to **fine-tune on the bench**, per wheel.
-- **Rollover protection to tune empirically**: `turn_gain`, `turn_full_ms`, `turn_hi`, `turn_rate`, `thr_ramp_per_s` depend on the actual track, the CG height and grip → start cautious. NB: the ramp relies on the **measured** speed → with `use_encoders=0`, no turn limiting.
+- **2 AS5600 sensors** (I²C, 12-bit angle, one per bus): speed = derivative at **500 Hz**, wrap handled, **3.3 V native**. **Known** kinematics → hardcoded constants (`AS5600_CPR=4096`, `WHEEL_DIAM_M=0.254`) + the mount-dependent web parameter `enc_per_wheel` (1.28 at the gearbox output). **Fully determined conversion**; still to **verify on the bench**.
+- **Sensor failure detection**: PWM active (>10%) but 0 rotation > 1 s → fault (covers motor stall / thrown or broken chain). The **reversed-wiring watchdog** is optional (`enc_rev_chk`, default on) — an owner who verifies the rpm signs at commissioning can disable it to avoid its downhill-plugging false trip.
+- **Pre-tuned PIDs** (validated in simulation) — limiter 0.54/0.50, brake 0.43/0.29/0.011 (m/s); to **fine-tune on the bench**.
+- **Rollover protection to tune empirically**: `turn_gain`, `turn_full_ms`, `turn_alat_vmax`, `turn_rate` depend on the actual track, the CG height and grip → start cautious. NB: the ramp relies on the **measured** speed → with `use_encoders=0`, no turn limiting.
 - **Brake = PID toward 0** (plugging): effective but **generates current spikes** (no regeneration) → relies on the driver's current limiting.
 
 **Electrical / power**
