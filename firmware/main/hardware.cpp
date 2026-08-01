@@ -266,21 +266,15 @@ int angleDelta(int i)
 
 void initButton()
 {
+    // Both inputs idle on the INTERNAL pull-up. That is real on these pins — the sense
+    // line once sat on GPIO34, where the pull-up request was silently ignored (GPIO 34-39
+    // have no pull hardware) and an unwired pin floated; it lives on GPIO22 now precisely
+    // so this line does what it says.
     gpio_config_t in{};
     in.mode = GPIO_MODE_INPUT;
-    in.pin_bit_mask = (1ULL << pins::START_BTN);
+    in.pin_bit_mask = (1ULL << pins::START_BTN) | (1ULL << pins::MOTOR_PWR_SENSE);
     in.pull_up_en = GPIO_PULLUP_ENABLE;
     gpio_config(&in);
-    // MOTOR_PWR_SENSE configured SEPARATELY, without requesting a pull-up: GPIO 34-39 are
-    // input-only and have NO internal pull hardware — asking for one is silently ignored,
-    // and the first version of this function did exactly that, documenting a pull-up that
-    // never existed. The idle level comes from an EXTERNAL 10 kΩ to 3.3 V (or the opto
-    // module's onboard output pull-up); without it the pin floats and pwr_sense_en=1 would
-    // flicker between "power live" and a phantom e-stop.
-    gpio_config_t sense{};
-    sense.mode = GPIO_MODE_INPUT;
-    sense.pin_bit_mask = (1ULL << pins::MOTOR_PWR_SENSE);
-    gpio_config(&sense);
 }
 
 
@@ -466,9 +460,9 @@ bool board::btnStart()
 }
 
 // Motor rail live = opto conducting = pin pulled LOW. An unwired or broken input rises to
-// the EXTERNAL pull-up (10 kΩ → 3.3 V — GPIO34 has no internal pull, see initButton) and
-// reads "dead", which is the safe way round. Only consulted when pwr_sense_en = 1, so a
-// bench without the opto is unaffected.
+// the internal pull-up and reads "dead", which is the safe way round. RAW level: the
+// debounce lives in the controller core (hw::PWR_SENSE_DEBOUNCE_TICKS), where the sim can
+// test it. Only consulted when pwr_sense_en = 1, so a bench without the opto is unaffected.
 bool board::motorPowerLive()
 {
     return 0 == gpio_get_level(pins::MOTOR_PWR_SENSE);

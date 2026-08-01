@@ -171,6 +171,16 @@ void testScenarios()
         CHECK(Fault::Encoder == r.final_fault);
         CHECK(r.t_first_fault > 0.f);
     }
+    // Two-rail e-stop through the opto sense: the t=4 s single-tick glitch must NOT disarm
+    // (debounce), the sustained drop at t=6 s must fault as MOTOR_POWER, brake, and stay
+    // disarmed (re-arm required — releasing the mushroom never resumes drive on its own).
+    {
+        const RunResult r = run(get("estop_moteur"));
+        CHECK(r.ever_armed);
+        CHECK(Fault::MotorPower == r.final_fault);
+        CHECK(r.t_disarmed_after >= 6.f && r.t_disarmed_after < 6.15f);   // 50 ms debounce + margin
+        CHECK(std::fabs(r.final_v) < 0.3f);                               // braked, not coasting
+    }
     {
         const RunResult r = run(get("encodeur_absent"));
         CHECK(Fault::EncoderAbsent == r.final_fault);

@@ -462,7 +462,7 @@ flowchart LR
     BATT -- "−" --> GNDC
     DRV -- "GND" --> GNDC
     ESP -. "GPIO13 POWER_HOLD holds the logic rail" .-> RAIL
-    SW -. "opto sense → GPIO34 (motor power live?)" .-> ESP
+    SW -. "opto sense → GPIO22 (motor power live?)" .-> ESP
 
     %% Motor outputs + speed feedback
     DRV -- "M1A / M1B" --> M1
@@ -496,18 +496,18 @@ flowchart LR
 | 27 / 14 | **I²C bus 1 SDA / SCL** | I/O | **AS5600 wheel R (0x36)**, 3.3 V, 4.7 kΩ pull-ups |
 | 13 | **POWER_HOLD** (power latch) | output | **active LOW**: holds the logic rail; HIGH = cuts |
 | 16 | **Arming button (START)** | input | pull-up, ~1 s press (or gamepad START) |
-| 34 | **MOTOR_PWR_SENSE** (opto from the 40 A relay output) | input only | **active LOW** = motor power live; ⚠️ **external 10 kΩ pull-up to 3.3 V required** (GPIO 34-39 have no internal pull — most opto modules provide it on their output); with it, a broken wire reads "dead" (safe side) |
+| 22 | **MOTOR_PWR_SENSE** (opto from the 40 A relay output) | input | **active LOW** = motor power live; idles on the **internal pull-up** (GPIO22 has one — the input-only 34-39 do NOT, which is why the pin moved), so a broken wire reads "dead" (safe side); **50 ms firmware debounce** against spikes coupled from the 40 A cabling |
 | 4 | **WS2812B strip** (data) | output | ~10 LEDs |
 | 2 | **Status LED** (onboard) | output | — |
 | **Free** | | | |
-| 35 / 36 / 39 | unused | inputs only | input-only pins |
+| 34 / 35 / 36 / 39 | unused | inputs only | input-only pins, **no internal pulls** |
 | 21 / 22 / 23 | unused | — | free |
 | — | **Battery voltage** | (ADS1115 A0) | **not on a GPIO**: measured by the ADS1115 via 100 k/15 k divider |
 | — | **Analog joystick** | (ADS1115 A1/A2) | reserved for future |
 
 **Key wiring points:**
 - **Common ground** ESP32 ↔ driver ↔ ADS1115 ↔ I²C sensors: essential.
-- **Two rails**: the small opto relay module holds the **logic rail** (ESP32 + driver logic + divider), the **40 A relay** feeds the motors through the **e-stop in its main path**. GPIO34 reads the opto that watches motor power (active low: a broken wire reads "dead").
+- **Two rails**: the small opto relay module holds the **logic rail** (ESP32 + driver logic + divider), the **40 A relay** feeds the motors through the **e-stop in its main path**. GPIO22 reads the opto that watches motor power (active low: a broken wire reads "dead").
 - **Brake by default**: at a stop, with no forward command, or if the gamepad disconnects, the firmware brakes.
 - **Power ~10 AWG** (crimped lugs); **signals thin wire**. **40 A fuse** on the single pack.
 - ⚠️ **Driver polarity (VB+/VB-)**: no reverse protection → **double-check**.
@@ -527,7 +527,7 @@ flowchart LR
         SR -->|"coil"| BR
         ESTOP["🛑 E-STOP (40 A path)"] --> BR
         BR --> MPWR(["+12 V motors"])
-        BR -->|"opto sense"| SENSE(["GPIO34"])
+        BR -->|"opto sense"| SENSE(["GPIO22"])
         RAIL --> BUCK["Buck 12→5 V"] --> V5(["+5 V"])
     end
 
@@ -646,11 +646,12 @@ flowchart LR
 > **The emergency stop only needs to cut the motor relay.** That is the point of splitting the
 > rails: the logic survives, so the kart can *say* what happened instead of going dark. A
 > **feedback opto** from the 40 A relay's output tells the firmware whether motor power is
-> actually live (`pins::MOTOR_PWR_SENSE`, GPIO34, active low so a broken wire reads "dead").
+> actually live (`pins::MOTOR_PWR_SENSE`, GPIO22, active low so a broken wire reads "dead").
 > Wiring: the opto's input LED across the relay's **output** (87/NO, i.e. downstream of the
-> e-stop) through its series resistor; output transistor between GPIO34 and GND. ⚠️ GPIO34
-> has **no internal pull-up** — a 10 kΩ to 3.3 V (or the module's onboard one) sets the
-> idle-high "dead" level; floating, the pin reads noise and fakes intermittent e-stops.
+> e-stop) through its series resistor; output transistor between **GPIO22** and GND. The pin
+> idles on the ESP32's **internal pull-up** (that is why it is GPIO22 and not one of the
+> pull-less input-only 34-39), and the firmware **debounces 50 ms** so a spike coupled from
+> the neighbouring 40 A cabling can never fake an emergency stop.
 > With `pwr_sense_en=1` the firmware raises **`fb::NO_MOTOR_PWR`**, disarms, names the fault on
 > the page, and requires a deliberate re-arm on START — releasing the mushroom button never
 > resumes drive on its own.
@@ -903,9 +904,9 @@ flowchart LR
 
 **Phase 3 — Front drives (replaces the old "steering").** On **each front wheel**: bolted sprocket (large washers / backing plate) + 3D gearbox + motor on a reinforced mount + #35 chain cut to length + tension adjustment + guard. **No linkage**: steering is differential, so nothing to adjust on the steering-wheel/tie-rod side. ✅ *With no power: each front wheel turns by hand, chain tensioned and lubricated.*
 
-**Phase 4 — Power electronics ⚠️ (at the front).** The **single 12 V pack housed in the front tech bay** (short power wiring to the 2 motors); **fuse 40 A → 40 A DC relay → +12 V rail**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, plus the **~1500 µF hold capacitor across the SMALL module's coil** (holding the small relay holds both — and 400 Ω discharges far slower than the 40 A coil's 80 Ω) so a reboot does not drop the power — **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`, and the button takes the capacitor's charging surge instead of the module's contacts); the **e-stop goes in the 40 A main path, NOT in the coil loop** — with the capacitor fitted, an e-stop on the coil side would take ~0.9 s to act (**2.3 m at full speed**). See `doc/schematics/power_latch.png` for the latch principle and the ⚠️ note in [power switch](#power-switch-two-rails-two-relays) for both trade-offs; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes, and **the central e-stop kills the motor rail while the logic stays up** (the page must show the MOTOR POWER fault, GPIO34). Then check the reboot case: force a reset while powered and watch whether the relay drops. Finally the 30-second brake test: logic up, motor relay open, spin a wheel by hand — if it resists, the e-stop brakes; if not, it freewheels (flat ground only).*
+**Phase 4 — Power electronics ⚠️ (at the front).** The **single 12 V pack housed in the front tech bay** (short power wiring to the 2 motors); **fuse 40 A → 40 A DC relay → +12 V rail**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, plus the **~1500 µF hold capacitor across the SMALL module's coil** (holding the small relay holds both — and 400 Ω discharges far slower than the 40 A coil's 80 Ω) so a reboot does not drop the power — **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`, and the button takes the capacitor's charging surge instead of the module's contacts); the **e-stop goes in the 40 A main path, NOT in the coil loop** — with the capacitor fitted, an e-stop on the coil side would take ~0.9 s to act (**2.3 m at full speed**). See `doc/schematics/power_latch.png` for the latch principle and the ⚠️ note in [power switch](#power-switch-two-rails-two-relays) for both trade-offs; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes, and **the central e-stop kills the motor rail while the logic stays up** (the page must show the MOTOR POWER fault, GPIO22). Then check the reboot case: force a reset while powered and watch whether the relay drops. Finally the 30-second brake test: logic up, motor relay open, spin a wheel by hand — if it resists, the e-stop brakes; if not, it freewheels (flat ground only).*
 
-**Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the 12 V LOGIC rail** (the ESP makes its own 3.3 V); **motor-power sense opto → GPIO34**; **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
+**Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the 12 V LOGIC rail** (the ESP makes its own 3.3 V); **motor-power sense opto → GPIO22**; **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
 
 **Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://kart.local` (or `http://192.168.4.1`). **Pair then calibrate the gamepad** (mandatory to drive); check the measured Vbat against a multimeter (the divider ratio is fixed by the resistor constants — see the Documentation tab). Speed conversion **already determined** (AS5600 at the output of the 1:13.33 gearbox + 1.28:1 sprockets → `enc_per_wheel=1.28`, 10″ wheel, **vehicle speed in m/s**) → **verify on the bench** (both rpm signs POSITIVE pushing forward; fix with `enc_inv_l/r`) + **fine-tune the PIDs** (limiter ≈ 0.54/0.50, brake ≈ 0.43/0.29/0.011 — in m/s). Set a **low speed limit** (`speed_limit_ms`) + **rollover protection** (`turn_gain`, `turn_full_ms`, `turn_alat_vmax`, `turn_rate`) + a child-friendly **mixing** (`mix_type` 1 or 2) + check LVC. *(500 Hz loop, IPv6, System page with persistent event log: automatic.)*
 

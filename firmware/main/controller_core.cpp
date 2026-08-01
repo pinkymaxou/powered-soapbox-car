@@ -260,8 +260,18 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     // Motor rail dead while the logic rail is alive = the emergency stop is pressed (two-rail
     // wiring). Reported only when the opto is declared wired, and blocking on the same terms:
     // it must force a DISARM, so that releasing the mushroom button never resumes drive on its
-    // own — the driver has to hold START again.
-    const bool no_motor_pwr = (0 != m_cfg.pwr_sense_en) && !in.sensors.motor_pwr;
+    // own — the driver has to hold START again. DEBOUNCED: the sense line idles on a weak
+    // pull-up next to the 40 A cabling, and one coupled spike must not fake an e-stop —
+    // 50 ms of consecutive "dead" reads to raise, first "live" read to clear.
+    if ((0 != m_cfg.pwr_sense_en) && !in.sensors.motor_pwr)
+    {
+        if (m_pwr_dead_ticks < hw::PWR_SENSE_DEBOUNCE_TICKS) ++m_pwr_dead_ticks;
+    }
+    else
+    {
+        m_pwr_dead_ticks = 0;
+    }
+    const bool no_motor_pwr = (m_pwr_dead_ticks >= hw::PWR_SENSE_DEBOUNCE_TICKS);
     if (no_motor_pwr)                            fmask |= fb::NO_MOTOR_PWR;
 
     const bool blocking = (0 != (fmask & fb::BLOCKING)) || no_motor_pwr ||

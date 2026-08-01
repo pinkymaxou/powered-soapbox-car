@@ -168,5 +168,6 @@ private:
     int     m_cps_win_i = 0;
     int64_t m_last_now_us = 0;                   // previous tick time → REAL dt for the count rate
     int     m_vbat_tick = 0;           // Vbat read rate-limit (hw::VBAT_READ_TICKS)
+    int     m_pwr_dead_ticks = 0;      // motor-power sense debounce (hw::PWR_SENSE_DEBOUNCE_TICKS)
     float   m_vraw = -1.f;             // last raw reading (< 0 = sensor absent)
 };

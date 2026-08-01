@@ -108,6 +108,12 @@ constexpr int     MAG_READ_TICKS    = 50;      // poll STATUS at CTRL_HZ/50 ≈ 
 // bound to 8645 B worst-case; the RAM diet left ~40 kB of heap headroom for the extra 1 kB.
 constexpr size_t PB_REPLY_CAP = 9216;
 
+// Motor-power sense debounce: the opto line idles on a weak internal pull-up (~45 kΩ) and
+// runs near the 40 A cabling — one coupled spike must not throw the blocking MOTOR-POWER
+// fault (which disarms and demands a re-arm). 25 ticks = 50 ms of consecutive "dead" reads
+// to raise it; recovery is immediate. Still instant to a human pressing the mushroom.
+constexpr int   PWR_SENSE_DEBOUNCE_TICKS = 25;
+
 constexpr int   VBAT_SAG_DEBOUNCE_MS = 500;
 constexpr int   LVC_POWEROFF_MS      = 30000;  // auto power cutoff (powerOff) after 30 s below the threshold
 

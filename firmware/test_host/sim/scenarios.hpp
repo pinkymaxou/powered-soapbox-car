@@ -291,6 +291,24 @@ inline std::vector<Scenario> allScenarios()
             c.y = 1.f;
             return c;
         }});
+    // Two-rail e-stop as the firmware SEES it: the opto reports the 40 A motor rail dead
+    // while the logic keeps running. A single-tick glitch at t=4 s (weak pull-up next to
+    // the 40 A cabling — coupled spikes happen) must NOT fault: the 50 ms debounce eats it.
+    // The sustained drop at t=6 s must fault as MOTOR_POWER and brake.
+    v.push_back({
+        "estop_moteur",
+        "Motor-power sense: 1-tick glitch ignored (debounce), sustained drop = MOTOR_POWER",
+        10.f,
+        [](KartConfig& c) { c.pwr_sense_en = 1; },
+        nullptr,
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = 1.f;
+            if (t >= 4.f && t < 4.004f) c.motor_pwr = false;   // 1-2 ticks: a coupled spike
+            if (t >= 6.f) c.motor_pwr = false;                 // the mushroom, for real
+            return c;
+        }});
     v.push_back({
         "encodeur_absent",
         "Right AS5600 silent (I2C): Fault::EncoderAbsent, arming refused",

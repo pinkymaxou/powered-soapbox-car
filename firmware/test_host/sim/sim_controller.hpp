@@ -27,6 +27,8 @@ struct PadCmd
     bool  reports = true;     // false = link "connected" but NO more reports at all (heartbeat)
     bool  sys_power = true;   // false = KILL SWITCH: power cut off (ESP32 off,
                               // MOSFETs open → coasting) — the controller no longer runs
+    bool  motor_pwr = true;   // false = the opto reports the MOTOR rail dead (e-stop in the
+                              // 40 A path, two-rail wiring) — the LOGIC keeps running
 };
 using PadScript = std::function<PadCmd(float t)>;
 
@@ -111,6 +113,7 @@ private:
         const float pin_v = m_veh.vbatPinVolts();
         s.vbat_ok = (pin_v >= 0.f);
         s.vbat_v = s.vbat_ok ? pin_v * hw::VBAT_DIV_RATIO : -1.f;   // same constant as the ESP host
+        s.motor_pwr = m_cmd.motor_pwr;   // opto sense (scenario-scripted, like sys_power)
         return s;
     }
 

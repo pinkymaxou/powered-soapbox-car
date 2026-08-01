@@ -53,14 +53,16 @@ constexpr int BTN_ACTIVE = 0;   // button pressed = low level
 // Motor-power sense: opto output reporting whether the 40 A relay is actually live, so the
 // firmware can tell "emergency stop pressed" from "all well" now that the e-stop only cuts
 // the MOTOR rail and leaves the ESP running. ACTIVE LOW — opto conducting = motor power
-// LIVE — so a broken wire reads "dead" and errs toward refusing to drive.
-// ⚠️ WIRING: GPIO 34-39 are input-only and have NO internal pull hardware — an EXTERNAL
-// 10 kΩ pull-up to 3.3 V is REQUIRED for the idle-high level (ready-made opto modules
-// usually provide one on their output). Floating, the pin reads noise and pwr_sense_en=1
-// would flicker between "live" and a phantom e-stop.
-constexpr gpio_num_t MOTOR_PWR_SENSE = GPIO_NUM_34;
+// LIVE — so a broken/unwired input rests at the pull-up, reads "dead", and errs toward
+// refusing to drive.
+// GPIO22, NOT one of the input-only 34-39: those have no internal pull hardware (the first
+// pick, 34, silently ignored the pull-up request and floated when unwired). 22 gives the
+// INTERNAL pull-up (~45 kΩ) — no external resistor needed. That pull is weak and the wire
+// runs near the 40 A cabling, so the controller also DEBOUNCES this signal
+// (hw::PWR_SENSE_DEBOUNCE_TICKS) — a coupled spike cannot fake an e-stop.
+constexpr gpio_num_t MOTOR_PWR_SENSE = GPIO_NUM_22;
 
-// Free GPIOs: 21, 22, 23 and the input-only 35, 36, 39.
+// Free GPIOs: 21, 23 and the input-only 34, 35, 36, 39 (no internal pulls on those four).
 // (Quadrature encoders were reserved here as a fallback to the AS5600; dropped — the
 // magnetic sensors do the job. See doc/reducteur.md for the kinematics they measure.)
 
