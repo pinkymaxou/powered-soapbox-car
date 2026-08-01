@@ -496,7 +496,7 @@ flowchart LR
 | 27 / 14 | **I²C bus 1 SDA / SCL** | I/O | **AS5600 wheel R (0x36)**, 3.3 V, 4.7 kΩ pull-ups |
 | 13 | **POWER_HOLD** (power latch) | output | **active LOW**: holds the logic rail; HIGH = cuts |
 | 16 | **Arming button (START)** | input | pull-up, ~1 s press (or gamepad START) |
-| 34 | **MOTOR_PWR_SENSE** (opto from the 40 A relay output) | input only | **active LOW** = motor power live; a broken wire reads "dead" (safe side) |
+| 34 | **MOTOR_PWR_SENSE** (opto from the 40 A relay output) | input only | **active LOW** = motor power live; ⚠️ **external 10 kΩ pull-up to 3.3 V required** (GPIO 34-39 have no internal pull — most opto modules provide it on their output); with it, a broken wire reads "dead" (safe side) |
 | 4 | **WS2812B strip** (data) | output | ~10 LEDs |
 | 2 | **Status LED** (onboard) | output | — |
 | **Free** | | | |
@@ -647,6 +647,10 @@ flowchart LR
 > rails: the logic survives, so the kart can *say* what happened instead of going dark. A
 > **feedback opto** from the 40 A relay's output tells the firmware whether motor power is
 > actually live (`pins::MOTOR_PWR_SENSE`, GPIO34, active low so a broken wire reads "dead").
+> Wiring: the opto's input LED across the relay's **output** (87/NO, i.e. downstream of the
+> e-stop) through its series resistor; output transistor between GPIO34 and GND. ⚠️ GPIO34
+> has **no internal pull-up** — a 10 kΩ to 3.3 V (or the module's onboard one) sets the
+> idle-high "dead" level; floating, the pin reads noise and fakes intermittent e-stops.
 > With `pwr_sense_en=1` the firmware raises **`fb::NO_MOTOR_PWR`**, disarms, names the fault on
 > the page, and requires a deliberate re-arm on START — releasing the mushroom button never
 > resumes drive on its own.

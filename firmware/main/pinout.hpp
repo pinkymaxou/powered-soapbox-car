@@ -52,9 +52,12 @@ constexpr int BTN_ACTIVE = 0;   // button pressed = low level
 
 // Motor-power sense: opto output reporting whether the 40 A relay is actually live, so the
 // firmware can tell "emergency stop pressed" from "all well" now that the e-stop only cuts
-// the MOTOR rail and leaves the ESP running. Input-only pin: the opto drives it, no pull
-// needed from us beyond the idle pull-up. ACTIVE LOW — opto conducting = motor power LIVE —
-// so a broken wire reads "dead" and errs toward refusing to drive.
+// the MOTOR rail and leaves the ESP running. ACTIVE LOW — opto conducting = motor power
+// LIVE — so a broken wire reads "dead" and errs toward refusing to drive.
+// ⚠️ WIRING: GPIO 34-39 are input-only and have NO internal pull hardware — an EXTERNAL
+// 10 kΩ pull-up to 3.3 V is REQUIRED for the idle-high level (ready-made opto modules
+// usually provide one on their output). Floating, the pin reads noise and pwr_sense_en=1
+// would flicker between "live" and a phantom e-stop.
 constexpr gpio_num_t MOTOR_PWR_SENSE = GPIO_NUM_34;
 
 // Free GPIOs: 21, 22, 23 and the input-only 35, 36, 39.
