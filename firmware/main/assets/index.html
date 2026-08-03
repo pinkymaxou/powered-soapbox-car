@@ -186,10 +186,21 @@
    <tr><td>34 / 35 / 36 / 39</td><td>unused</td><td>input-only, no internal pulls</td></tr>
   </table>
   <p class="note">Control = <b>Bluetooth gamepad</b> (Gamepad tab). Tricycle: 2 driven front wheels + rear caster wheel.<br>
-  Disconnected or uncalibrated gamepad → <b>braking / refuses to drive</b>. Emergency stop = hardware kill switch.</p>
+  Disconnected or uncalibrated gamepad → <b>braking / refuses to drive</b>. Emergency stop = mushroom
+  opening the 40 A motor relay (its coil runs through the button); the logic stays alive, reports the
+  fault, and a deliberate re-arm on START is required.</p>
  </section>
 
  <section id="doc" class="panel" hidden>
+  <div class="chart-title">💡 LED strip — what the colors mean</div>
+  <p class="note">
+   <b>Moving rainbow</b> = armed &amp; ready (driving allowed) ·
+   <b>yellow</b> = healthy but disarmed (pulses while the START hold is in progress) ·
+   <b>orange</b> = low battery (below the warn threshold of the detected pack) ·
+   <b>blinking red</b> = fault stop (2 s rapid burst, then 1 Hz until cleared — never solid) ·
+   <b>blue</b> = gamepad calibration in progress.
+  </p>
+
   <div class="chart-title">🎓 Control modes</div>
   <p class="note">The kart turns the stick into a left/right motor command (arcade mixing:
    forward drives both wheels, turn adds a left/right difference). What sits <b>between the

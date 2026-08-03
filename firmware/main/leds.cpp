@@ -1,7 +1,7 @@
 // leds.cpp — Task dedicated to the WS2812B strip: reflects the kart's state.
-//   green = armed & ready · yellow = healthy but disarmed · pulsing yellow = arming ·
-//   fault stop = 2 s rapid red blink then a steady 1 Hz red blink until the fault clears ·
-//   orange = low battery · blue = calibration.
+//   ARMED = moving rainbow (scrolling hue wheel) · yellow = healthy but disarmed ·
+//   pulsing yellow = arming · fault stop = 2 s rapid red blink then a steady 1 Hz red
+//   blink until the fault clears · orange = low battery · blue = calibration.
 #include "leds.hpp"
 
 #include "config.hpp"
@@ -21,6 +21,34 @@ constexpr int FAULT_ALERT_MS = 2000;       // rapid red blink burst on a fault s
 Ws2812 m_strip;
 int     m_phase = 0;
 int     m_fault_ms = 0;                    // time in Fault since entry (drives the 2 s alert)
+
+// Hue wheel (0-255) → RGB, full saturation/value: the classic thirds-of-the-circle ramp.
+void hueToRgb(uint8_t h, uint8_t& r, uint8_t& g, uint8_t& b)
+{
+    const uint8_t seg = h / 85;                                  // 0, 1, 2
+    const uint8_t up  = static_cast<uint8_t>((h % 85) * 3);      // 0..252 within the segment
+    const uint8_t dn  = static_cast<uint8_t>(255 - up);
+    switch (seg)
+    {
+        case 0:  r = dn;  g = up;  b = 0;   break;   // red → green
+        case 1:  r = 0;   g = dn;  b = up;  break;   // green → blue
+        default: r = up;  g = 0;   b = dn;  break;   // blue → red
+    }
+}
+
+// ARMED: a rainbow scrolling along the strip (~2.5 s per full cycle at 20 Hz). One hue
+// wheel stretched across the LEDs, phase-shifted every frame — unmistakably "alive", and
+// pleasant enough that being allowed to drive LOOKS like a small celebration.
+void renderRainbow(int count)
+{
+    for (int i = 0; i < count; ++i)
+    {
+        uint8_t r, g, b;
+        const uint8_t hue = static_cast<uint8_t>((i * 256) / (count > 0 ? count : 1) + m_phase * 5);
+        hueToRgb(hue, r, g, b);
+        m_strip.setPixel(i, r, g, b);
+    }
+}
 
 void render(const KartConfig& cfg)
 {
@@ -74,17 +102,14 @@ void render(const KartConfig& cfg)
             if ((0 != bt) && (0 != cfg.vbat_check_en) && st.m_vbat > 0.05f && st.m_vbat < warn_v)
             {
                 r = 255;
-                g = 120;       // low battery: orange
+                g = 120;       // low battery: orange (the warning outranks the party)
+                break;
             }
-            else if ((static_cast<int>(BrakeMode::None) != st.m_brake_mode) && slow)
-            {
-                g = 255;       // braking: blinking green
-            }
-            else
-            {
-                g = 255;       // armed & ready: green
-            }
-            break;
+            // Armed & healthy: MOVING RAINBOW — per-pixel, so it bypasses the setAll path.
+            m_strip.setBrightness(static_cast<uint8_t>(cfg.led_brightness));
+            renderRainbow(cfg.led_count);
+            m_strip.show();
+            return;
         }
         case State::Lockout:
         default:
