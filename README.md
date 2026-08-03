@@ -425,7 +425,7 @@ The scale (center + half-amplitude per axis) is **persisted in NVS** (namespace 
 
 ### Electrical safety
 
-- **Emergency stop** easily accessible, **in the 40 A relay's coil loop**: pressing it de-energises the coil and the **relay contact breaks the 40 A** (~10-20 ms; with no hold capacitor, nothing delays it). The mushroom itself only switches ~150 mA on signal-gauge wires — no 40 A detour to the seatback, any decent NC mushroom qualifies. The **logic rail stays up**: the firmware sees `MOTOR POWER` dead, disarms, names the fault on the page, and releasing the button never resumes drive on its own. ⚠️ Residual risk: a **welded relay contact** ignores the coil — the pre-drive test (press e-stop, the MOTOR POWER fault must appear) checks exactly that. (In addition, the gamepad's **button B** triggers immediate braking on the firmware side.)
+- **Emergency stop** easily accessible, **in the 40 A relay's coil loop**: pressing it de-energises the coil and the **relay contact breaks the 40 A** (~10-20 ms; with no hold capacitor, nothing delays it). The mushroom itself only switches ~150 mA on signal-gauge wires — no 40 A detour to the seatback, any decent NC mushroom qualifies. The **logic rail stays up**, and the sense opto reads the **coil** (after the mushroom): the firmware sees the e-stop the instant it is pressed, disarms, **dynamic-brakes** and names the fault — **even if the relay contact is welded closed** (the driver still has VB+ and logic, so the brake actually works). The trade: welding itself becomes undetectable; the pre-drive e-stop test verifies the sense chain. (In addition, the gamepad's **button B** triggers immediate braking on the firmware side.)
 - **Start via momentary button** (primes the latch); **fuse/pack**, wiring ≥ the 2 motors' current.
 - **Battery: one 12 V motorcycle battery** (lead-acid — no BMS of its own). Deep discharge protection = **the firmware LVC** (thresholds hard-coded per detected type: 12 V → cut 10.5 V, 24 V → cut 21 V) + the 40 A fuse.
 - **One 12 V pack, no paralleling** (this phase): it carries the whole ~40 A, so its internal resistance sets the sag under load — a motorcycle battery at ~0.05 Ω dips ~2 V at full throttle, which is why the LVC judges a smoothed voltage. ⚠️ **Never put packs in series** unless you also change the divider (24 V needs 100 k/12 k).
@@ -507,7 +507,7 @@ flowchart LR
 
 **Key wiring points:**
 - **Common ground** ESP32 ↔ driver ↔ ADS1115 ↔ I²C sensors: essential.
-- **Two rails**: the small opto relay module holds the **logic rail** (ESP32 + driver logic + divider), the **40 A relay** feeds the motors through the **e-stop in its main path**. GPIO22 reads the opto that watches motor power (active low: a broken wire reads "dead").
+- **Two rails**: the small opto relay module holds the **logic rail** (ESP32 + driver logic + divider), the **40 A relay** feeds the motors through the **e-stop in its main path**. GPIO22 reads the opto on the relay COIL, after the e-stop (active low: a broken wire reads "e-stop engaged", the safe side).
 - **Brake by default**: at a stop, with no forward command, or if the gamepad disconnects, the firmware brakes.
 - **Power ~10 AWG** (crimped lugs); **signals thin wire**. **40 A fuse** on the single pack.
 - ⚠️ **Driver polarity (VB+/VB-)**: no reverse protection → **double-check**.
@@ -527,7 +527,7 @@ flowchart LR
         SR -->|"coil"| BR
         ESTOP["🛑 E-STOP (NC, in the coil loop)"] --> BR
         BR --> MPWR(["+12 V motors"])
-        BR -->|"opto sense"| SENSE(["GPIO22"])
+        ESTOP -->|"coil sense (after the mushroom)"| SENSE(["GPIO22"])
         RAIL --> BUCK["Buck 12→5 V"] --> V5(["+5 V"])
     end
 
@@ -652,9 +652,12 @@ flowchart LR
 > **The emergency stop only needs to cut the motor relay.** That is the point of splitting the
 > rails: the logic survives, so the kart can *say* what happened instead of going dark. A
 > **feedback opto** from the 40 A relay's output tells the firmware whether motor power is
-> actually live (`pins::MOTOR_PWR_SENSE`, GPIO22, active low so a broken wire reads "dead").
-> Wiring: the opto's input LED across the relay's **output** (87/NO, i.e. downstream of the
-> e-stop) through its series resistor; output transistor between **GPIO22** and GND. The pin
+> actually live (`pins::MOTOR_PWR_SENSE`, GPIO22, active low so a broken wire reads "e-stop engaged").
+> Wiring: the opto's input LED from the **coil node (pin 85, after the e-stop)** through its
+> 4.7 kΩ resistor to ground; output transistor between **GPIO22** and GND. Sensing the COIL
+> rather than the output means a **welded contact cannot defeat the e-stop**: the firmware
+> sees the command and dynamic-brakes (it keeps VB+ and logic to do it). The cost — welding
+> becomes undetectable — was accepted over a dual-opto variant. The pin
 > idles on the ESP32's **internal pull-up** (that is why it is GPIO22 and not one of the
 > pull-less input-only 34-39), and the firmware **debounces 50 ms** so a spike coupled from
 > the neighbouring 40 A cabling can never fake an emergency stop.
@@ -825,7 +828,7 @@ flowchart TB
 - ⚠️ **Chain/sprocket guard**: no fingers/laces/clothing caught.
 - ⚠️ **Rounded corners**, sanding against splinters, bolt heads countersunk/capped on the child side.
 - ⚠️ **Lap belt** anchored to the frame; **helmet mandatory**; **footrest**.
-- ⚠️ **Central hardware emergency stop**: at the **top of the seatback, centered**, **easily reachable by both kids** (and by an adult behind); it **opens the 40 A motor relay** (coil-loop break, ~10-20 ms) — the primary removal of drive power, complementing the **software** emergency stop on the gamepad (button **B**). Its weak spot is a **welded relay contact**, so the pre-drive check is non-negotiable: press it, the `MOTOR POWER` fault must appear. The logic rail stays up so the kart reports the fault; whether the driver still *brakes* dynamically with its 40 A supply cut depends on the driver board keeping gate drive — **test it on the bench** (spin a wheel with the motor relay open). Check that the button is neither hidden nor blocked, and that the kids know how to use it.
+- ⚠️ **Central hardware emergency stop**: at the **top of the seatback, centered**, **easily reachable by both kids** (and by an adult behind); it **opens the 40 A motor relay** (coil-loop break, ~10-20 ms) — the primary removal of drive power, complementing the **software** emergency stop on the gamepad (button **B**). A **welded relay contact** is covered in software: the coil-side sense still sees the e-stop and the firmware disarms + dynamic-brakes (VB+ being present is what makes that brake bite). The logic rail stays up so the kart reports the fault; whether the driver still *brakes* dynamically with its 40 A supply cut depends on the driver board keeping gate drive — **test it on the bench** (spin a wheel with the motor relay open). Check that the button is neither hidden nor blocked, and that the kids know how to use it.
 - ⚠️ **Gamepad**: calibrated before each session; check that **button B (software emergency stop)** brakes, and that a **disconnect** (gamepad off / out of range) triggers braking.
 - ⚠️ **Inspection before each use**: motor mounts, chain tension + lubrication + sprocket tightness, rear caster wheel, **central hardware e-stop** + gamepad e-stop, tech bay mounting (batteries at the front), electric brake test.
 - ⚠️ **Flat ground, supervised**, away from traffic and slopes.
@@ -915,7 +918,7 @@ ESP-IDF 6.1 (C++) code in [`firmware/`](firmware/) — details in [`firmware/REA
 Points to **address / validate before any real use**.
 
 **Safety & access**
-- **The central hardware emergency stop removes drive power by opening the 40 A relay** (mushroom in the relay's **coil loop**, at the top of the seatback, within reach of both kids; ~10-20 ms). Its blind spot is a **welded relay contact** — which is why the pre-drive e-stop test (fault must appear) exists. The logic rail deliberately survives — the kart disarms, reports `MOTOR POWER`, and requires a re-arm. The rest (gamepad emergency stop, LVC, disarm, watchdog, braking on disconnect) is software; the ESP can also cut itself via POWER_HOLD.
+- **The central hardware emergency stop removes drive power by opening the 40 A relay** (mushroom in the relay's **coil loop**, at the top of the seatback, within reach of both kids; ~10-20 ms). A **welded relay contact** no longer defeats it: the sense reads the coil, so the firmware still disarms and dynamic-brakes. The logic rail deliberately survives — the kart disarms, reports `MOTOR POWER`, and requires a re-arm. The rest (gamepad emergency stop, LVC, disarm, watchdog, braking on disconnect) is software; the ESP can also cut itself via POWER_HOLD.
 - **Unauthenticated web — by choice**: only the AP password protects access (changing it is still recommended). **Gamepad calibration** is locked outside the disarmed/stopped state.
 - **Gamepad dependency**: if the gamepad disconnects, the kart **brakes** (safety), but the driver loses directional control until reconnection → drive within Bluetooth range, gamepad charged.
 

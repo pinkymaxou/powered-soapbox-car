@@ -69,8 +69,15 @@ re-arm. Releasing the mushroom never resumes drive on its own.
   ~10–20 ms — instant to a human. *(This placement was chosen once the capacitor was
   dropped: the old reason to put the mushroom in the 40 A path was precisely that a charged
   capacitor kept the coil alive ~0.9 s against it.)*
-- **Sense opto**: input LED through **4.7 kΩ ¼ W** across the **relay output** (87 / driver
-  VB+ node) → it reads what the driver actually receives. Sizing: R = (V − Vf)/If with
+- **Sense opto — on the COIL, after the mushroom** (owner's decision, 2026-08-03): input
+  LED through **4.7 kΩ ¼ W** from the coil node (85) to ground. Coil dead = e-stop engaged
+  (or logic rail down) → the firmware disarms and **dynamic-brakes**. The point of sensing
+  the coil rather than the relay output: **a welded relay contact no longer defeats the
+  e-stop** — the software sees the command and stops the kart even though VB+ is still
+  there (and braking works all the better for it). The trade, stated plainly: a welded
+  contact becomes **invisible** (the sense can no longer prove the contact opened), and a
+  relay that fails to CLOSE is not seen here either — that case is caught by the
+  wheel-stuck fault (commanded PWM, no rotation, 1 s) and by the obvious symptom. Sizing: R = (V − Vf)/If with
   Vf ≈ 1.2 V gives 2.0–2.9 mA over the whole 10.5–14.8 V battery range (39 mW worst in the
   resistor); the transistor only has to sink the GPIO's internal pull-up (~73 µA), so even
   a minimum-CTR PC817 at the LVC floor keeps a ×9 margin. A ready-made opto module rated
@@ -78,13 +85,18 @@ re-arm. Releasing the mushroom never resumes drive on its own.
   and GND; the pin idles on the ESP32's internal pull-up (that is why it is GPIO22 — the
   input-only 34–39 have no pull hardware) and the firmware debounces 50 ms, so a spike
   coupled from the neighbouring 40 A cabling cannot fake an emergency stop.
-- Contact welding on inrush (closing 40 A onto the driver's bulk capacitors) is the known
-  relay failure mode and it fails ON — and with the e-stop in the coil loop, a welded
-  contact is exactly what the mushroom can no longer cut. The mitigation is the **pre-drive
-  e-stop test, every session**: press the mushroom, the page MUST show the `MOTOR POWER`
-  fault (the sense opto proves the contact actually opened). No fault shown = welded
-  contact = the kart does not drive. If it ever welds, add a pre-charge resistor across
-  the contact.
+- **Contact welding** happens at CLOSING: the contacts bounce for a few ms, and each bounce
+  arcs across whatever inrush is waiting — here, the driver's bulk capacitors. Two facts
+  follow. First, **driving style is irrelevant to welding**: the relay always closes with
+  the kart disarmed and the motors commanded off (boot sequence), so the make-current is
+  the capacitor charge, never the motors — gentler mixing curves protect the CHILD, not
+  the relay. Second, the fix if it ever welds is a **pre-charge resistor** across the
+  contact, not softer throttle. What softer driving DOES reduce is contact **erosion** when
+  the e-stop opens the relay under load (the relay then breaks whatever the motors draw,
+  up to ~40 A at 12 VDC — inside an automotive relay's normal duty). With the coil-side
+  sense, a welded contact is mitigated in software (disarm + dynamic brake, see above)
+  but NOT detected — the pre-drive e-stop test verifies the sense chain, no longer the
+  contact itself.
 
 ### 5 V rail — the ≥ 2 A budget
 
@@ -169,8 +181,8 @@ Work with the battery disconnected; connect it last.
 6. **40 A relay pin 87 → driver VB+** — 10 AWG, short run inside the nose. Driver VB− →
    ground bus (10 AWG). ⚠️ **Triple-check VB+/VB− polarity before the battery goes in —
    the driver has no reverse protection.**
-7. **Sense opto**: LED input through **4.7 kΩ ¼ W** across the **relay output / driver VB+
-   node** (+) and ground (12 V-rated modules have it onboard; 3.3/5 V modules get ~1–1.5 kΩ
+7. **Sense opto**: LED input through **4.7 kΩ ¼ W** from the **coil node (relay pin 85,
+   AFTER the e-stop)** to ground (12 V-rated modules have it onboard; 3.3/5 V modules get ~1–1.5 kΩ
    added); output: collector → **GPIO22**, emitter → GND. No external pull-up needed
    (internal).
 8. **Buck**: IN ← +12V_LOG (+ ≥ 470 µF bulk at its input), OUT 5 V → ESP32 5V/VIN, WS2812
@@ -193,9 +205,11 @@ Work with the battery disconnected; connect it last.
    ~1 s — the rail must HOLD.
 3. E-stop released: +12V_MOT present at driver VB+; **page shows no MOTOR POWER fault**
    (with `pwr_sense_en=1`).
-4. **Press the e-stop**: +12V_MOT dead, logic alive, page names the `MOTOR POWER` fault,
-   re-arm required after release. **This is also the welded-contact test — repeat it at
-   every pre-drive inspection** (no fault appearing = the relay contact is stuck closed).
+4. **Press the e-stop**: the page names the `MOTOR POWER` fault (coil sense), re-arm
+   required after release; with a healthy relay, +12V_MOT dies too — verify BOTH at
+   commissioning (fault shown AND driver VB+ actually dead, multimeter). The routine
+   pre-drive test verifies the sense chain; it cannot prove the contact is not welded —
+   that case is covered by the software disarm + dynamic brake.
 5. **The 30-second brake test**: logic up, e-stop pressed, spin a front wheel by hand — if it
    resists, dynamic braking survives the e-stop on this driver; if it spins free, the e-stop
    coasts (acceptable on the flat only — note the result here: ☐ brakes / ☐ coasts).
@@ -212,4 +226,5 @@ Work with the battery disconnected; connect it last.
 | Pre-charge on the 40 A contact | **not fitted, watched** | inrush is modest; welding fails ON and is on the watch list; resistor retrofit documented |
 | Buck | **verify ≥ 2 A or replace (3 A class)** | firm 5 V ≥ 2 A budget (LEDs + ESP bursts) |
 | Divider | **100 k / 15 k confirmed** | matches `hw::VBAT_R_*` and the soldered board; the 27 k row in old tables was a sizing example, now removed |
+| Sense position | **on the COIL (85), not the relay output** | e-stop engaged is detected even with a welded contact → software disarm + dynamic brake; cost: welding becomes undetectable and a fail-open relay is only caught by the wheel-stuck net (owner's call over the dual-opto option) |
 | E-stop position | **in the 40 A relay's COIL loop** | with no hold capacitor there is nothing to delay it (~10-20 ms drop-out); the mushroom switches 150 mA on thin wires instead of 40 A to the seatback and back; residual welded-contact risk covered by the per-session e-stop test via the sense opto |

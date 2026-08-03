@@ -5,8 +5,9 @@
 #     maintenance switch. NO hold capacitor: a reboot drops the rail = clean power-down.
 #   · MOTOR rail: 40 A automotive relay; the E-STOP (NC mushroom) breaks the relay's COIL —
 #     the relay's contact is what breaks the 40 A, so the mushroom only switches ~150 mA and
-#     the power run never detours to the seatback. Welded-contact check: pressing the e-stop
-#     must raise the MOTOR POWER fault (sense opto → GPIO22, active low, 50 ms debounce).
+#     the power run never detours to the seatback. The sense opto reads the COIL (after the
+#     e-stop) into GPIO22: coil dead = e-stop engaged → the firmware disarms and
+#     DYNAMIC-BRAKES — which covers even a welded relay contact (driver keeps VB+ + logic).
 # Also on sheet: the ESP32 (holds PWR_HOLD, reads GPIO22) and the ADS1115 with the
 # 100k/15k divider measuring the battery on the LOGIC rail.
 #   . .venv-schem/bin/activate && python doc/schematics/power_rails.py
@@ -90,17 +91,19 @@ with schemdraw.Drawing(file='doc/schematics/power_rails.png', dpi=150, show=Fals
                              elm.IcPin(name='30', side='top'),
                              elm.IcPin(name='87', side='right', slot='2/2'),
                              elm.IcPin(name='87a', side='right', slot='1/2')],
-                       w=3.2, h=2.6, plblsize=10).label('40 A RELAY (automotive)', loc='top', fontsize=9, ofst=(-2.4, 0.6))
+                       w=3.2, h=2.6, plblsize=10).label('40 A RELAY (automotive)', loc='top', fontsize=9, ofst=(1.6, 0.9))
                 .right().anchor('center').at((13.0, 11.0)))
-    d += elm.Line().up().at(P(rly, '30')).length(0.5)
-    flag(d, d.here, '+12V_BAT', 'right')
+    d += elm.Line().up().at(P(rly, '30')).length(0.9)
+    flag(d, d.here, '+12V_BAT', 'up')
     # E-STOP breaks the COIL: the mushroom switches ~150 mA on thin wires; the relay's
     # CONTACT is what breaks the 40 A. (No hold capacitor anywhere ⇒ drop-out is the relay's
     # own ~10-20 ms.)
     d += elm.Line().left().at(P(rly, '85')).length(2.2)
     n85 = d.here
     d += elm.Dot()
-    d += elm.Switch().left().at(n85).label('E-STOP\n(mushroom NC, in the COIL loop —\nthin wires to the seatback)',
+    d += elm.Line().up().at(n85).length(1.5)
+    flag(d, d.here, 'COIL_SENSE', 'up')
+    d += elm.Switch().left().at(n85).label('E-STOP (mushroom NC,\nin the COIL loop)',
                                            loc='top', fontsize=9).length(3.0).color(HL)
     flag(d, d.here, '+12V_LOG', 'left')
     d += elm.Line().left().at(P(rly, '86')).length(1.0)
@@ -113,23 +116,23 @@ with schemdraw.Drawing(file='doc/schematics/power_rails.png', dpi=150, show=Fals
     d += elm.Line().left().at(n86).length(0.9)
     d += elm.Diode().up().toy(n85[1]).label('1N4007\nflyback', fontsize=8, ofst=(-1.15, -0.5))
     d += elm.Dot()
-    d += elm.Label().label('welded-contact check: press the e-stop →\nthe MOTOR POWER fault MUST appear',
-                           fontsize=8, color=HL).at((13.4, 8.2))
+    d += elm.Label().label('welded contact? the software still stops it: coil sense says\n"e-stop engaged" → disarm + DYNAMIC BRAKE (driver keeps VB+ and logic)',
+                           fontsize=8, color=HL).at((13.6, 8.2))
     # 87 → motor rail (the CONTACT is what breaks the 40 A)
     d += elm.Line().right().at(P(rly, '87')).length(1.4)
     flag(d, d.here, '+12V_MOT', 'up')
     d += elm.Label().label('87a: spare (NC)', fontsize=8).at((15.9, 9.5))
 
-    # ───────── Sense opto: is the motor rail actually live? ─────────
+    # ───────── Sense opto: is the e-stop engaged? (reads the COIL, after the mushroom) ─────────
     opto = d.add(elm.Optocoupler(box=True).right().anchor('anode').at((20.6, 4.6)))
     d += elm.Resistor().up().at(opto.anode).label('4.7 kΩ ¼ W', fontsize=8, loc='left', ofst=(-1.7, 0.2)).length(1.5)
-    flag(d, d.here, '+12V_MOT', 'up')
+    flag(d, d.here, 'COIL_SENSE', 'up')
     d += elm.Line().down().at(opto.cathode).length(0.8)
     d += elm.Ground()
     d += elm.Line().up().at(opto.collector).length(0.8)
     flag(d, d.here, 'PWR_SENSE', 'up')
-    d += elm.Label().label('MOTOR_PWR_SENSE — active LOW = live\ninternal pull-up + 50 ms firmware debounce\nno voltage ⇒ e-stop assumed active',
-                           fontsize=8, color='#555').at((26.0, 3.6))
+    d += elm.Label().label('E-STOP sense (on the COIL, after the mushroom) — GPIO22\nactive LOW = coil energized = e-stop released\ninternal pull-up + 50 ms firmware debounce\ncoil dead ⇒ e-stop engaged → disarm + dynamic brake',
+                           fontsize=8, color='#555').at((26.2, 3.5))
     d += elm.Line().down().at(opto.emitter).length(0.8)
     d += elm.Ground()
 
@@ -165,7 +168,7 @@ with schemdraw.Drawing(file='doc/schematics/power_rails.png', dpi=150, show=Fals
     flag(d, P(esp, '3V3'), '+3V3', 'right')
     flag(d, P(esp, '13'), 'PWR_HOLD', 'right')
     flag(d, P(esp, '22'), 'PWR_SENSE', 'right')
-    d += elm.Label().label('GPIO13 low = hold the logic rail\nGPIO22 = motor-rail sense (pull-up on)',
+    d += elm.Label().label('GPIO13 low = hold the logic rail\nGPIO22 = e-stop sense on the 40 A coil (pull-up on)',
                            fontsize=8, color='#555').at((0.4, -0.8))
 
     # ───────── ADS1115 + divider: battery voltage on the LOGIC rail ─────────

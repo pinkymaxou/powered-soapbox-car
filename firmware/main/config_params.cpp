@@ -120,7 +120,7 @@ extern constexpr ParamDesc PARAMS[] =
      "Minutes DISARMED before the kart powers itself down, so a forgotten kart does not flatten its battery. Arming restarts the countdown, which the Dashboard shows. 0 = never. Note: adjusting settings from this page does NOT restart it — only arming does.",
      PType::Int,   {.i = 0}, {.i = 10}, {.i = 120}, {.i = &KartConfig::idle_off_min}},
     {"pwr_sense_en",    "Motor-power sense (0/1)", "Behavior",
-     "1 = the opto that reports whether the 40 A motor relay is live is wired: losing motor power (emergency stop pressed) becomes a blocking fault instead of the kart silently commanding dead motors. 0 = ignore that input entirely (bench, or opto not fitted yet).",
+     "1 = the opto on the 40 A relay COIL (after the e-stop) is wired: pressing the emergency stop becomes a blocking fault with immediate disarm and braking — even if the relay contact is welded closed. 0 = ignore that input entirely (bench, or opto not fitted yet).",
      PType::Bool,  {.i = 0}, {.i = 0}, {.i = 1}, {.i = &KartConfig::pwr_sense_en}},
     // (No allow_reverse: reverse is ALWAYS permitted, held by its own limit rev_speed_ms.)
     // (No motor-output inversion: swapping the two motor leads does that in hardware.)

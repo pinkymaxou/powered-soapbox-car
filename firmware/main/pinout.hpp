@@ -50,11 +50,12 @@ constexpr gpio_num_t WS2812 = GPIO_NUM_4;   // status strip
 // Active levels
 constexpr int BTN_ACTIVE = 0;   // button pressed = low level
 
-// Motor-power sense: opto output reporting whether the 40 A relay is actually live, so the
-// firmware can tell "emergency stop pressed" from "all well" now that the e-stop only cuts
-// the MOTOR rail and leaves the ESP running. ACTIVE LOW — opto conducting = motor power
-// LIVE — so a broken/unwired input rests at the pull-up, reads "dead", and errs toward
-// refusing to drive.
+// E-stop sense: opto reading the 40 A relay's COIL (pin 85, AFTER the mushroom). Coil dead
+// = e-stop engaged (or logic rail down) → blocking fault, disarm, dynamic brake. Sensing
+// the COIL rather than the relay output means a WELDED contact cannot defeat the e-stop:
+// the firmware still sees the command and brakes (it keeps VB+ and logic to do it).
+// ACTIVE LOW — opto conducting = coil energized = e-stop released — so a broken/unwired
+// input rests at the pull-up, reads "engaged", and errs toward refusing to drive.
 // GPIO22, NOT one of the input-only 34-39: those have no internal pull hardware (the first
 // pick, 34, silently ignored the pull-up request and floated when unwired). 22 gives the
 // INTERNAL pull-up (~45 kΩ) — no external resistor needed. That pull is weak and the wire
