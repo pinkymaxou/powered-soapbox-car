@@ -184,8 +184,8 @@ network browsers (Bonjour, `avahi-browse`, Windows Explorer "Network"). The host
 - Cost: ~34 kB of flash and one low-priority task; a failure to start is **logged and
   ignored** — access by IP is never affected.
 
-The page (8 tabs: **Dashboard / Graph / Configuration / Gamepad / Wi-Fi / Pinout /
-Documentation / System**) communicates over **WebSocket** (`/ws`) using **binary Protocol Buffers** — a single
+The page (7 tabs: **Dashboard / Graph / Configuration / Gamepad / Wi-Fi /
+Documentation / System** — the pinout lives in the Documentation tab) communicates over **WebSocket** (`/ws`) using **binary Protocol Buffers** — a single
 schema [`main/proto/kart.proto`](main/proto/kart.proto) (regenerate: `main/proto/generate.sh`),
 encoded on the kart side by **nanopb** (vendored, callbacks → zero-copy/zero-heap, from the
 static arena) and decoded browser-side by **protobuf.js** (`/pb.js` embedded, mirror JSON
