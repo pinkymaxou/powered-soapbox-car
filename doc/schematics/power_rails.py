@@ -119,7 +119,7 @@ with schemdraw.Drawing(file='doc/schematics/power_rails.png', dpi=150, show=Fals
 
     # ───────── Sense opto: is the motor rail actually live? ─────────
     opto = d.add(elm.Optocoupler(box=True).right().anchor('anode').at((13.2, 4.2)))
-    d += elm.Resistor().up().at(opto.anode).label('series R\n(module)', fontsize=8, loc='left', ofst=(-1.3, 0.1)).length(1.5)
+    d += elm.Resistor().up().at(opto.anode).label('4.7 kΩ ¼ W', fontsize=8, loc='left', ofst=(-1.3, 0.1)).length(1.5)
     flag(d, d.here, '+12V_MOT', 'up')
     d += elm.Line().down().at(opto.cathode).length(0.8)
     d += elm.Ground()

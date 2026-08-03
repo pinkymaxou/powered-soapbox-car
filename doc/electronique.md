@@ -65,8 +65,12 @@ re-arm. Releasing the mushroom never resumes drive on its own.
 - **E-stop (mushroom, NC, rated for the current) in the 40 A path itself** — a mechanical
   break of the drive current, not a signal to electronics. With no hold capacitor anywhere
   it acts instantly.
-- **Sense opto**: input LED (with its series resistor) across the **driver side** of the
-  e-stop → it reads what the driver actually receives. Output transistor between **GPIO22**
+- **Sense opto**: input LED through **4.7 kΩ ¼ W** across the **driver side** of the
+  e-stop → it reads what the driver actually receives. Sizing: R = (V − Vf)/If with
+  Vf ≈ 1.2 V gives 2.0–2.9 mA over the whole 10.5–14.8 V battery range (39 mW worst in the
+  resistor); the transistor only has to sink the GPIO's internal pull-up (~73 µA), so even
+  a minimum-CTR PC817 at the LVC floor keeps a ×9 margin. A ready-made opto module rated
+  12 V needs nothing added; one rated 3.3/5 V gets ~1–1.5 kΩ in series with its input. Output transistor between **GPIO22**
   and GND; the pin idles on the ESP32's internal pull-up (that is why it is GPIO22 — the
   input-only 34–39 have no pull hardware) and the firmware debounces 50 ms, so a spike
   coupled from the neighbouring 40 A cabling cannot fake an emergency stop.
@@ -128,7 +132,7 @@ a 40 A acceleration cannot false-trip. Decoupling capacitor (100 nF) at A0.
 | 11 | Motor driver | dual channel, 20 A/ch, 6–30 V, PWM+DIR | 1 | both front motors |
 | 12 | ADS1115 breakout | 16-bit I²C ADC, addr 0x48 | 1 | Vbat on A0 (bus 0, 3.3 V) |
 | 13 | AS5600 breakout + diametric magnet | 12-bit angle, I²C 0x36 | 2 | one per wheel, one per bus |
-| 14 | Sense optocoupler (or opto module) | LED side 12 V w/ series R; transistor out | 1 | motor-rail presence → GPIO22 |
+| 14 | Sense optocoupler (or opto module) | PC817-class; input via **4.7 kΩ ¼ W** | 1 | motor-rail presence → GPIO22 |
 | 15 | Resistors 100 k + 15 k | 1 %, ¼ W | 1+1 | Vbat divider (**matches `hw::VBAT_R_*`**) |
 | 16 | Resistors 4.7 k | ¼ W | 4 | I²C pull-ups (2 per bus) |
 | 17 | Resistor ~330 Ω | ¼ W | 1 | WS2812 DIN series |
@@ -158,9 +162,10 @@ Work with the battery disconnected; connect it last.
 6. **40 A relay pin 87 → e-stop (NC) → driver VB+** — 10 AWG throughout; the mushroom sits at
    the top of the seatback. Driver VB− → ground bus (10 AWG). ⚠️ **Triple-check VB+/VB−
    polarity before the battery goes in — the driver has no reverse protection.**
-7. **Sense opto**: LED input (through its series resistor / module input) across
-   **driver-side e-stop output** (+) and ground; output: collector → **GPIO22**, emitter →
-   GND. No external pull-up needed (internal).
+7. **Sense opto**: LED input through **4.7 kΩ ¼ W** across **driver-side e-stop output**
+   (+) and ground (12 V-rated modules have it onboard; 3.3/5 V modules get ~1–1.5 kΩ
+   added); output: collector → **GPIO22**, emitter → GND. No external pull-up needed
+   (internal).
 8. **Buck**: IN ← +12V_LOG (+ ≥ 470 µF bulk at its input), OUT 5 V → ESP32 5V/VIN, WS2812
    strip (with its 470–1000 µF at the strip head), ground to the bus.
 9. **Divider**: 100 k from +12V_LOG to node A0, 15 k from node to ground, 100 nF across the
