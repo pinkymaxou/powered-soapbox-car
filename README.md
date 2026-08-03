@@ -94,7 +94,7 @@ flowchart TB
 | **Electronics** | **ESP32** → **dual-channel driver 20 A / 6–30 V** (PWM + DIR / channel), **PWM capped at ≈ 12 V/Vbat** (12 V → ~100%, 24 V → ~50%); **tech bay in the nose** (near the 2 motors, short power wiring) |
 | **Power** | **One 12 V motorcycle battery**, **at the front, centered in the nose** — its weight loads the drive axle. Single pack, no paralleling |
 | **Speed** | Measured by **2 AS5600 angle sensors** (one per wheel, 1 per I²C bus); control loop at **500 Hz** |
-| **Controls** | Driving with the **Bluetooth gamepad**; **arming** button (physical or gamepad START, ~1 s); **hardware emergency stop** at the **top of the seatback, centered** (breaks the 40 A motor feed; the logic rail stays up so the kart reports WHY it stopped; reachable by both kids and by an adult behind) **+** software emergency stop = gamepad button **B**; **electric brake by default** |
+| **Controls** | Driving with the **Bluetooth gamepad**; **arming** button (physical or gamepad START, ~1 s); **hardware emergency stop** at the **top of the seatback, centered** (opens the 40 A motor relay by breaking its COIL — thin wires, ~10-20 ms; the logic rail stays up so the kart reports WHY it stopped; reachable by both kids and by an adult behind) **+** software emergency stop = gamepad button **B**; **electric brake by default** |
 | **Frame** | Lightweight **wood**: **2×3** studs + **6 mm plywood** floor |
 | **Mass** | ~**32 kg** empty · ~**98 kg** loaded (2 kids) |
 
@@ -106,7 +106,7 @@ flowchart TB
 - **Flexible battery voltage (6–30 V driver)**: the motors are 12 V; the firmware **caps PWM AUTOMATICALLY at 12 V / measured Vbat** (smoothed ~1 s): motorcycle battery **12 V → ~100%**, 20 V pack → ~60%, **24 V → ~50%**. Changing battery = adjust the Vbat measurement **voltage divider** (swap the two resistors and edit the `hw::VBAT_R_TOP`/`VBAT_R_BOTTOM` constants — deliberately NOT a web setting, a wrong ratio would silently drag the LVC along); the LVC thresholds are **hard-coded per battery type** (12/24 V, detected at startup). A **manual** cap (`duty_cap`) remains available; ⚠️ **without the Vbat sensor (ADS1115), the auto cap is inactive** → set `duty_cap` by hand if the battery exceeds 12 V.
 - **Free-rolling front wheels**: driven by **#35 chain** (sprocket bolted to the rim), they keep their original bearing — no through drive axle.
 - **Tech bay at the front**: batteries + driver + ESP32 are grouped **at the front, near the 2 motors** → **short power wiring** (fewer losses, fewer ~10 AWG wires to run), drive mass and energy concentrated over the drive axle. Longitudinal layout: **NOSE (tech bay + battery) → DRIVE AXLE → CABIN → REAR (free caster wheel)**. **The axle is set back ~32 cm into the body**: in a pivot in place (rotation about the middle of the axle) the swept envelope drops from ~1.27 m to **~0.95 m radius** (short turning radius), and the weight of the **battery centered in the nose** loads the drive wheels (traction + braking).
-- **Safety**: **central hardware emergency stop**, at the **top of the seatback** (within reach of both kids and an adult behind), **e-stop in the 40 A motor path** (mechanical break of the drive current; the logic rail survives and the firmware raises the MOTOR-POWER fault) **and** software gamepad emergency stop (button B); start via **momentary button** priming the two-relay latch (small opto module = logic rail, 40 A relay = motor power, the ESP holds via `POWER_HOLD`), one 40 A fuse, **electric brake by default** (gamepad disconnect → immediate braking), low-voltage cutoff (LVC), **2 s watchdog (PANIC)**, **disarmed** start by default, guards over chains/sprockets, seatbelt, helmet.
+- **Safety**: **central hardware emergency stop**, at the **top of the seatback** (within reach of both kids and an adult behind), **e-stop in the 40 A relay's coil loop** (the mushroom breaks 150 mA, the relay contact breaks the 40 A; the logic rail survives and the firmware raises the MOTOR-POWER fault — which doubles as the per-session welded-contact test) **and** software gamepad emergency stop (button B); start via **momentary button** priming the two-relay latch (small opto module = logic rail, 40 A relay = motor power, the ESP holds via `POWER_HOLD`), one 40 A fuse, **electric brake by default** (gamepad disconnect → immediate braking), low-voltage cutoff (LVC), **2 s watchdog (PANIC)**, **disarmed** start by default, guards over chains/sprockets, seatbelt, helmet.
 
 ---
 
@@ -153,7 +153,7 @@ Reference 0 = **front** axle (drive wheels); dimensions measured **toward the re
 
 ➡️ With the **Bluetooth gamepad**, there's **no more pedal box or steering wheel** to position: only seating ergonomics matter. **Seatback → footrest ≈ 57 cm** (62 − 5) ✔ leg almost straight, slight knee bend. Provide a safe place to **rest/charge the gamepad**. **Adjustable** seat (§6) to fit the child's size.
 
-➡️ **Emergency stop at the top of the seatback (centered)**: the **hardware mushroom button** (in series in the **40 A motor path**) is mounted **at the top of the seatback, in the center** — reachable by **both kids** and by an **adult following the kart**. It **breaks the motor current mechanically**; the logic rail stays up, so the firmware disarms, names the fault (`MOTOR POWER`) and requires a deliberate re-arm — complementing the **software** emergency stop on the gamepad (button **B**). **Side guardrails** on each side of the bench (no central divider: continuous bench). **Driving stays on the Bluetooth gamepad**.
+➡️ **Emergency stop at the top of the seatback (centered)**: the **hardware mushroom button** (in series with the **40 A relay's coil**) is mounted **at the top of the seatback, in the center** — reachable by **both kids** and by an **adult following the kart**. It **opens the motor relay** (~10-20 ms, thin wires only); the logic rail stays up, so the firmware disarms, names the fault (`MOTOR POWER`) and requires a deliberate re-arm — complementing the **software** emergency stop on the gamepad (button **B**). **Side guardrails** on each side of the bench (no central divider: continuous bench). **Driving stays on the Bluetooth gamepad**.
 
 > ⚠️ **Total power off = coasting; e-stop probably still brakes.** Dynamic braking closes the
 > driver's **low-side** MOSFETs, which need only gate drive — so with the two-rail wiring, an
@@ -425,7 +425,7 @@ The scale (center + half-amplitude per axis) is **persisted in NVS** (namespace 
 
 ### Electrical safety
 
-- **Emergency stop** easily accessible, **in the 40 A motor path**: it **breaks the drive current mechanically** (a mushroom button rated for it — breaking the actual current beats signalling electronics, and nothing anywhere holds the relay up against it). The **logic rail stays up**: the firmware sees `MOTOR POWER` dead, disarms, names the fault on the page, and releasing the button never resumes drive on its own. (In addition, the gamepad's **button B** triggers immediate braking on the firmware side.)
+- **Emergency stop** easily accessible, **in the 40 A relay's coil loop**: pressing it de-energises the coil and the **relay contact breaks the 40 A** (~10-20 ms; with no hold capacitor, nothing delays it). The mushroom itself only switches ~150 mA on signal-gauge wires — no 40 A detour to the seatback, any decent NC mushroom qualifies. The **logic rail stays up**: the firmware sees `MOTOR POWER` dead, disarms, names the fault on the page, and releasing the button never resumes drive on its own. ⚠️ Residual risk: a **welded relay contact** ignores the coil — the pre-drive test (press e-stop, the MOTOR POWER fault must appear) checks exactly that. (In addition, the gamepad's **button B** triggers immediate braking on the firmware side.)
 - **Start via momentary button** (primes the latch); **fuse/pack**, wiring ≥ the 2 motors' current.
 - **Battery: one 12 V motorcycle battery** (lead-acid — no BMS of its own). Deep discharge protection = **the firmware LVC** (thresholds hard-coded per detected type: 12 V → cut 10.5 V, 24 V → cut 21 V) + the 40 A fuse.
 - **One 12 V pack, no paralleling** (this phase): it carries the whole ~40 A, so its internal resistance sets the sag under load — a motorcycle battery at ~0.05 Ω dips ~2 V at full throttle, which is why the LVC judges a smoothed voltage. ⚠️ **Never put packs in series** unless you also change the divider (24 V needs 100 k/12 k).
@@ -438,7 +438,7 @@ flowchart LR
     BATT["🔋 1 pack 12 V<br/>(motorcycle battery)"]
     FUSE["Fuse 40 A"]
     RAIL(["+12 V LOGIC rail<br/>(small opto relay module)"])
-    SW["🔌 40 A relay (MOTOR power)<br/>coil fed through the small module<br/>🛑 e-stop in the 40 A path"]
+    SW["🔌 40 A relay (MOTOR power)<br/>coil: +12V_LOG → 🛑 e-stop (NC) → 85<br/>contact 30→87 breaks the 40 A"]
     GNDC(["Common GND"])
     BUCK["Buck<br/>12 V → 5 V"]
     ESP["🧠 ESP32"]
@@ -525,7 +525,7 @@ flowchart LR
         FA --> BR["🔌 40 A DC relay<br/>(MOTOR power)"]
         SR --> RAIL(["+12 V logic"])
         SR -->|"coil"| BR
-        ESTOP["🛑 E-STOP (40 A path)"] --> BR
+        ESTOP["🛑 E-STOP (NC, in the coil loop)"] --> BR
         BR --> MPWR(["+12 V motors"])
         BR -->|"opto sense"| SENSE(["GPIO22"])
         RAIL --> BUCK["Buck 12→5 V"] --> V5(["+5 V"])
@@ -719,8 +719,9 @@ flowchart LR
 >   Unreachable from the driver's seat. If left on by mistake, the idle power-off fires,
 >   the rail stays up, and the firmware stays alive with the countdown parked at 0 — the
 >   designed behavior for power that refuses to die.
-> - **The e-stop sits in the 40 A main path** (a mushroom button rated for it): it breaks
->   the drive current mechanically, and with no capacitor anywhere its action is instant.
+> - **The e-stop sits in the 40 A relay's coil loop**: with no capacitor anywhere, nothing
+>   holds the relay against it — drop-out is the relay's own ~10-20 ms, the mushroom only
+>   ever switches ~150 mA, and the 40 A run stays in the nose.
 >
 > **Considered: going back to 2× IRFZ44N gated by the e-stop.** It is a genuine trade, not a
 > clear win, so here it is in numbers:
@@ -731,7 +732,7 @@ flowchart LR
 > | heatsink | mandatory | none |
 > | drop | 350–600 mV | ~80 mV |
 > | reboot hold | **~7 µF** (a gate leaks µA) | ~1500 µF |
-> | e-stop in the control path | instant — the gate pull-down drains in µs | delayed by the hold cap ⇒ must go in the 40 A path |
+> | e-stop in the control path | instant — the gate pull-down drains in µs | ~10-20 ms relay drop-out (fine since the hold cap is gone) |
 > | usual failure mode | shorted D-S — stuck ON | welded contacts — stuck ON |
 >
 > The MOSFETs win exactly where the relay hurt: **200× less capacitance to ride out the reboot**,
@@ -741,8 +742,9 @@ flowchart LR
 >
 > **Staying with the relay** for now: it is in hand, dissipates a fifth as much, needs no
 > heatsink, and both problems it created are answered — the reboot hold is *deliberately not
-> provided* (reboot = clean power-off + START), and the e-stop moved into the 40 A path where
-> a mushroom button belongs anyway. ⚠️ The relay-specific risk to watch is **contact welding
+> provided* (reboot = clean power-off + START), and the e-stop lives in the coil loop, where a
+> plain NC mushroom on thin wires does the whole job.
+ ⚠️ The relay-specific risk to watch is **contact welding
 > on inrush**: closing 40 A onto the driver's bulk capacitors is a hard surge, and a welded
 > contact fails ON. If it welds, add a pre-charge resistor across the contact. Its coil gets
 > a **1N4007 flyback** (the module's contacts must never break an arcing inductive load).
@@ -823,7 +825,7 @@ flowchart TB
 - ⚠️ **Chain/sprocket guard**: no fingers/laces/clothing caught.
 - ⚠️ **Rounded corners**, sanding against splinters, bolt heads countersunk/capped on the child side.
 - ⚠️ **Lap belt** anchored to the frame; **helmet mandatory**; **footrest**.
-- ⚠️ **Central hardware emergency stop**: at the **top of the seatback, centered**, **easily reachable by both kids** (and by an adult behind); it **breaks the 40 A motor feed mechanically** — the **guaranteed** removal of drive power, complementing the **software** emergency stop on the gamepad (button **B**). The logic rail stays up so the kart reports the fault; whether the driver still *brakes* dynamically with its 40 A supply cut depends on the driver board keeping gate drive — **test it on the bench** (spin a wheel with the motor relay open). Check that the button is neither hidden nor blocked, and that the kids know how to use it.
+- ⚠️ **Central hardware emergency stop**: at the **top of the seatback, centered**, **easily reachable by both kids** (and by an adult behind); it **opens the 40 A motor relay** (coil-loop break, ~10-20 ms) — the primary removal of drive power, complementing the **software** emergency stop on the gamepad (button **B**). Its weak spot is a **welded relay contact**, so the pre-drive check is non-negotiable: press it, the `MOTOR POWER` fault must appear. The logic rail stays up so the kart reports the fault; whether the driver still *brakes* dynamically with its 40 A supply cut depends on the driver board keeping gate drive — **test it on the bench** (spin a wheel with the motor relay open). Check that the button is neither hidden nor blocked, and that the kids know how to use it.
 - ⚠️ **Gamepad**: calibrated before each session; check that **button B (software emergency stop)** brakes, and that a **disconnect** (gamepad off / out of range) triggers braking.
 - ⚠️ **Inspection before each use**: motor mounts, chain tension + lubrication + sprocket tightness, rear caster wheel, **central hardware e-stop** + gamepad e-stop, tech bay mounting (batteries at the front), electric brake test.
 - ⚠️ **Flat ground, supervised**, away from traffic and slopes.
@@ -885,7 +887,7 @@ flowchart LR
 
 **Phase 3 — Front drives (replaces the old "steering").** On **each front wheel**: bolted sprocket (large washers / backing plate) + 3D gearbox + motor on a reinforced mount + #35 chain cut to length + tension adjustment + guard. **No linkage**: steering is differential, so nothing to adjust on the steering-wheel/tie-rod side. ✅ *With no power: each front wheel turns by hand, chain tensioned and lubricated.*
 
-**Phase 4 — Power electronics ⚠️ (at the front).** The **single 12 V pack housed in the front tech bay** (short power wiring to the 2 motors); **fuse 40 A → 40 A DC relay → +12 V rail**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`); **NO hold capacitor** — a reboot drops the rail and powers the kart off cleanly (re-prime with START); a **hidden FORCE ON toggle inside the enclosure** forces the logic rail for bench/flash work; the **e-stop goes in the 40 A main path** (mechanical break, instant, mushroom rated for it); **1N4007 flyback across the 40 A coil** (cathode to 85/+). See [`doc/electronique.md`](doc/electronique.md) for the full wiring guide and [`doc/schematics/power_rails.png`](doc/schematics/power_rails.png) for the schematic; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes, and **the central e-stop kills the motor rail while the logic stays up** (the page must show the MOTOR POWER fault, GPIO22). Then check the reboot case: force a reset while powered — the relay MUST drop (clean power-off) and START must bring it back. Finally the 30-second brake test: logic up, motor relay open, spin a wheel by hand — if it resists, the e-stop brakes; if not, it freewheels (flat ground only).*
+**Phase 4 — Power electronics ⚠️ (at the front).** The **single 12 V pack housed in the front tech bay** (short power wiring to the 2 motors); **fuse 40 A → 40 A DC relay → +12 V rail**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`); **NO hold capacitor** — a reboot drops the rail and powers the kart off cleanly (re-prime with START); a **hidden FORCE ON toggle inside the enclosure** forces the logic rail for bench/flash work; the **e-stop (NC mushroom) goes in the 40 A relay's COIL loop** (+12V_LOG → mushroom → 85; thin wires to the seatback, the relay contact breaks the 40 A); **1N4007 flyback across the 40 A coil** (cathode to 85/+). See [`doc/electronique.md`](doc/electronique.md) for the full wiring guide and [`doc/schematics/power_rails.png`](doc/schematics/power_rails.png) for the schematic; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes, and **the central e-stop kills the motor rail while the logic stays up** (the page must show the MOTOR POWER fault, GPIO22). Then check the reboot case: force a reset while powered — the relay MUST drop (clean power-off) and START must bring it back. Finally the 30-second brake test: logic up, motor relay open, spin a wheel by hand — if it resists, the e-stop brakes; if not, it freewheels (flat ground only).*
 
 **Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the 12 V LOGIC rail** (the ESP makes its own 3.3 V); **motor-power sense opto → GPIO22**; **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
 
@@ -913,7 +915,7 @@ ESP-IDF 6.1 (C++) code in [`firmware/`](firmware/) — details in [`firmware/REA
 Points to **address / validate before any real use**.
 
 **Safety & access**
-- **The central hardware emergency stop is the only guaranteed removal of drive power** (mushroom button **at the top of the seatback, centered**, within reach of both kids; it breaks the **40 A motor path** mechanically). The logic rail deliberately survives — the kart disarms, reports `MOTOR POWER`, and requires a re-arm. The rest (gamepad emergency stop, LVC, disarm, watchdog, braking on disconnect) is software; the ESP can also cut itself via POWER_HOLD.
+- **The central hardware emergency stop removes drive power by opening the 40 A relay** (mushroom in the relay's **coil loop**, at the top of the seatback, within reach of both kids; ~10-20 ms). Its blind spot is a **welded relay contact** — which is why the pre-drive e-stop test (fault must appear) exists. The logic rail deliberately survives — the kart disarms, reports `MOTOR POWER`, and requires a re-arm. The rest (gamepad emergency stop, LVC, disarm, watchdog, braking on disconnect) is software; the ESP can also cut itself via POWER_HOLD.
 - **Unauthenticated web — by choice**: only the AP password protects access (changing it is still recommended). **Gamepad calibration** is locked outside the disarmed/stopped state.
 - **Gamepad dependency**: if the gamepad disconnects, the kart **brakes** (safety), but the driver loses directional control until reconnection → drive within Bluetooth range, gamepad charged.
 

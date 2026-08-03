@@ -23,7 +23,7 @@ tells the firmware whether the motor rail is live · priming by a **momentary bu
 | Rail | Switched by | Feeds | Dies when |
 |---|---|---|---|
 | **+12V_LOG** (logic) | small **opto relay module** (COM/NO from the fused battery +) | ESP32 (via buck 5 V), motor-driver **logic**, voltage divider + ADS1115, AS5600 ×2, WS2812 | the ESP releases `POWER_HOLD` (self power-off), or a reboot |
-| **+12V_MOT** (motors) | **40 A automotive relay**, coil fed from +12V_LOG; **e-stop in series with the 40 A contact** | motor driver **VB+** only | e-stop pressed, or the logic rail dies (coil) |
+| **+12V_MOT** (motors) | **40 A automotive relay** — its **coil** runs +12V_LOG → **E-STOP (NC)** → 85; the CONTACT (30→87) is what carries and breaks the 40 A | motor driver **VB+** only | e-stop pressed (coil broken → relay opens in ~10-20 ms), or the logic rail dies |
 
 Why the split: the emergency stop must remove **drive power** without killing the brain — the
 logic survives, the firmware sees the motor rail die through the sense opto (GPIO22), disarms,
@@ -62,11 +62,15 @@ re-arm. Releasing the mushroom never resumes drive on its own.
   the motor rail alive. **1N4007 flyback across the coil** (cathode to +): the little module's
   10 A contacts switch a 150 mA inductive load and must never break an arc. *(Design-review
   addition — the module protects its own relay, nothing protected this one.)*
-- **E-stop (mushroom, NC, rated for the current) in the 40 A path itself** — a mechanical
-  break of the drive current, not a signal to electronics. With no hold capacitor anywhere
-  it acts instantly.
-- **Sense opto**: input LED through **4.7 kΩ ¼ W** across the **driver side** of the
-  e-stop → it reads what the driver actually receives. Sizing: R = (V − Vf)/If with
+- **E-stop (mushroom, NC) in the COIL loop**: +12V_LOG → mushroom → 85. The button switches
+  **~150 mA on thin wires** — any decent NC mushroom qualifies, and the 40 A power run stays
+  in the nose instead of detouring to the seatback and back in 10 AWG. The **relay contact**
+  is what breaks the 40 A. With no hold capacitor anywhere, drop-out is the relay's own
+  ~10–20 ms — instant to a human. *(This placement was chosen once the capacitor was
+  dropped: the old reason to put the mushroom in the 40 A path was precisely that a charged
+  capacitor kept the coil alive ~0.9 s against it.)*
+- **Sense opto**: input LED through **4.7 kΩ ¼ W** across the **relay output** (87 / driver
+  VB+ node) → it reads what the driver actually receives. Sizing: R = (V − Vf)/If with
   Vf ≈ 1.2 V gives 2.0–2.9 mA over the whole 10.5–14.8 V battery range (39 mW worst in the
   resistor); the transistor only has to sink the GPIO's internal pull-up (~73 µA), so even
   a minimum-CTR PC817 at the LVC floor keeps a ×9 margin. A ready-made opto module rated
@@ -75,9 +79,12 @@ re-arm. Releasing the mushroom never resumes drive on its own.
   input-only 34–39 have no pull hardware) and the firmware debounces 50 ms, so a spike
   coupled from the neighbouring 40 A cabling cannot fake an emergency stop.
 - Contact welding on inrush (closing 40 A onto the driver's bulk capacitors) is the known
-  relay failure mode and it fails ON. **Watch for it**; if it ever welds, add a pre-charge
-  resistor across the contact. Not fitted preemptively — the driver's input capacitance is
-  modest and the e-stop downstream still cuts the motors.
+  relay failure mode and it fails ON — and with the e-stop in the coil loop, a welded
+  contact is exactly what the mushroom can no longer cut. The mitigation is the **pre-drive
+  e-stop test, every session**: press the mushroom, the page MUST show the `MOTOR POWER`
+  fault (the sense opto proves the contact actually opened). No fault shown = welded
+  contact = the kart does not drive. If it ever welds, add a pre-charge resistor across
+  the contact.
 
 ### 5 V rail — the ≥ 2 A budget
 
@@ -124,7 +131,7 @@ a 40 A acceleration cannot false-trip. Decoupling capacitor (100 nF) at A0.
 | 3 | Opto relay module | 12 V coil, opto input, low trigger, contacts ≥ 10 A | 1 | logic-rail switch (COM/NO) |
 | 4 | Automotive relay | 12 V coil, **40 A** on 87 (NO), SPDT | 1 | motor-rail switch |
 | 5 | Diode 1N4007 | 1 A / 1000 V | 1 | flyback across the 40 A coil |
-| 6 | E-stop mushroom | NC, rated ≥ 40 A DC, latching | 1 | in the 40 A path, top of seatback |
+| 6 | E-stop mushroom | NC, latching (coil current only: ≥ 1 A) | 1 | in the 40 A relay's coil loop, top of seatback — thin wires |
 | 7 | Momentary button | NO, panel mount | 1 | START / priming (GPIO16 side too) |
 | 8 | Toggle switch | ≥ 3 A, any | 1 | hidden FORCE ON, inside the enclosure |
 | 9 | Buck converter | 12 V in → **5 V ≥ 2 A cont.** (3 A class) | 1 | logic 5 V rail |
@@ -157,13 +164,13 @@ Work with the battery disconnected; connect it last.
    set the module's trigger jumper to **LOW**.
 4. **START button (momentary)** between fused + and the +12V_LOG bus — in parallel with the
    module's contact. **FORCE ON toggle** likewise, mounted inside the enclosure.
-5. **40 A relay coil**: `85` → +12V_LOG bus, `86` → ground bus, **1N4007 across 85/86,
-   cathode (ring) on 85**.
-6. **40 A relay pin 87 → e-stop (NC) → driver VB+** — 10 AWG throughout; the mushroom sits at
-   the top of the seatback. Driver VB− → ground bus (10 AWG). ⚠️ **Triple-check VB+/VB−
-   polarity before the battery goes in — the driver has no reverse protection.**
-7. **Sense opto**: LED input through **4.7 kΩ ¼ W** across **driver-side e-stop output**
-   (+) and ground (12 V-rated modules have it onboard; 3.3/5 V modules get ~1–1.5 kΩ
+5. **40 A relay coil**: +12V_LOG bus → **e-stop mushroom (NC, top of seatback — signal-gauge
+   wires)** → `85`; `86` → ground bus; **1N4007 across 85/86, cathode (ring) on 85**.
+6. **40 A relay pin 87 → driver VB+** — 10 AWG, short run inside the nose. Driver VB− →
+   ground bus (10 AWG). ⚠️ **Triple-check VB+/VB− polarity before the battery goes in —
+   the driver has no reverse protection.**
+7. **Sense opto**: LED input through **4.7 kΩ ¼ W** across the **relay output / driver VB+
+   node** (+) and ground (12 V-rated modules have it onboard; 3.3/5 V modules get ~1–1.5 kΩ
    added); output: collector → **GPIO22**, emitter → GND. No external pull-up needed
    (internal).
 8. **Buck**: IN ← +12V_LOG (+ ≥ 470 µF bulk at its input), OUT 5 V → ESP32 5V/VIN, WS2812
@@ -187,7 +194,8 @@ Work with the battery disconnected; connect it last.
 3. E-stop released: +12V_MOT present at driver VB+; **page shows no MOTOR POWER fault**
    (with `pwr_sense_en=1`).
 4. **Press the e-stop**: +12V_MOT dead, logic alive, page names the `MOTOR POWER` fault,
-   re-arm required after release.
+   re-arm required after release. **This is also the welded-contact test — repeat it at
+   every pre-drive inspection** (no fault appearing = the relay contact is stuck closed).
 5. **The 30-second brake test**: logic up, e-stop pressed, spin a front wheel by hand — if it
    resists, dynamic braking survives the e-stop on this driver; if it spins free, the e-stop
    coasts (acceptable on the flat only — note the result here: ☐ brakes / ☐ coasts).
@@ -204,4 +212,4 @@ Work with the battery disconnected; connect it last.
 | Pre-charge on the 40 A contact | **not fitted, watched** | inrush is modest; welding fails ON and is on the watch list; resistor retrofit documented |
 | Buck | **verify ≥ 2 A or replace (3 A class)** | firm 5 V ≥ 2 A budget (LEDs + ESP bursts) |
 | Divider | **100 k / 15 k confirmed** | matches `hw::VBAT_R_*` and the soldered board; the 27 k row in old tables was a sizing example, now removed |
-| E-stop position | **in the 40 A path** | mechanical break of the actual drive current; logic survives to report |
+| E-stop position | **in the 40 A relay's COIL loop** | with no hold capacitor there is nothing to delay it (~10-20 ms drop-out); the mushroom switches 150 mA on thin wires instead of 40 A to the seatback and back; residual welded-contact risk covered by the per-session e-stop test via the sense opto |
