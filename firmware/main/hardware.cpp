@@ -462,7 +462,8 @@ bool board::btnStart()
 // 40 A relay COIL energized (= e-stop released) = opto conducting = pin pulled LOW. An
 // unwired or broken input rises to the internal pull-up and reads "engaged", the safe way
 // round. RAW level: the debounce lives in the controller core (hw::PWR_SENSE_DEBOUNCE_TICKS),
-// where the sim can test it. Only consulted when pwr_sense_en = 1 (bench unaffected).
+// where the sim can test it. ALWAYS consulted (no software bypass): bench without the
+// opto = GPIO22 tied to GND.
 bool board::motorPowerLive()
 {
     return 0 == gpio_get_level(pins::MOTOR_PWR_SENSE);

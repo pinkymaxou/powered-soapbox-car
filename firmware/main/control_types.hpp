@@ -198,7 +198,6 @@ struct KartConfig
     int32_t enc_inv_l;      // 1 = flip the LEFT encoder's sign (convention: +rpm = forward)
     int32_t enc_inv_r;      // 1 = flip the RIGHT encoder's sign
     int32_t enc_rev_chk;    // 1 = runtime reversed-encoder watchdog (ENC_REV); 0 = commissioning-checked
-    int32_t pwr_sense_en;   // 1 = the motor-power opto sense is wired and blocks when it reads dead
     int32_t idle_off_min;   // minutes disarmed before self power-off (0 = never)
     float   enc_per_wheel;  // encoder-shaft turns per WHEEL turn (mount: gearbox output 1.28, 1:5 shaft 3.41)
     int32_t arm_hold_ms;
@@ -271,10 +270,11 @@ constexpr unsigned ENC_R_ABS = 1u << 9;   // right AS5600 absent — if use_enco
 constexpr unsigned PAD_STALE = 1u << 10;  // gamepad "connected" but silent (heartbeat, PAD_HB_TIMEOUT_US)
 constexpr unsigned MAG_L     = 1u << 11;  // left AS5600 magnet out of field (absent/too far/too close)
 constexpr unsigned MAG_R     = 1u << 12;  // right AS5600 magnet out of field
-// MOTOR power rail dead while the logic rail is alive — which, in the two-rail wiring, is
-// exactly what pressing the emergency stop looks like from the ESP's point of view. Reported
-// only when pwr_sense_en=1 (the opto is wired); blocking is handled in step(), like the
-// encoder-sensor bits, so a bench without the opto is unaffected.
+// The 40 A relay COIL is de-energized while the logic rail is alive — i.e. the emergency
+// stop is engaged (coil sense on GPIO22). ALWAYS armed: there is deliberately no software
+// switch to ignore this input — on a bench without the opto, tie GPIO22 to GND (reads
+// "coil energized"); on the kart the opto is simply part of the build. Blocking is handled
+// in step(), like the encoder-sensor bits.
 constexpr unsigned NO_MOTOR_PWR = 1u << 13;
 
 // Aggregates: BLOCKING forbids driving (disarm + State::Fault);

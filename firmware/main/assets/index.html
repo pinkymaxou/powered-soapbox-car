@@ -175,7 +175,7 @@
    <tr><td>27 / 14</td><td>I²C bus 1 (SDA/SCL) — AS5600 right wheel (0x36)</td><td>I/O</td></tr>
    <tr><td>16</td><td>Arming button (START)</td><td>input (pull-up)</td></tr>
    <tr><td>13</td><td>POWER_HOLD (power latch, active low)</td><td>output</td></tr>
-   <tr><td>22</td><td>E-stop sense (opto on the 40 A relay COIL, after the mushroom; active LOW = coil energized; 50 ms debounce; enable with pwr_sense_en)</td><td>input (pull-up)</td></tr>
+   <tr><td>22</td><td>E-stop sense (opto on the 40 A relay COIL, after the mushroom; active LOW = coil energized; 50 ms debounce; ALWAYS active — bench without the opto: tie to GND)</td><td>input (pull-up)</td></tr>
    <tr><td>4</td><td>WS2812B LED strip (data)</td><td>output</td></tr>
    <tr><td>2</td><td>Status LED (onboard)</td><td>output</td></tr>
    <tr><th colspan="3">External ADS1115 ADC (I²C bus 0, 3.3 V)</th></tr>
@@ -822,7 +822,7 @@ const FAULTS_DESC=[
  {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 750 ms: communication lost. Immediate disarm and braking.', grave:true, z:['pad']},
  {b:7, t:'Encoder: erratic reading',             d:'Measured speed physically impossible for the kart. Faulty sensor or magnet. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
  {b:11,t:'LEFT encoder: magnet out of range',    d:'The left AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wl'], cond:true},
- {b:13,t:'Emergency stop engaged (coil sense)',  d:'The 40 A relay COIL is not energized — the e-stop mushroom is pressed (or the sense wiring is open). Works even with a welded relay contact: the kart disarms and brakes on the command itself. Release the e-stop, then rearm with START. Only reported when pwr_sense_en=1.', grave:true, z:['batt']},
+ {b:13,t:'Emergency stop engaged (coil sense)',  d:'The 40 A relay COIL is not energized — the e-stop mushroom is pressed (or the sense wiring is open). Works even with a welded relay contact: the kart disarms and brakes on the command itself. Release the e-stop, then rearm with START. Bench without the opto wired: tie GPIO22 to GND.', grave:true, z:['batt']},
  {b:12,t:'RIGHT encoder: magnet out of range',   d:'The right AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wr'], cond:true},
 ];
 // cond:true faults (encoder sensor) are only GRAVE when the encoders are actually used;

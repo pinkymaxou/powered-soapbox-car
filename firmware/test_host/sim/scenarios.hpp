@@ -297,9 +297,9 @@ inline std::vector<Scenario> allScenarios()
     // The sustained drop at t=6 s must fault as MOTOR_POWER and brake.
     v.push_back({
         "estop_moteur",
-        "Motor-power sense: 1-tick glitch ignored (debounce), sustained drop = MOTOR_POWER",
+        "E-stop coil sense (always on): 1-tick glitch ignored, sustained drop = MOTOR_POWER",
         10.f,
-        [](KartConfig& c) { c.pwr_sense_en = 1; },
+        nullptr,
         nullptr,
         [](float t) {
             PadCmd c;

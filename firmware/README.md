@@ -113,10 +113,11 @@ multi-second Bluetooth supervision timeout.
 - ⚠️ **Wiring required**: the internal pull-downs **do not survive a reset** (IO_MUX
   registers). During the bootloader (~700 ms), only **EXTERNAL pull-downs** (~10 kΩ) on
   the driver's PWM/DIR inputs guarantee braking — plan for them (or check that the
-  driver module includes them). Same for the **power latch** (`POWER_HOLD`, active
-  low): plan for the resistor/capacitor that keeps the power on during a
-  reboot, otherwise a reset on a slope = driver powered off = **coasting** (the
-  `coupure_pente*` simulation scenarios).
+  driver module includes them). The **power latch** (`POWER_HOLD`, active low) is
+  deliberately NOT held through a reboot: no capacitor — the logic rail drops, the kart
+  powers off cleanly and is re-primed with START (a hidden FORCE ON switch covers bench
+  work). A reset on a slope therefore means an unpowered driver = **coasting** — flat
+  ground use, as the `coupure_pente*` simulation scenarios quantify.
 
 ## Analog measurements (external ADS1115 ADC)
 
@@ -296,8 +297,8 @@ plugging-braking on a downhill, and an owner who verifies the rpm signs at commi
 prefer to disable it; the stuck and aberrant nets remain) and **aberrant** measurement
 (physically impossible speed) ⇒ **total stop latched until restart** (a lying sensor
 would make active (PID) braking and the limiter dangerous), **gamepad heartbeat 750 ms**,
-**2 s watchdog with PANIC**, **motor-power sense** (`pwr_sense_en`: the opto reporting the
-40 A motor relay — losing motor power, e-stop pressed, becomes a blocking fault), **idle
+**2 s watchdog with PANIC**, **e-stop coil sense** (GPIO22, always on —
+no software bypass; the mushroom becomes a blocking fault with immediate disarm and braking, even against a welded relay contact; bench without the opto: tie GPIO22 to GND), **idle
 power-off** (`idle_off_min`: a kart left disarmed powers itself down, countdown on the
 Dashboard), **automatically capped PWM** (12 V/measured Vbat), and the **persistent event
 log** so a disarm that nobody saw still has its cause on record.

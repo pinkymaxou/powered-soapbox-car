@@ -257,13 +257,15 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     if (enc_r_abs)                               fmask |= fb::ENC_R_ABS;
     if (mag_l_out)                               fmask |= fb::MAG_L;
     if (mag_r_out)                               fmask |= fb::MAG_R;
-    // Motor rail dead while the logic rail is alive = the emergency stop is pressed (two-rail
-    // wiring). Reported only when the opto is declared wired, and blocking on the same terms:
-    // it must force a DISARM, so that releasing the mushroom button never resumes drive on its
-    // own — the driver has to hold START again. DEBOUNCED: the sense line idles on a weak
+    // 40 A relay coil de-energized = the emergency stop is engaged (coil sense). ALWAYS
+    // consulted — no software bypass, by decision: the e-stop detection is a link in the
+    // relay-protection chain (forced disarm ⇒ the contact only ever closes at no load), and
+    // a config flag that can silently disable a safety input is a liability. Bench without
+    // the opto: tie GPIO22 to GND. Blocking: forces a DISARM, so releasing the mushroom
+    // never resumes drive on its own — the driver has to hold START again. DEBOUNCED: the sense line idles on a weak
     // pull-up next to the 40 A cabling, and one coupled spike must not fake an e-stop —
     // 50 ms of consecutive "dead" reads to raise, first "live" read to clear.
-    if ((0 != m_cfg.pwr_sense_en) && !in.sensors.motor_pwr)
+    if (!in.sensors.motor_pwr)
     {
         if (m_pwr_dead_ticks < hw::PWR_SENSE_DEBOUNCE_TICKS) ++m_pwr_dead_ticks;
     }

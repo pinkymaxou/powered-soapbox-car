@@ -570,7 +570,7 @@ The same content as an **electrical schematic with standard symbols** (named-por
 ![Electrical schematic of the kart](doc/schematics/full_schematic.png)
 
 > Regenerable: `. .venv-schem/bin/activate && python doc/schematics/full_schematic.py`.
-> The power-switching detail is in [`power_rails.png`](doc/schematics/power_rails.png) (the old MOSFET variant stays in [`power_latch.png`](doc/schematics/power_latch.png)).
+> The power-switching detail is in [`power_rails.png`](doc/schematics/power_rails.png).
 
 ### Battery voltage measurement & low-voltage cutoff (LVC)
 
@@ -661,7 +661,8 @@ flowchart LR
 > idles on the ESP32's **internal pull-up** (that is why it is GPIO22 and not one of the
 > pull-less input-only 34-39), and the firmware **debounces 50 ms** so a spike coupled from
 > the neighbouring 40 A cabling can never fake an emergency stop.
-> With `pwr_sense_en=1` the firmware raises **`fb::NO_MOTOR_PWR`**, disarms, names the fault on
+> The firmware watches this input **unconditionally** (the software bypass was removed; a
+> bench without the opto ties GPIO22 to GND) and raises **`fb::NO_MOTOR_PWR`**, disarms, names the fault on
 > the page, and requires a deliberate re-arm on START — releasing the mushroom button never
 > resumes drive on its own.
 >
@@ -726,28 +727,9 @@ flowchart LR
 >   holds the relay against it — drop-out is the relay's own ~10-20 ms, the mushroom only
 >   ever switches ~150 mA, and the 40 A run stays in the nose.
 >
-> **Considered: going back to 2× IRFZ44N gated by the e-stop.** It is a genuine trade, not a
-> clear win, so here it is in numbers:
->
-> | | 2× IRFZ44N (20 A each, low side) | YCL-12V-C relay |
-> |---|---|---|
-> | dissipation at 40 A | **14 W** cold, **24 W** at 100 °C (Rds rises ~1.7×) | ~3 W contacts + 1.8 W coil |
-> | heatsink | mandatory | none |
-> | drop | 350–600 mV | ~80 mV |
-> | reboot hold | **~7 µF** (a gate leaks µA) | ~1500 µF |
-> | e-stop in the control path | instant — the gate pull-down drains in µs | ~10-20 ms relay drop-out (fine since the hold cap is gone) |
-> | usual failure mode | shorted D-S — stuck ON | welded contacts — stuck ON |
->
-> The MOSFETs win exactly where the relay hurt: **200× less capacitance to ride out the reboot**,
-> and an e-stop that can sit in the control path without being delayed. That was the elegance of
-> the original design. What they cost is 14–24 W to get rid of and a gate drive that wants
-> Vgs ≈ 10 V, which is why they switched the GROUND return rather than the supply.
->
-> **Staying with the relay** for now: it is in hand, dissipates a fifth as much, needs no
-> heatsink, and both problems it created are answered — the reboot hold is *deliberately not
-> provided* (reboot = clean power-off + START), and the e-stop lives in the coil loop, where a
-> plain NC mushroom on thin wires does the whole job.
- ⚠️ The relay-specific risk to watch is **contact welding
+> **The relay's two historical problems are both answered**: the reboot hold is *deliberately
+> not provided* (reboot = clean power-off + START), and the e-stop lives in the coil loop,
+> where a plain NC mushroom on thin wires does the whole job. ⚠️ The relay-specific risk to watch is **contact welding
 > on inrush**: closing 40 A onto the driver's bulk capacitors is a hard surge, and a welded
 > contact fails ON. If it welds, add a pre-charge resistor across the contact. Its coil gets
 > a **1N4007 flyback** (the module's contacts must never break an arcing inductive load).
@@ -759,63 +741,6 @@ flowchart LR
 > Why any of this matters: if the relay releases on a reboot the driver loses power, the windings
 > go open and the kart **freewheels**. On a slope that is the `coupure_pente*` simulation result —
 > 4.4 m/s eight seconds after the cut at 8 %, 12 m/s at 16 %.
-
-![Power latch schematic](doc/schematics/power_latch.png)
-
-> ⛔ **Superseded — MOSFET reference design.** Everything below (and the diagram above)
-> describes the original **low-side MOSFET latch**, replaced this phase by the two-relay
-> build documented in the block just before. Kept because the comparison table shows exactly
-> when the MOSFET variant wins (200× smaller hold capacitor, e-stop allowed in the control
-> path) — if the relay ever welds a contact, this is the fallback to reach for.
-
-The **+20 V** rail continuously powers the driver; it's the batteries' **ground return (−)** that is switched by **2 low-side N-MOSFETs**. ⚠️ Consequence: **as long as the MOSFETs are open, the ESP (and its 3.3 V) are NOT powered** → impossible to prime from the 3.3 V. The solution = **two paths to the gate**, both taken from the **always-present +20 V**:
-
-- **Priming = the button** puts **+20 V directly on the gate** (it never touches the ESP).
-- **Hold = the opto**, driven by the ESP once powered; its **LED is on the 3.3 V side**, its transistor switches the +20 V → **the +20 V never gets back to the ESP** (true isolation).
-
-```mermaid
-flowchart TB
-    P20(["+20 V (always present)"])
-    ESTOP["🛑 Emergency stop<br/>(NC, in series)"]
-    E(["+20 V gate line"])
-    BTN["🔘 Start button<br/>(momentary)"]
-    RG["Series Rg"]
-    GATE(["Common gate"])
-    PULL["Pull-down R"]
-    ZEN["Zener ~15 V"]
-    Q1["IRFZ44N #1<br/>(− pack A → GND)"]
-    Q2["IRFZ44N #2<br/>(− pack B → GND)"]
-    GND(["Chassis GND"])
-    V33(["+3.3 V (ESP, after startup)"])
-    ESP["ESP32 GPIO13<br/>POWER_HOLD (active LOW)"]
-    subgraph OPTO["Optocoupler (isolation)"]
-        LED["LED (3.3 V side)"]
-        TR["Transistor (+20 V side)"]
-    end
-
-    P20 --> ESTOP --> E
-    E -->|"priming"| BTN --> RG
-    E -->|"hold"| TR --> RG
-    RG --> GATE
-    GATE --> Q1 --> GND
-    GATE --> Q2 --> GND
-    GATE --> PULL --> GND
-    GATE --> ZEN --> GND
-    V33 --> LED --> ESP
-    ESP -. "GPIO LOW = LED on = opto holds" .-> LED
-
-    classDef pwr fill:#f8d7da,stroke:#333;
-    classDef sig fill:#d1e7dd,stroke:#333;
-    class P20,E,Q1,Q2,GATE,TR pwr;
-    class BTN,ESP,LED,V33 sig;
-```
-
-1. **Priming**: button → **+20 V → (e-stop) → Rg → gate** → MOSFETs conduct → ground connected → buck → **the ESP powers up**.
-2. **Latch**: as soon as `app_main`, the ESP drives **GPIO13 LOW** → opto LED (on 3.3 V) on → the opto **holds +20 V on the gate** → you can release the button.
-3. **Cutoff**: GPIO13 **HIGH** → LED off → gate falls (pull-down) → MOSFETs open → cutoff (prolonged LVC).
-4. **Passive safeties**: **pull-down** = OFF by default (*fail-safe*); **Rg + zener ~15 V** bound Vgs (±20 V max) while keeping ≥10 V for a low Rds(on); **NC e-stop** cuts both paths (low current, not the 40 A); opto **isolation** = no +20 V return to the ESP.
-
-> Dissipation: ~**7 W/MOSFET** at 20 A → **heatsink mandatory** (or 2 IRFZ44N in parallel per pack). ⚠️ Moot in the relay build above — a 40 A relay's contacts dissipate a fraction of that, which is part of why it was chosen. Regenerable diagram: `. .venv-schem/bin/activate && python doc/schematics/power_latch.py`.
 
 ---
 

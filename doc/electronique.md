@@ -7,8 +7,8 @@ in [`../firmware/README.md`](../firmware/README.md).
 
 **Design inputs (fixed):** single **12 V** motorcycle battery (no other voltages this phase) ·
 **5 V rail ≥ 2 A** (it powers everything: ESP32, WS2812 strip, sensors) · the low-power relay
-feeds **everything except motor power** · the **e-stop cuts motor power only** and an opto
-tells the firmware whether the motor rail is live · priming by a **momentary button**, hold by
+feeds **everything except motor power** · the **e-stop cuts motor power only** and an opto on the
+relay coil tells the firmware the e-stop is engaged (always on — no software bypass) · priming by a **momentary button**, hold by
 **GPIO13** (the ESP can power itself off) · **no hold capacitor** · ESP32, ADS1115 and
 2× AS5600 confirmed.
 
@@ -26,7 +26,7 @@ tells the firmware whether the motor rail is live · priming by a **momentary bu
 | **+12V_MOT** (motors) | **40 A automotive relay** — its **coil** runs +12V_LOG → **E-STOP (NC)** → 85; the CONTACT (30→87) is what carries and breaks the 40 A | motor driver **VB+** only | e-stop pressed (coil broken → relay opens in ~10-20 ms), or the logic rail dies |
 
 Why the split: the emergency stop must remove **drive power** without killing the brain — the
-logic survives, the firmware sees the motor rail die through the sense opto (GPIO22), disarms,
+logic survives, the firmware sees the e-stop through the coil-sense opto (GPIO22), disarms,
 **names the fault** (`MOTOR POWER`) on the page and in the event log, and requires a deliberate
 re-arm. Releasing the mushroom never resumes drive on its own.
 
@@ -104,10 +104,11 @@ re-arm. Releasing the mushroom never resumes drive on its own.
   is being demanded. Same story at power-up (boot forces PWM low before anything else) and
   under FORCE ON. The residual make-current is the driver's capacitor inrush alone, which
   is what justifies shipping without a pre-charge resistor.
-  ⚠️ The chain starts at DETECTION, so it stands on `pwr_sense_en = 1`: with the sense
-  unwired the firmware never sees the e-stop, a held throttle stays armed through it, and
-  releasing the mushroom closes the relay into full motor demand — the worst welding case.
-  Wiring the opto is part of the relay's protection, not optional diagnostics.
+  The chain starts at DETECTION, and the detection is **unconditional**: the software
+  switch that could ignore this input (`pwr_sense_en`) was **removed by decision** — a flag
+  that can silently disable a safety link is a liability. On a breadboard without the opto,
+  **tie GPIO22 to GND** (reads "coil energized / e-stop released"); no vehicle exists at
+  that stage, so nothing is protected away.
 
 ### 5 V rail — the ≥ 2 A budget
 
@@ -171,9 +172,6 @@ a 40 A acceleration cannot false-trip. Decoupling capacitor (100 nF) at A0.
 | 20 | Enclosure ~150×100×70, clear lid | ≈ IP65 + cable glands | 1 | ESP32 + breakout + ADS1115 + perfboard |
 | 21 | Wire: 10 AWG (power), 18–22 AWG (signal) + lugs/ferrules | — | — | power vs signal, crimped |
 
-*(The IRFZ44N pair stays in the drawer as the documented fallback — see the superseded MOSFET
-design in the README power section.)*
-
 ## 3. Wiring guide — terminal by terminal
 
 Work with the battery disconnected; connect it last.
@@ -195,7 +193,8 @@ Work with the battery disconnected; connect it last.
 7. **Sense opto**: LED input through **4.7 kΩ ¼ W** from the **coil node (relay pin 85,
    AFTER the e-stop)** to ground (12 V-rated modules have it onboard; 3.3/5 V modules get ~1–1.5 kΩ
    added); output: collector → **GPIO22**, emitter → GND. No external pull-up needed
-   (internal).
+   (internal). **Bench without the opto: jumper GPIO22 → GND**, otherwise the kart shows a
+   permanent `MOTOR POWER` fault (which is the safe default).
 8. **Buck**: IN ← +12V_LOG (+ ≥ 470 µF bulk at its input), OUT 5 V → ESP32 5V/VIN, WS2812
    strip (with its 470–1000 µF at the strip head), ground to the bus.
 9. **Divider**: 100 k from +12V_LOG to node A0, 15 k from node to ground, 100 nF across the
@@ -215,7 +214,7 @@ Work with the battery disconnected; connect it last.
 2. Press START: +12V_LOG present, buck outputs 5.0 V, ESP boots (status LED), release after
    ~1 s — the rail must HOLD.
 3. E-stop released: +12V_MOT present at driver VB+; **page shows no MOTOR POWER fault**
-   (with `pwr_sense_en=1`).
+.
 4. **Press the e-stop**: the page names the `MOTOR POWER` fault (coil sense), re-arm
    required after release; with a healthy relay, +12V_MOT dies too — verify BOTH at
    commissioning (fault shown AND driver VB+ actually dead, multimeter). The routine
@@ -237,5 +236,6 @@ Work with the battery disconnected; connect it last.
 | Pre-charge on the 40 A contact | **not fitted, watched** | inrush is modest; welding fails ON and is on the watch list; resistor retrofit documented |
 | Buck | **verify ≥ 2 A or replace (3 A class)** | firm 5 V ≥ 2 A budget (LEDs + ESP bursts) |
 | Divider | **100 k / 15 k confirmed** | matches `hw::VBAT_R_*` and the soldered board; the 27 k row in old tables was a sizing example, now removed |
+| Software bypass of the sense | **removed** (`pwr_sense_en` deleted) | a config flag able to silently disable a safety link is a liability; bench bypass is HARDWARE: GPIO22 tied to GND on the breadboard, where no vehicle exists |
 | Sense position | **on the COIL (85), not the relay output** | e-stop engaged is detected even with a welded contact → software disarm + dynamic brake; cost: welding becomes undetectable and a fail-open relay is only caught by the wheel-stuck net (owner's call over the dual-opto option) |
 | E-stop position | **in the 40 A relay's COIL loop** | with no hold capacitor there is nothing to delay it (~10-20 ms drop-out); the mushroom switches 150 mA on thin wires instead of 40 A to the seatback and back; residual welded-contact risk covered by the per-session e-stop test via the sense opto |
