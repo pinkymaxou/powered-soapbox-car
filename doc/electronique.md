@@ -97,6 +97,17 @@ re-arm. Releasing the mushroom never resumes drive on its own.
   sense, a welded contact is mitigated in software (disarm + dynamic brake, see above)
   but NOT detected — the pre-drive e-stop test verifies the sense chain, no longer the
   contact itself.
+- **The relay never closes under motor load — and the DETECTION is what guarantees it.**
+  The chain: the e-stop is sensed → blocking fault → forced disarm → releasing the mushroom
+  changes nothing until the **full re-arm sequence** (deliberate START hold, stick centered)
+  is performed — so at the instant the coil re-energizes and the contact closes, no current
+  is being demanded. Same story at power-up (boot forces PWM low before anything else) and
+  under FORCE ON. The residual make-current is the driver's capacitor inrush alone, which
+  is what justifies shipping without a pre-charge resistor.
+  ⚠️ The chain starts at DETECTION, so it stands on `pwr_sense_en = 1`: with the sense
+  unwired the firmware never sees the e-stop, a held throttle stays armed through it, and
+  releasing the mushroom closes the relay into full motor demand — the worst welding case.
+  Wiring the opto is part of the relay's protection, not optional diagnostics.
 
 ### 5 V rail — the ≥ 2 A budget
 
