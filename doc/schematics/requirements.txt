@@ -1,0 +1,7 @@
+# Regeneration environment for the diagrams in this directory.
+#   python3 -m venv .venv-schem && .venv-schem/bin/pip install -r doc/schematics/requirements.txt
+#   . .venv-schem/bin/activate && python doc/schematics/<script>.py   (from the repo root)
+# schemdraw draws the electrical schematics (power_rails, full_schematic, power_latch);
+# matplotlib draws the mechanical ones (gearbox, chain_layout, kart_dimensions).
+schemdraw==0.23
+matplotlib>=3.8

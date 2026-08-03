@@ -292,7 +292,7 @@ Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_a
 | **Power / electronics** | Battery | **One 12 V motorcycle battery** (~40 A peak OK, PWM ~100%) **centered in the nose**. No paralleling this phase. The driver accepts up to **30 V**, and the firmware still supports **24 V** (2×12 V in series, auto PWM ~50%) — unlikely to be used, and it would need the divider changed to 100 k/12 k (12 V/Vbat) |
 | | **Battery adapters** (×2) | Slide-on holder → power terminals (+ / −) |
 | | **40 A DC relay** + optocoupler + drive transistor | main power switch (see [power switch](#power-switch-two-rails-two-relays)) + 1 fuse |
-| | **Power switch (latch)** | **opto-isolated relay module** (logic rail, driven by `POWER_HOLD`) + **~1500 µF hold capacitor on its coil** (rides through a reboot) + **start button** (primes; hold ~1 s at power-up) |
+| | **Power switch (latch)** | **opto-isolated relay module** (logic rail, driven by `POWER_HOLD`) + **start button** (primes; hold ~1 s at power-up) + **hidden FORCE ON toggle** (bench/flash). **No hold capacitor**: a reboot powers the kart off cleanly. Full BOM: [`doc/electronique.md`](doc/electronique.md) |
 | | Motor driver | **1 dual-channel board 20 A / 6–30 V** (PWM+DIR/channel), duty **capped automatically at 12 V/measured Vbat** (+ manual cap `duty_cap`) |
 | | Controller | **ESP32-WROOM board** (dual-core 240 MHz, Wi-Fi/BT, 4 MB flash) |
 | | **External ADC ADS1115** | **16-bit I²C**, powered at **3.3 V**, address **0x48** on bus 0 (with the left AS5600); A0 = Vbat, A1/A2 reserved for the future joystick |
@@ -425,7 +425,7 @@ The scale (center + half-amplitude per axis) is **persisted in NVS** (namespace 
 
 ### Electrical safety
 
-- **Emergency stop** easily accessible, **in the 40 A motor path**: it **breaks the drive current mechanically** (a mushroom button rated for it — with the hold capacitor fitted, a coil-side e-stop would act ~0.9 s late, 2.3 m at full speed). The **logic rail stays up**: the firmware sees `MOTOR POWER` dead, disarms, names the fault on the page, and releasing the button never resumes drive on its own. (In addition, the gamepad's **button B** triggers immediate braking on the firmware side.)
+- **Emergency stop** easily accessible, **in the 40 A motor path**: it **breaks the drive current mechanically** (a mushroom button rated for it — breaking the actual current beats signalling electronics, and nothing anywhere holds the relay up against it). The **logic rail stays up**: the firmware sees `MOTOR POWER` dead, disarms, names the fault on the page, and releasing the button never resumes drive on its own. (In addition, the gamepad's **button B** triggers immediate braking on the firmware side.)
 - **Start via momentary button** (primes the latch); **fuse/pack**, wiring ≥ the 2 motors' current.
 - **Battery: one 12 V motorcycle battery** (lead-acid — no BMS of its own). Deep discharge protection = **the firmware LVC** (thresholds hard-coded per detected type: 12 V → cut 10.5 V, 24 V → cut 21 V) + the 40 A fuse.
 - **One 12 V pack, no paralleling** (this phase): it carries the whole ~40 A, so its internal resistance sets the sag under load — a motorcycle battery at ~0.05 Ω dips ~2 V at full throttle, which is why the LVC judges a smoothed voltage. ⚠️ **Never put packs in series** unless you also change the divider (24 V needs 100 k/12 k).
@@ -570,7 +570,7 @@ The same content as an **electrical schematic with standard symbols** (named-por
 ![Electrical schematic of the kart](doc/schematics/full_schematic.png)
 
 > Regenerable: `. .venv-schem/bin/activate && python doc/schematics/full_schematic.py`.
-> The kill-switch detail is in [`power_latch.png`](doc/schematics/power_latch.png).
+> The power-switching detail is in [`power_rails.png`](doc/schematics/power_rails.png) (the old MOSFET variant stays in [`power_latch.png`](doc/schematics/power_latch.png)).
 
 ### Battery voltage measurement & low-voltage cutoff (LVC)
 
@@ -581,9 +581,9 @@ Vbat from the **resistor constants** `hw::VBAT_R_TOP` / `VBAT_R_BOTTOM` (`contro
 
 | Battery | Vmax (under charge) | Divider (top/bottom) | Ratio | A0 at Vmax |
 |---|---|---|---|---|
-| **12 V motorcycle** (likely option) | ~14.8 V | **100 k / 27 k** | 0.213 | 3.15 V ✔ |
-| 20 V tool pack | ~21 V | **100 k / 15 k** | 0.130 | 2.74 V ✔ |
-| **24 V** (2×12 V in series) | ~29 V | **100 k / 12 k** | 0.107 | 3.10 V ✔ |
+| **12 V motorcycle — FITTED** (matches `hw::VBAT_R_*`) | ~14.8 V | **100 k / 15 k** | 0.130 | 1.93 V ✔ |
+| *(alt. sizing, 12 V, more ADC range)* | ~14.8 V | 100 k / 27 k | 0.213 | 3.15 V ✔ |
+| *(out of scope) 24 V — 2×12 V in series* | ~29 V | 100 k / 12 k | 0.107 | 3.10 V ✔ |
 
 - Reconstruction: **Vbat = V_adc × (R_top + R_bottom) / R_bottom** — the ratio is a **compile-time constant**, deliberately NOT a web setting: a wrong value would silently misreport the battery and drag the LVC thresholds along. Swap the resistors ⇒ edit the two constants and reflash (the Documentation tab shows the live math on the divider diagram).
 - **Battery type detected automatically at startup**: the voltage must be **stable for 3 s** (deviation ≤ 0.5 V), then it is classified as **12 V or 24 V** (18 V threshold: a 12 V even under charge stays ≤ ~14.8 V, a 24 V even empty stays ≥ ~21 V). The type is **frozen until restart** (you never change battery with the system on). The **LVC thresholds are hardcoded per type** (lead-acid): 12 V → warning 11.5 / cutoff 10.5 / rearm 12.0; 24 V → 23.0 / 21.0 / 24.0. Until the type is classified: no LVC (the kart starts disarmed anyway).
@@ -635,6 +635,12 @@ flowchart LR
 
 ### Power switch (two rails, two relays)
 
+![Two-rail power schematic](doc/schematics/power_rails.png)
+
+> Full design rationale, BOM and the terminal-by-terminal wiring guide:
+> **[`doc/electronique.md`](doc/electronique.md)**. Regenerable:
+> `. .venv-schem/bin/activate && python doc/schematics/power_rails.py`.
+
 > 🔁 **This phase: two rails, two relays.** The low-side MOSFET pair is replaced by
 > - a **small opto-isolated relay module** (ready-made, opto and flyback diode on board) that
 >   holds the **LOGIC rail** — ESP32 + motor-controller board — driven from `POWER_HOLD`;
@@ -681,20 +687,12 @@ flowchart LR
 > would read 0 V the moment the e-stop is pressed, and the kart would report a dead battery
 > instead of an emergency stop.
 >
-> ⚠️ **What does not carry over is holding through a reboot**, because the load changed. After
-> a watchdog reset the ESP32 spends ~700 ms in the bootloader with `POWER_HOLD` undriven, and
-> this design has always leaned on a capacitor to ride through that window. A MOSFET **gate**
-> holds on leakage — microamps. A **relay coil** draws real current, and now there are two of
-> them in cascade, either of which dropping cuts everything:
->
-> | holding element | current at pick-up | capacitor for 700 ms |
-> |---|---|---|
-> | MOSFET gate (old design) | ~0.05 mA | **~7 µF** |
-> | small module coil, 5 V ~70 Ω | 71 mA | **~6 000 µF** |
-> | 40 A relay coil, 12 V ~75 Ω | 160 mA | **~6 000 µF** |
->
-> *(RC decay, not constant current — a relay holds well below nominal, releasing around 10–30 %,
-> which is what keeps this at millifarads instead of tens of them.)*
+> ⚠️ **A reboot does NOT hold through — by decision.** After a watchdog reset the ESP32
+> spends ~700 ms in the bootloader with `POWER_HOLD` undriven; a relay coil draws real
+> current (unlike the old MOSFET gate), so without help the logic rail drops and the kart
+> powers off cleanly. **That is the accepted behavior**: a reboot becomes one press of
+> START, the motors are unpowered throughout (safe), and the event log records the boot
+> and its reason instead of a capacitor papering over it.
 >
 > **Parts actually used**
 >
@@ -709,38 +707,20 @@ flowchart LR
 > indicator or a future second relay. The module's 10 A contacts drive the 150 mA coil with a
 > factor of 66 in hand.
 >
-> **Decision: fit the capacitor and accept that it is not perfect.** The coil current is not a
-> consumption problem — the module runs off 12 V and the ESP only lights an opto LED — it is
-> simply the current the capacitor has to supply while nothing is driving.
+> **Decision (2026-08-02 review): NO hold capacitor.** The ~1500 µF ride-through was
+> designed, sized (RC decay, release at 10–30 % of nominal) and then **rejected**: it adds a
+> part whose only job is to hide reboots, and anything holding a relay up is a liability in
+> the same circuit as an emergency stop. What replaces it:
 >
-> **Put the capacitor on the SMALL relay's coil, not the big one.** Two reasons, and they both
-> follow from the small relay carrying the LOGIC rail: if it drops mid-reboot the **ESP loses
-> its own power** and never comes back — a permanent shutdown, worse than a motor blip — and
-> since the big coil is fed *through* its contacts, holding the small one holds both. It is
-> also five times cheaper, because 400 Ω discharges far more slowly than 80 Ω:
->
-> - **~1 500 µF across the JQC-3FF coil** covers the 700 ms window (760–1454 µF depending on
->   where the relay actually releases, 10–30 % of nominal).
-> - The same job on the 40 A coil would need **~4 000–7 300 µF**.
-> - **Hold START for ~1 s at power-up.** Not a workaround for the capacitor — it is what covers
->   the *first* boot, where the ESP simply does not exist yet to hold anything. It also means the
->   **button** takes the capacitor's charging surge (once, mechanically, on a contact built for
->   it) and the little module's contacts never see it: they only ever close onto an
->   already-charged capacitor. **That removes the need for an inrush limiter** (otherwise: 4.7 Ω
->   in the capacitor branch with a diode across it so the discharge still goes straight to the
->   coil).
->
-> The two cover different windows and neither replaces the other: **the finger covers the first
-> boot, the capacitor covers every reboot after that** — the watchdog reset at speed, when nobody
-> has a hand on the button. The capacitor charges in ~2 ms through the battery, so it is not what
-> makes the 1 s necessary; the ESP's ~700 ms to reach `app_main` is.
->
-> ⚠️ **The trade to be explicit about: the capacitor delays the emergency stop by exactly as
-> long as it holds the relay up.** If the mushroom button sits in the coil/hold path, pressing it
-> now leaves the relay closed for ~0.7–0.9 s — **2.3 m at full speed**, 1 m at walking pace. This
-> README calls the central hardware e-stop *the only guaranteed stop*; a hold capacitor quietly
-> takes that away. **Put the e-stop in the 40 A main path** (a mushroom button rated for it), so
-> it breaks the current mechanically and the capacitor has nothing to hold up.
+> - **Hold START ~1 s at power-up** — covers the boot, where the ESP does not exist yet to
+>   hold anything (~700 ms to `app_main`).
+> - **A hidden FORCE ON toggle inside the electronics enclosure**, in parallel with the
+>   button: forces the logic rail permanently on for bench work, flashing and diagnosis.
+>   Unreachable from the driver's seat. If left on by mistake, the idle power-off fires,
+>   the rail stays up, and the firmware stays alive with the countdown parked at 0 — the
+>   designed behavior for power that refuses to die.
+> - **The e-stop sits in the 40 A main path** (a mushroom button rated for it): it breaks
+>   the drive current mechanically, and with no capacitor anywhere its action is instant.
 >
 > **Considered: going back to 2× IRFZ44N gated by the e-stop.** It is a genuine trade, not a
 > clear win, so here it is in numbers:
@@ -760,15 +740,16 @@ flowchart LR
 > Vgs ≈ 10 V, which is why they switched the GROUND return rather than the supply.
 >
 > **Staying with the relay** for now: it is in hand, dissipates a fifth as much, needs no
-> heatsink, and both problems it created are already solved — 1500 µF on the small coil, and the
-> e-stop moved into the 40 A path where a mushroom button belongs anyway. ⚠️ The relay-specific
-> risk to watch is **contact welding on inrush**: closing 40 A onto the driver's bulk capacitors
-> is a hard surge, and a welded contact fails ON. If it welds, add a pre-charge resistor across
-> the contact.
+> heatsink, and both problems it created are answered — the reboot hold is *deliberately not
+> provided* (reboot = clean power-off + START), and the e-stop moved into the 40 A path where
+> a mushroom button belongs anyway. ⚠️ The relay-specific risk to watch is **contact welding
+> on inrush**: closing 40 A onto the driver's bulk capacitors is a hard surge, and a welded
+> contact fails ON. If it welds, add a pre-charge resistor across the contact. Its coil gets
+> a **1N4007 flyback** (the module's contacts must never break an arcing inductive load).
 >
-> *(The alternative that needs no capacitor at all: a self-holding relay — auxiliary contact
-> feeding its own coil, primed by START. Nothing has to be driven to stay on, so a reboot changes
-> nothing. It inverts the meaning of `POWER_HOLD`, today LOW = held.)*
+> *(Also considered: a self-holding relay — auxiliary contact feeding its own coil. Rejected
+> for the same reason as the capacitor: power that survives a reboot is power the firmware no
+> longer controls; the FORCE ON switch gives that mode explicitly when a human wants it.)*
 >
 > Why any of this matters: if the relay releases on a reboot the driver loses power, the windings
 > go open and the kart **freewheels**. On a slope that is the `coupure_pente*` simulation result —
@@ -904,7 +885,7 @@ flowchart LR
 
 **Phase 3 — Front drives (replaces the old "steering").** On **each front wheel**: bolted sprocket (large washers / backing plate) + 3D gearbox + motor on a reinforced mount + #35 chain cut to length + tension adjustment + guard. **No linkage**: steering is differential, so nothing to adjust on the steering-wheel/tie-rod side. ✅ *With no power: each front wheel turns by hand, chain tensioned and lubricated.*
 
-**Phase 4 — Power electronics ⚠️ (at the front).** The **single 12 V pack housed in the front tech bay** (short power wiring to the 2 motors); **fuse 40 A → 40 A DC relay → +12 V rail**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, plus the **~1500 µF hold capacitor across the SMALL module's coil** (holding the small relay holds both — and 400 Ω discharges far slower than the 40 A coil's 80 Ω) so a reboot does not drop the power — **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`, and the button takes the capacitor's charging surge instead of the module's contacts); the **e-stop goes in the 40 A main path, NOT in the coil loop** — with the capacitor fitted, an e-stop on the coil side would take ~0.9 s to act (**2.3 m at full speed**). See `doc/schematics/power_latch.png` for the latch principle and the ⚠️ note in [power switch](#power-switch-two-rails-two-relays) for both trade-offs; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes, and **the central e-stop kills the motor rail while the logic stays up** (the page must show the MOTOR POWER fault, GPIO22). Then check the reboot case: force a reset while powered and watch whether the relay drops. Finally the 30-second brake test: logic up, motor relay open, spin a wheel by hand — if it resists, the e-stop brakes; if not, it freewheels (flat ground only).*
+**Phase 4 — Power electronics ⚠️ (at the front).** The **single 12 V pack housed in the front tech bay** (short power wiring to the 2 motors); **fuse 40 A → 40 A DC relay → +12 V rail**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`); **NO hold capacitor** — a reboot drops the rail and powers the kart off cleanly (re-prime with START); a **hidden FORCE ON toggle inside the enclosure** forces the logic rail for bench/flash work; the **e-stop goes in the 40 A main path** (mechanical break, instant, mushroom rated for it); **1N4007 flyback across the 40 A coil** (cathode to 85/+). See [`doc/electronique.md`](doc/electronique.md) for the full wiring guide and [`doc/schematics/power_rails.png`](doc/schematics/power_rails.png) for the schematic; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes, and **the central e-stop kills the motor rail while the logic stays up** (the page must show the MOTOR POWER fault, GPIO22). Then check the reboot case: force a reset while powered — the relay MUST drop (clean power-off) and START must bring it back. Finally the 30-second brake test: logic up, motor relay open, spin a wheel by hand — if it resists, the e-stop brakes; if not, it freewheels (flat ground only).*
 
 **Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the 12 V LOGIC rail** (the ESP makes its own 3.3 V); **motor-power sense opto → GPIO22**; **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
 

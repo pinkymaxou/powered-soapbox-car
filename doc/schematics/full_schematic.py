@@ -1,6 +1,8 @@
-# full_schematic.py — Kart electrical schematic (EXPERIMENTAL variant: differential
-# drive). 2 independent FRONT motors, 2 AS5600 sensors (one per I2C bus), external
-# ADS1115 ADC (Vbat), driven by BLUETOOTH GAMEPAD (ESP32 internal radio, no pedal).
+# full_schematic.py — Kart electrical schematic (differential drive, TWO-RAIL power).
+# Single 12 V battery; +12V_LOG (logic rail, held by the relay module) and +12V_MOT
+# (motor rail, 40 A relay + e-stop) — the switching detail lives in power_rails.png.
+# 2 independent FRONT motors, 2 AS5600 sensors (one per I2C bus), external ADS1115 ADC
+# (Vbat), driven by BLUETOOTH GAMEPAD (ESP32 internal radio, no pedal).
 # Generates doc/schematics/full_schematic.png via schemdraw.
 #   . .venv-schem/bin/activate && python doc/schematics/full_schematic.py
 #
@@ -38,7 +40,7 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
     # 2 I2C buses: bus 0 (SDA0/SCL0 = AS5600 L + ADS1115) · bus 1 (SDA1/SCL1 = AS5600 R).
     LEFT = [('18', 'SDA0'), ('19', 'SCL0'), ('27', 'SDA1'), ('14', 'SCL1'), ('16', 'START')]
     RIGHT = [('25', 'PWM_L'), ('26', 'DIR_L'), ('32', 'PWM_R'), ('33', 'DIR_R'),
-             ('17', 'WS'), ('13', 'PWR_HOLD')]
+             ('4', 'WS'), ('22', 'PWR_SENSE'), ('13', 'PWR_HOLD')]
     pins = []
     for i, (g, _) in enumerate(LEFT):
         pins.append(elm.IcPin(name=g, side='left', slot=f'{len(LEFT)-i}/{len(LEFT)}'))
@@ -66,7 +68,7 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
     d += elm.Ground().at(P(ha, 'pin5'))
     d += elm.Label().label('A1/A2: FUTURE joystick', fontsize=7).at((-10.2, 6.3))
     # 100k/15k divider: +20V → VBAT → GND (VBAT goes to A0)
-    flag(d, (-7.6, 10.4), '+20V', 'up'); vtop = (-7.0, 10.4)
+    flag(d, (-7.6, 10.4), '+12V_LOG', 'up'); vtop = (-7.0, 10.4)
     d += elm.Resistor().down().at(vtop).label('100k', fontsize=8).length(1.4)
     d += elm.Dot(); nv = d.here
     flag(d, nv, 'VBAT', 'right')
@@ -111,9 +113,10 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
         elm.IcPin(name='PWM_R', side='left', slot='2/4'), elm.IcPin(name='DIR_R', side='left', slot='1/4'),
         elm.IcPin(name='M1A', side='right', slot='4/4'), elm.IcPin(name='M1B', side='right', slot='3/4'),
         elm.IcPin(name='M2A', side='right', slot='2/4'), elm.IcPin(name='M2B', side='right', slot='1/4'),
-    ], label='DRIVER\n2× 20 A', w=DRV_W, h=DRV_H, plblsize=11, leadlen=1.1)
+    ], w=DRV_W, h=DRV_H, plblsize=11, leadlen=1.1).label('DRIVER 2× 20 A', loc='top', fontsize=10)
     drv.right(); drv.anchor('center'); drv.at((DRV_X, DRV_Y)); d.add(drv)
-    d += elm.Line().up().at((DRV_X, DRV_Y + DRV_H / 2)).length(0.7); d += elm.Vdd().label('+20V')
+    d += elm.Line().up().at((DRV_X, DRV_Y + DRV_H / 2)).length(0.7); d += elm.Vdd().label('+12V_MOT (VB+)')
+    d += elm.Label().label('board logic fed from +12V_LOG', fontsize=7, color=NET).at((DRV_X, DRV_Y + DRV_H / 2 + 1.6))
     d += elm.Line().down().at((DRV_X, DRV_Y - DRV_H / 2)).length(0.7); d += elm.Ground()
     mL = header(d, 18.0, 3.4, 'FRONT MOTOR L', ['A', 'B'])
     d += elm.Line().at(P(drv, 'M1A')).tox(P(mL, 'pin1')[0])
@@ -131,27 +134,24 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
 
     # POWER_HOLD → latch
     flag(d, (5.5, -6.4), 'PWR_HOLD', 'left')
-    d += elm.Label().label("→ power latch (see power_latch.png)", fontsize=9, color=NET).at((9.7, -6.4))
+    d += elm.Label().label("→ relay module IN (see power_rails.png)", fontsize=9, color=NET).at((9.9, -6.4))
 
     # ───────────────────────── Power (top) ─────────────────────────
-    ba = header(d, -2.5, 11.0, 'PACK A 20V', ['+', '-'])
-    d += elm.Diode().right().at(P(ba, 'pin1')).label('ideal', fontsize=8).length(2.0)
+    ba = header(d, -2.5, 11.0, 'BATTERY 12V', ['+', '-'])
+    d += elm.Line().right().at(P(ba, 'pin1')).length(1.0)
+    d += elm.Fuse().right().label('40 A', fontsize=8, loc='bottom').length(2.0)
     d += elm.Dot(); rail = d.here
-    bb = header(d, -2.5, 9.1, 'PACK B 20V', ['+', '-'])
-    d += elm.Diode().right().at(P(bb, 'pin1')).label('ideal', fontsize=8).length(2.0)
-    d += elm.Line().toy(rail[1]); d += elm.Dot()
-    flag(d, rail, '+20V', 'up')
+    d += elm.Label().label('→ relay module (+12V_LOG) and 40 A relay + e-stop (+12V_MOT): see power_rails.png',
+                           fontsize=8, color=NET).at((rail[0] + 3.4, 12.3))
     d += elm.Line().right().at(rail).length(1.4)
     buck = elm.Ic(pins=[elm.IcPin(name='IN', side='left'), elm.IcPin(name='5V', side='right')],
-                  label='BUCK\n20→5V', w=2.2, h=1.8, plblsize=9).right().at((4.0, 10.5)).anchor('IN')
+                  w=2.4, h=1.8, plblsize=9).label('BUCK 12→5V — ≥2 A', loc='top', fontsize=9).right().at((4.2, 10.5)).anchor('IN')
     d.add(buck)
-    d += elm.Line().left().at(P(buck, 'IN')).tox(rail[0] + 1.4)
+    flag(d, P(buck, 'IN'), '+12V_LOG', 'left')
     flag(d, P(buck, '5V'), '+5V', 'right')
     d += elm.Label().label('(+3V3 = ESP32 board regulator)', fontsize=8).at((4.5, 9.0))
 
-    d += elm.Label().label('Detailed cutoff (2× IRFZ44N low-side + opto + e-stop): see power_latch.png',
+    d += elm.Label().label('Power switching detail (relay module + 40 A relay + e-stop + GPIO22 sense): see power_rails.png',
                            fontsize=10).at((0, -8))
-    d += elm.Label().label('Wired spare (unused): 2 AMT103-V quadrature A/B encoders on GPIO 34/35 (L) and 36/39 (R).',
-                           fontsize=9).at((0, -8.7))
 
 print('render OK')
