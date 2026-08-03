@@ -61,8 +61,8 @@ extern constexpr ParamDesc PARAMS[] =
     // OFFSET LOAD (child alone on one side, adult+child) tips over with the old
     // linear ramp as soon as gain=1 — the iso-a_lat at 0.2 restores healthy margins (≥ +0.8 m/s²).
     {"turn_alat_vmax",  "Max turn at Vmax (0-1)", "Rollover protection",
-     "Turn limit at maximum speed; in between, the limit follows 1/v (same lateral acceleration at all speeds). 0.2 = the only value verified safe by simulation for offset loads (child alone on one side, adult+child) with turn gain 1.",
-     PType::Float, {.f = 0.1f}, {.f = 0.2f}, {.f = 0.4f}, {.f = &KartConfig::turn_hi}},
+     "Turn limit at maximum speed; in between, the limit follows 1/v (same lateral acceleration at all speeds). 0.2 = the default verified safe by simulation for offset loads with turn gain 1. Range re-validated for the REAR battery (max was 0.4 with it in the nose; 0.4 tips with the new CG).",
+     PType::Float, {.f = 0.1f}, {.f = 0.2f}, {.f = 0.3f}, {.f = &KartConfig::turn_hi}},
     // (No vbat_div_ratio: the divider is fixed by the resistors on the board — hw::VBAT_DIV_RATIO.)
     {"vbat_check_en",   "Voltage check (0/1)",    "Battery",
      "1 = the low-voltage cutoff (LVC) is a driving condition: below the threshold of the detected battery the kart disarms, refuses to move, and cuts the power after 30 s. 0 = the voltage is still measured, displayed and graphed, but NEVER blocks anything — for bench work with no pack on the divider bridge. WARNING: with 0 the battery's own BMS is the only remaining protection against deep discharge.",

@@ -150,7 +150,7 @@ a 40 A acceleration cannot false-trip. Decoupling capacitor (100 nF) at A0.
 
 | # | Part | Spec / rating | Qty | Role |
 |--:|---|---|--:|---|
-| 1 | Motorcycle battery | 12 V lead-acid, ≥ 40 A peak | 1 | single pack, centered in the nose |
+| 1 | Motorcycle battery | 12 V lead-acid, ≥ 40 A peak | 1 | single pack, **REAR** — strapped in a retaining tray above the caster |
 | 2 | Blade fuse + holder | **40 A** | 1 | master protection at battery + |
 | 3 | Opto relay module | 12 V coil, opto input, low trigger, contacts ≥ 10 A | 1 | logic-rail switch (COM/NO) |
 | 4 | Automotive relay | 12 V coil, **40 A** on 87 (NO), SPDT | 1 | motor-rail switch |
@@ -176,8 +176,10 @@ a 40 A acceleration cannot false-trip. Decoupling capacitor (100 nF) at A0.
 
 Work with the battery disconnected; connect it last.
 
-1. **Battery + → fuse holder (40 A)** — 10 AWG, lug at the battery. Battery − → common
-   ground bus (10 AWG).
+1. **Battery + → fuse holder (40 A) AT the battery** (rear tray, above the caster) — then the
+   **10 AWG pair runs rear→front** along a frame rail to the nose (≈ 1.1 m each way: ~7 mΩ
+   round trip, ~0.3 V at 40 A — fine). Battery − → common ground bus (10 AWG). Keep signal
+   looms on the other rail, away from this run.
 2. **Fused + → 40 A relay pin 30** (10 AWG) and **fused + → relay-module COM** (18 AWG — the
    logic rail carries ≤ 2–3 A).
 3. **Relay module**: `NO` → **+12V_LOG bus** (18 AWG). `VCC` → +12V_LOG bus (yes, its own

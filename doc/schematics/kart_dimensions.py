@@ -3,7 +3,8 @@
 #   . .venv-schem/bin/activate && python doc/schematics/kart_dimensions.py
 # Reference: x=0 = front axle. The axle is SET BACK 325 mm into the body (nose in front):
 # the spin-in-place center moves closer to the vehicle midpoint → reduced sweep radius,
-# and the 12 V battery in the nose loads the drive wheels (traction/braking).
+# The 12 V battery now sits at the REAR, in a retaining tray above the caster (2026-08-03):
+# CG moves back (xcg 0.40->0.44) — rollover range re-validated in simulation (sim_main sweep).
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -30,7 +31,7 @@ TOTAL_L = (CASTER_WHEEL_X + WHEEL_D / 2) - BODY0            # ≈ 1252
 SEAT_X0, SEAT_X1 = 650 - SHIFT, 950 - SHIFT                 # seat: 325..625
 GUARD_X0 = 580 - SHIFT                                      # guardrail: 255..655
 BACK_X = 950 - SHIFT                                        # seatback foot: 625
-BAT_X0, BAT_L, BAT_W, BAT_H = 40 - SHIFT, 150, 88, 105      # 12 V motorcycle battery (nose, centered)
+BAT_X0, BAT_L, BAT_W, BAT_H = PIVOT_X - 75, 150, 88, 105    # 12 V battery: REAR, tray above the caster
 BODY_W, SEAT_W, BAY_W = 600, 800, 820
 OVERALL_W = TRACK + WHEEL_W            # 910
 SWEEP_R = CASTER_WHEEL_X + WHEEL_D / 2                      # sweep radius when pivoting ≈ 947
@@ -65,7 +66,8 @@ ax.add_patch(Circle((CASTER_WHEEL_X, AXLE_Z), WHEEL_D / 2, fc=DARK, ec='k'))  # 
 ax.add_patch(Circle((CASTER_WHEEL_X, AXLE_Z), WHEEL_D * 0.27, fc='#bbbbbb', ec='k'))
 ax.add_patch(Rectangle((BODY0, CLEAR), 1010, LU_H, fc=WOOD, ec='k'))       # stringer
 ax.add_patch(Rectangle((BODY0, FLOOR_Z), 1010, PLY, fc=PLYC, ec='k'))      # floor
-ax.add_patch(Rectangle((BAT_X0, FLOOR_TOP), BAT_L, BAT_H, fc='#222222', ec='k'))  # 12 V battery
+ax.add_patch(Rectangle((BAT_X0 - 30, CASTER_PLATE + PLY), BAT_L + 60, 8, fc=PLYC, ec='k'))  # battery tray
+ax.add_patch(Rectangle((BAT_X0, CASTER_PLATE + PLY + 8), BAT_L, BAT_H, fc='#222222', ec='k'))  # 12 V battery
 ax.add_patch(Rectangle((SEAT_X0, FLOOR_TOP), 300, 30 + PLY, fc=WOOD, ec='k'))  # seat
 ax.add_patch(Polygon([(BACK_X, FLOOR_TOP), (BACK_X + 340 * math.cos(math.radians(82)), BACK_TOP),
                       (BACK_X + 12 + 340 * math.cos(math.radians(82)), BACK_TOP), (BACK_X + 12, FLOOR_TOP)],
@@ -78,7 +80,7 @@ ax.add_patch(Rectangle((-60, CLEAR + 20), 180, 170, fc='#708090', ec='k'))      
 ax.add_patch(Rectangle((115, CLEAR + 130), 80, 42, fc='#888888', ec='k'))           # motor
 be_x = BACK_X + 340 * math.cos(math.radians(82))
 ax.add_patch(Rectangle((be_x - 22, BACK_TOP), 45, 26, fc='red', ec='k'))            # e-stop
-ax.annotate("12 V motorcycle battery\n(nose, centered)", xy=(BAT_X0 + BAT_L / 2, FLOOR_TOP + BAT_H),
+ax.annotate("12 V motorcycle battery\n(REAR, tray above the caster)", xy=(BAT_X0 + BAT_L / 2, CASTER_PLATE + PLY + 8 + BAT_H),
             xytext=(-430, 400), fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
 
 dim(ax, (BODY0, 0), (0, 0), "nose 305", off=-95)

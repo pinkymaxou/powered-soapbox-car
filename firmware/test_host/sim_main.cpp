@@ -325,7 +325,10 @@ void testParamSweep()
     int runs = 0;
     float worst = 1e9f;
     float worst_hi = 0, worst_full = 0, worst_lim = 0;
-    for (float turn_hi : {0.2f, 0.3f, 0.4f})
+    // 0.4 was in this list while the battery lived in the NOSE. Rear battery (2026-08-03):
+    // xcg 0.40→0.44, a_tip 5.2→4.4 m/s², and 0.4 tips (measured: margin −0.26 m/s²).
+    // The sweep validates the whole WEB RANGE, so the param max shrank with it.
+    for (float turn_hi : {0.2f, 0.3f})
         for (float turn_full : {0.3f, 0.5f, 0.8f})
             for (float vlim : {2.0f, 3.3f})
             {

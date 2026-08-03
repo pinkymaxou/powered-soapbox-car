@@ -48,11 +48,18 @@ module frame()
     color("Wheat") translate([330, -300, FLOOR_Z]) ply(700, 600);                  // habitacle
 }
 
-// Batterie moto 12 V (~150×87×105) — À L'AVANT AU CENTRE de la baie : son poids
-// dans le museau charge l'essieu moteur (traction/freinage) et abaisse le CG.
+// Batterie moto 12 V (~150×87×105) — À L'ARRIÈRE, au-dessus de la roue folle, dans un
+// bac de contention (plateau + rebords). Choix 2026-08-03 : le CG recule (xcg 0,40→0,44)
+// et monte un peu — l'anti-renversement a été re-validé en simulation avec ce CG
+// (plage turn_alat_vmax plafonnée à 0,3 ; voir le sweep de sim_main.cpp).
 module battery()
 {
-    translate([40, -44, FLOOR_Z + PLY])
+    // Bac de contention au-dessus de la roulette (plateau ~332 mm + rebords)
+    color("BurlyWood") translate([990, -105, FLOOR_Z + PLY + 175]) cube([210, 210, PLY]);
+    for (sy = [-1, 1])
+        color("BurlyWood") translate([990, sy * 105 - (sy > 0 ? 0 : 12), FLOOR_Z + PLY + 175])
+            cube([210, 12, 60]);
+    translate([1015, -44, FLOOR_Z + PLY + 175 + PLY])
     {
         color("DimGray") cube([150, 88, 105]);
         color("Black")   translate([0, 0, 105]) cube([150, 88, 6]);

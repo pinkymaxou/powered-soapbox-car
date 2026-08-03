@@ -30,8 +30,9 @@ struct VehicleParams
     float track_m   = 0.84f;    // front track width (centers of the drive wheels)
     float wb_m      = 0.765f;   // wheelbase axle → caster wheel pivot
     float iz_kgm2   = 12.f;     // yaw inertia (estimated: m·(L/2)²·k)
-    float xcg_m     = 0.40f;    // CG behind the front axle (battery at the nose)
-    float hcg_m     = 0.38f;    // height of the loaded CG (children sitting low, moving a bit)
+    float xcg_m     = 0.44f;    // CG behind the front axle — battery moved to the REAR,
+                                // above the caster (2026-08-03): was 0.40 with it in the nose
+    float hcg_m     = 0.39f;    // loaded CG height (battery raised onto the caster shelf)
     float ycg_m     = 0.f;      // LATERAL offset of the CG (+ = left) — asymmetric load
 
     // ── 12 V DC motor (per wheel) — 4615 rpm no-load, ~19.6 A nominal ──
