@@ -125,7 +125,7 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
 // Single arena for every reply. The SIZE lives in control_types.hpp so config_params.cpp can
 // static_assert the config against it — see the guard at the bottom of that file, which is
 // what actually protects us, since the config is callback-encoded and nanopb cannot size it.
-// Measured 6568 B at 30 params (2026-07-29): ~64 % used, room for ~19 more.
+// The compile-time guard in config_params.cpp bounds the config against this arena.
 constexpr size_t REPLY_CAP = hw::PB_REPLY_CAP;
 // The messages nanopb CAN size are checked here, cheaply and exactly.
 static_assert(Status_size <= REPLY_CAP, "Status no longer fits the reply arena");

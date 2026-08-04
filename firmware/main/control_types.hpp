@@ -104,8 +104,8 @@ constexpr int     MAG_READ_TICKS    = 50;      // poll STATUS at CTRL_HZ/50 ≈ 
 // Sized to the guard, not the other way around: this is permanent BSS and every static
 // kilobyte comes straight out of the heap pool (RAM audit 2026-07-31), so keep it snug —
 // but when the compile-time worst-case guard in config_params.cpp fires on a new param,
-// prefer growing this over butchering help texts (they are the kart's manual). 35 params
-// bound to 8645 B worst-case; the RAM diet left ~40 kB of heap headroom for the extra 1 kB.
+// prefer growing this over butchering help texts (they are the kart's manual) — the guard
+// recomputes the exact worst-case bound at every build, so the number never rots here.
 constexpr size_t PB_REPLY_CAP = 9216;
 
 // Motor-power sense debounce: the opto line idles on a weak internal pull-up (~45 kΩ) and

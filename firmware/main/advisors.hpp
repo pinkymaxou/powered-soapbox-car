@@ -83,7 +83,7 @@ private:
 // Idle cutoff: the kart left DISARMED for idle_off_min minutes powers itself down, so a
 // forgotten kart does not sit there flattening its battery. Armed → the countdown restarts.
 // FIRES ONCE: the host de-asserts POWER_HOLD and that is all we promise. If the power does
-// not actually go away (the hold capacitor, or a self-holding relay), we simply stay alive
+// not actually go away (the hidden FORCE ON switch, or bench USB power), we simply stay alive
 // with the counter parked at 0 rather than retrying — no relay chatter, no surprise second
 // cut minutes later.
 // remainingS() is published in the telemetry so the page can show the countdown; a driver

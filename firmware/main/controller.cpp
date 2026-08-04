@@ -131,18 +131,23 @@ void EspController::tickOnce()
     const CtrlTelemetry t = m_ctrl.telemetry();
     const RumbleCmd r = m_rumble.update(t, m_pad_in, now);
     if (r.active) input::rumble(r.strong, r.weak, r.duration_ms);
-    // Both power-off records reach flash in time: the LED task drains the ring every 50 ms
-    // (kart disarmed in both cases) and the hold capacitor gives ~1 s of grace after powerOff.
+    // Power-off records are drained to flash BEFORE the rail is cut: there is no hold
+    // capacitor anymore, so once POWER_HOLD releases, the logic rail is gone in tens of ms —
+    // too tight for the LED task's 50 ms cadence. Writing flash from the control task is
+    // forbidden while driving, but here the kart is disarmed and about to power off: a
+    // stalled last tick is exactly free.
     if (m_poweroff.update(t, now))
     {
         evlog::push(evlog::Ev::LvcOff, t.faults);
+        evlog::maintain();
         board::powerOff();
     }
-    // Idle cutoff: fires ONCE. If the power does not actually drop (hold capacitor, or a
-    // self-holding relay), we stay alive with the countdown parked at 0 rather than retrying.
+    // Idle cutoff: fires ONCE. If the power does not actually drop (the hidden FORCE ON
+    // switch, or bench USB power), we stay alive with the countdown parked at 0.
     if (m_idle_off.update(t.armed, cfg_idle_min, now))
     {
         evlog::push(evlog::Ev::IdleOff, static_cast<uint32_t>(cfg_idle_min));
+        evlog::maintain();
         board::powerOff();
     }
 

@@ -219,7 +219,7 @@ identify the specific buttons of a gamepad).
 | `control_types.hpp` | **PURE types shared host/target**: `KartConfig`, state/fault enums, `hw::` constants, `ParamDesc` |
 | `config_params.cpp` | **`PARAMS[]` table** (defaults/bounds/help) — PURE, also compiled by the simulation |
 | `config.hpp` / `.cpp` | **NVS** persistence (write-if-changed; every save verb is **refused while armed**) + `KartStatus` telemetry + mutex |
-| `hardware.hpp` / `.cpp` | Low-level hardware (`board::` — Vbat via ADS1115, **2× PWM/DIR**, **2× AS5600** on 2 I²C buses, buttons, LED, latch, motor-power sense, boot-time I²C scan) |
+| `hardware.hpp` / `.cpp` | Low-level hardware (`board::` — Vbat via ADS1115, **2× PWM/DIR**, **2× AS5600** on 2 I²C buses, buttons, LED, latch, e-stop coil sense, boot-time I²C scan) |
 | `ads1115.hpp` / `.cpp` | **ADS1115 driver** (external 16-bit I²C ADC, PGA) — continuous / single-shot modes, 2 ms transaction timeout |
 | `input.hpp` / `.cpp` | **Gamepad input** (neutral interface) + **mandatory calibration** (NVS); calibration/pairing refused while armed, collection forces a disarm |
 | `input_bp32.c` | **Bluepad32/BTstack backend** (custom platform + BT loop task) |

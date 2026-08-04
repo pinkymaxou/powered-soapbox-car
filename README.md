@@ -189,7 +189,7 @@ flowchart LR
     class BAY elec;
 ```
 
-> **Single 2-seat bench**: the two kids side by side (~80 cm inner), same seatback. The **driver (left)** holds the **gamepad**; the right side is passenger. The **tech bay** (battery + electronics) is **in the nose, ahead of the drive axle**.
+> **Single 2-seat bench**: the two kids side by side (~80 cm inner), same seatback. The **driver (left)** holds the **gamepad**; the right side is passenger. The **tech bay** (electronics) is **in the nose, ahead of the drive axle**; the battery sits at the **rear**, in its tray above the caster.
 
 ### Top view (2-seat layout)
 
@@ -262,7 +262,7 @@ flowchart TD
 1. **"Arcade" mixing**: the firmware combines forward motion (stick Y) and turn (stick X) into two wheel commands: `left = forward + turn·gain` and `right = forward − turn·gain`. Push the stick right = left wheel faster → the kart turns right.
 2. **Pivot in place**: if forward motion ≈ 0 and you push the stick sideways, the two wheels turn **in opposite directions** → the kart **spins on itself** (the rear caster pivots to follow).
 3. **Rollover protection**: a tricycle tips easily, so the turn is protected on **two fronts**:
-   - **Speed→turn ISO-a_lat limit (MEASURED speed)**: below `turn_full_ms` (~0.5 m/s) — and anywhere the curve allows — turning is permitted at **±100%** (full-power pivot in place, `turn_gain` default 1.0); above that, the limit decreases as **1/v** (same lateral acceleration at any speed) down to `turn_at_vmax` (**±20% by default**) at top speed, then keeps tightening in case of runaway. Calibrated by physics simulation: the old linear ramp tipped an **offset load** (a single child on one side, adult+child) as soon as the turn gain reached 100%; the iso-a_lat at 0.2 keeps ≥ +0.8 m/s² of margin. The faster you go, the less you can steer. **Reverse** has **its own speed limit** (`rev_speed_ms`, default 1 m/s), served by the same PID limiter as `speed_limit_ms` (target chosen by the measured direction).
+   - **Speed→turn ISO-a_lat limit (MEASURED speed)**: below `turn_full_ms` (~0.5 m/s) — and anywhere the curve allows — turning is permitted at **±100%** (full-power pivot in place, `turn_gain` default 1.0); above that, the limit decreases as **1/v** (same lateral acceleration at any speed) down to `turn_alat_vmax` (**±20% by default**) at top speed, then keeps tightening in case of runaway. Calibrated by physics simulation: the old linear ramp tipped an **offset load** (a single child on one side, adult+child) as soon as the turn gain reached 100%; the iso-a_lat curve keeps healthy margins across the whole settable range (re-validated for the rear-battery CG — the sim sweep is the authority). The faster you go, the less you can steer. **Reverse** has **its own speed limit** (`rev_speed_ms`, default 1 m/s), served by the same PID limiter as `speed_limit_ms` (target chosen by the measured direction).
    - **Slew-rate limiter**: the turn command cannot change by more than `turn_rate` per second → an abrupt stick move is **smoothed** instead of causing a violent differential. The forward command is deliberately **not** slewed: softening the throttle is the job of the **mixing curves** (`mix_type` — expo, or expo + speed-soft for a child driver) and of the speed limiter.
 
 Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_alat_vmax`** (rollover ramp), **`turn_rate`** (turn smoothness), and the **Drive feel** group (`mix_type`, `mix_expo_fwd`, `mix_expo_turn`, `mix_soft_hi` — stick-to-motor feel, from linear to child-gentle). Details in [`firmware/README.md`](firmware/README.md).
@@ -497,7 +497,7 @@ flowchart LR
 | 27 / 14 | **I²C bus 1 SDA / SCL** | I/O | **AS5600 wheel R (0x36)**, 3.3 V, 4.7 kΩ pull-ups |
 | 13 | **POWER_HOLD** (power latch) | output | **active LOW**: holds the logic rail; HIGH = cuts |
 | 16 | **Arming button (START)** | input | pull-up, ~1 s press (or gamepad START) |
-| 22 | **MOTOR_PWR_SENSE** (opto from the 40 A relay output) | input | **active LOW** = motor power live; idles on the **internal pull-up** (GPIO22 has one — the input-only 34-39 do NOT, which is why the pin moved), so a broken wire reads "dead" (safe side); **50 ms firmware debounce** against spikes coupled from the 40 A cabling |
+| 22 | **MOTOR_PWR_SENSE** (opto on the 40 A relay **COIL**, after the e-stop) | input | **active LOW** = coil energized = e-stop released; idles on the **internal pull-up** (GPIO22 has one — the input-only 34-39 do NOT, which is why the pin moved), so a broken wire reads "e-stop engaged" (safe side); **50 ms firmware debounce**; ALWAYS active — bench: tie to GND |
 | 4 | **WS2812B strip** (data) | output | ~10 LEDs |
 | 2 | **Status LED** (onboard) | output | — |
 | **Free** | | | |
@@ -652,8 +652,8 @@ flowchart LR
 >
 > **The emergency stop only needs to cut the motor relay.** That is the point of splitting the
 > rails: the logic survives, so the kart can *say* what happened instead of going dark. A
-> **feedback opto** from the 40 A relay's output tells the firmware whether motor power is
-> actually live (`pins::MOTOR_PWR_SENSE`, GPIO22, active low so a broken wire reads "e-stop engaged").
+> **feedback opto** on the 40 A relay's **coil** (after the mushroom) tells the firmware the
+> instant the e-stop is engaged (`pins::MOTOR_PWR_SENSE`, GPIO22, active low so a broken wire reads "e-stop engaged").
 > Wiring: the opto's input LED from the **coil node (pin 85, after the e-stop)** through its
 > 4.7 kΩ resistor to ground; output transistor between **GPIO22** and GND. Sensing the COIL
 > rather than the output means a **welded contact cannot defeat the e-stop**: the firmware
@@ -747,7 +747,7 @@ flowchart LR
 
 ## 5. Critical safety points (child)
 
-- ⚠️ **Rollover protection**: a tricycle tips over more easily than a 4-wheeler. Keep the **wide front track (84 cm)** + low seat (16 cm); don't raise the seat; keep the battery and motors low. **Never disable the firmware rollover protection** (clamped turn amplitude + slew-rate limiter); start with low `turn_gain`/`speed_limit_ms`.
+- ⚠️ **Rollover protection**: a tricycle tips over more easily than a 4-wheeler. Keep the **wide front track (84 cm)** + low seat (16 cm); don't raise the seat; keep masses low — the rear battery tray is the one accepted exception, and the rollover range was re-validated in simulation for it. **Never disable the firmware rollover protection** (clamped turn amplitude + slew-rate limiter); start with low `turn_gain`/`speed_limit_ms`.
 - ⚠️ **Mounting of the 2 front drives**: motor mounts solidly bolted/reinforced; chains tensioned, lubricated and guards closed (never any slack — a slack chain climbs the sprocket and is thrown).
 - ⚠️ **Rear caster wheel**: axle and pivot well tightened (nylock / threadlocker); check that it pivots freely with no binding.
 - ⚠️ **Front wheel axles secured**: nylock + **cotter pin/retaining washer**.
@@ -818,7 +818,7 @@ flowchart LR
 
 **Phase 4 — Power electronics ⚠️ (at the front).** The **single 12 V pack at the REAR, strapped in its retaining tray above the caster** (build the tray first: plywood plate + rims on the caster platform); **fuse 40 A AT the battery → 10 AWG pair to the nose → 40 A DC relay → +12 V rail**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`); **NO hold capacitor** — a reboot drops the rail and powers the kart off cleanly (re-prime with START); a **hidden FORCE ON toggle inside the enclosure** forces the logic rail for bench/flash work; the **e-stop (NC mushroom) goes in the 40 A relay's COIL loop** (+12V_LOG → mushroom → 85; thin wires to the seatback, the relay contact breaks the 40 A); **1N4007 flyback across the 40 A coil** (cathode to 85/+). See [`doc/electronique.md`](doc/electronique.md) for the full wiring guide and [`doc/schematics/power_rails.png`](doc/schematics/power_rails.png) for the schematic; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes, and **the central e-stop kills the motor rail while the logic stays up** (the page must show the MOTOR POWER fault, GPIO22). Then check the reboot case: force a reset while powered — the relay MUST drop (clean power-off) and START must bring it back. Finally the 30-second brake test: logic up, motor relay open, spin a wheel by hand — if it resists, the e-stop brakes; if not, it freewheels (flat ground only).*
 
-**Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the 12 V LOGIC rail** (the ESP makes its own 3.3 V); **motor-power sense opto → GPIO22**; **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
+**Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the 12 V LOGIC rail** (the ESP makes its own 3.3 V); **e-stop coil-sense opto → GPIO22**; **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
 
 **Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://kart.local` (or `http://192.168.4.1`). **Pair then calibrate the gamepad** (mandatory to drive); check the measured Vbat against a multimeter (the divider ratio is fixed by the resistor constants — see the Documentation tab). Speed conversion **already determined** (AS5600 at the output of the 1:13.33 gearbox + 1.28:1 sprockets → `enc_per_wheel=1.28`, 10″ wheel, **vehicle speed in m/s**) → **verify on the bench** (both rpm signs POSITIVE pushing forward; fix with `enc_inv_l/r`) + **fine-tune the PIDs** (limiter ≈ 0.54/0.50, brake ≈ 0.43/0.29/0.011 — in m/s). Set a **low speed limit** (`speed_limit_ms`) + **rollover protection** (`turn_gain`, `turn_full_ms`, `turn_alat_vmax`, `turn_rate`) + a child-friendly **mixing** (`mix_type` 1 or 2) + check LVC. *(500 Hz loop, IPv6, System page with persistent event log: automatic.)*
 

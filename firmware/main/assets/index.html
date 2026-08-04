@@ -418,7 +418,7 @@
 const STATE={LOCKOUT:0,CALIBRATE:1,RUN:2,FAULT:3};
 const FAULT={NONE:0,ESTOP:1,LVC:2,NOT_CALIBRATED:3,ENCODER:4,ENCODER_DIR:5,ENCODER_MAD:6,ENCODER_ABSENT:7};
 const ST=["IDLE","CALIBRATION","ARMED","FAULT"];                       // labels per STATE
-const FA=["—","E-STOP","LOW BATTERY","NOT CALIBRATED","ENCODER STUCK","ENCODER REVERSED","ENCODER ERRATIC","ENCODER ABSENT","MAGNET OUT OF RANGE"];  // labels per FAULT
+const FA=["—","E-STOP","LOW BATTERY","NOT CALIBRATED","ENCODER STUCK","ENCODER REVERSED","ENCODER ERRATIC","ENCODER ABSENT","MAGNET OUT OF RANGE","E-STOP (MOTOR RELAY)"];  // labels per FAULT — keep index 9 in step with Fault::MotorPower
 // ── BINARY protocol (Protocol Buffers) ──
 // Descriptor = exact mirror of firmware/main/proto/kart.proto (same names, same numbers).
 // Decoded by the protobuf.js runtime (/pb.js, embedded). The frames are ~3× smaller
