@@ -325,10 +325,11 @@ void testParamSweep()
     int runs = 0;
     float worst = 1e9f;
     float worst_hi = 0, worst_full = 0, worst_lim = 0;
-    // 0.4 was in this list while the battery lived in the NOSE. Rear battery (2026-08-03):
-    // xcg 0.40→0.44, a_tip 5.2→4.4 m/s², and 0.4 tips (measured: margin −0.26 m/s²).
-    // The sweep validates the whole WEB RANGE, so the param max shrank with it.
-    for (float turn_hi : {0.2f, 0.3f})
+    // The sweep validates the WHOLE web-settable range, so this list tracks the param's
+    // min..max. It has shrunk twice as the build settled: 0.4 left when the battery moved
+    // (2026-08-03), 0.3 left when the bench went to the back of the deck (2026-08-06) —
+    // at 0.3 and full speed that CG tips, measured at −0.22 m/s².
+    for (float turn_hi : {0.1f, 0.15f, 0.2f})
         for (float turn_full : {0.3f, 0.5f, 0.8f})
             for (float vlim : {2.0f, 3.3f})
             {

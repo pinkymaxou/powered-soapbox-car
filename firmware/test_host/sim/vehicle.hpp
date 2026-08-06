@@ -34,7 +34,10 @@ struct VehicleParams
                                 // relatively closer to the drive axle = more effective
                                 // half-track, which is what pays back the 4" riser.
     float iz_kgm2   = 12.f;     // yaw inertia (estimated: m·(L/2)²·k)
-    float xcg_m     = 0.40f;    // CG behind the front axle (battery back in the NOSE, 2026-08-06)
+    float xcg_m     = 0.560f;   // CG behind the front axle. Battery in the NOSE, but the bench
+                                // sits as far back as the deck allows (rear edge at 863 mm, the
+                                // reclined seatback then overhangs the caster): the passengers are
+                                // 66 of the 98 kg, so the seat position dominates xcg.
     // Loaded CG height. The deck rides on a 4" (102 mm) riser over the front axle so the tall
     // rear caster fits under a FLAT tail instead of a raised one — everything on the frame
     // (children included) goes up with it: 0.38 → 0.48 m. That is the dominant rollover term

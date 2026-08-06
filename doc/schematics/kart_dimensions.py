@@ -39,9 +39,10 @@ CASTER_PLATE = 332                     # SET BY THE CASTER (10" wheel + fork + s
 AXLE_Z = WHEEL_D / 2
 CASTER_WHEEL_X = PIVOT_X + TRAIL       # 820 (fork aligned)
 TOTAL_L = (CASTER_WHEEL_X + WHEEL_D / 2) - BODY0            # ≈ 1252
-SEAT_X0, SEAT_X1 = 325, 625                                 # seat, unchanged w.r.t. the axle
-GUARD_X0 = 255                                              # guardrail: 255..655
-BACK_X = 625                                                # seatback foot
+SEAT_X0, SEAT_X1 = 563, 863                                 # bench pushed to the deck's rear edge
+GUARD_X0 = 493                                              # guardrail follows the bench
+BACK_X = 863                                                # seatback foot = deck rear edge;
+                                                            # the incline then passes OVER the caster
 BAT_X0, BAT_L, BAT_W, BAT_H = -265, 150, 88, 105            # 12 V motorcycle battery (nose, centered)
 BODY_W = SEAT_W = BAY_W = PLAT_W       # one deck, full width throughout (bench 762 inner:
                                        # ~381 mm/child instead of 400 — the 30" cut's cost)

@@ -114,21 +114,22 @@ flowchart TB
 
 | Dimension | Value | Why |
 |---|---|---|
-| Total length | **~125 cm** (dimensioned drawing; leave margin) | **Nose** (tech bay ~30 cm **ahead of the axle**) + cabin + seatback + overhang out to the rear caster wheel |
-| Overall width | **96 cm** | Must fit **two kids side by side** |
-| **Bench inner width** | **~80 cm** | 2 × ~40 cm/child (shoulders + elbows) |
+| Total length | **~150 cm** | **30″ × 46″ platform** (762 × 1168 mm) + a **150 mm caster extension** past its rear edge |
+| Overall width | **~90 cm** (deck 30″ = 762 mm + the wheels) | The **30″ deck** sets everything: two kids side by side, and the track |
+| **Bench inner width** | **76 cm** (the deck's width) | 2 × ~38 cm/child — the 30″ cut's cost, still workable |
 | **Side guardrails** (1/2″ plywood, on each side of the bench) | height **~30 cm** above the floor, length ~40 cm | Keep the child from **falling out sideways**; rounded edges |
 | **Tech bay** (nose, **ahead of the axle**) | length ~**30 cm** | Houses the driver, ESP32, breakout near the 2 motors (short motor wiring). The **battery lives at the REAR** (tray above the caster) |
-| **Front track** (drive-wheel spacing, center to center) | **84 cm** | Wide track = **tip resistance** AND **differential lever arm** (the wider the track, the sharper the turn for a given differential) |
-| **Wheelbase** (front axle ↔ caster pivot) | **~76 cm** (axle **set back** ~32 cm into the body) | **Short turning radius**: the pivot-in-place rotates about the middle of the axle → axle close to the vehicle center = **swept radius ~0.95 m**; and more weight on the drive wheels (traction/braking) |
-| Seat height (ground → seat bottom) | **16 cm** | **Low** center of gravity = limits rollover |
-| Ground clearance (under frame) | **8 cm** | Clears small obstacles without bottoming out |
+| **Front track** (drive-wheel spacing, center to center) | **83.2 cm** = deck width + wheel width | The wheels sit in **notches cut in the deck** and bear laterally on the two **inboard 2×3 rails**, so the deck sets the track. Wide track = **tip resistance** AND **differential lever arm** |
+| **Wheelbase** (front axle ↔ caster pivot) | **101.3 cm** = (1168 − 305 nose) + 150 extension | The **long** wheelbase is what pays for the 4″ axle drop: `w_eff ∝ (1 − x_cg/wheelbase)`, so pushing the caster back moves the CG relatively closer to the drive axle. Cost: pivot-in-place envelope grows to **~1.20 m radius** |
+| Seat height (ground → seat bottom) | **~27 cm** | The deck rides **4″ above the axle on shims** (the tall rear caster needs the height). ⚠️ This is the single biggest rollover term — see §3 |
+| Ground clearance (under frame) | **18 cm** | Consequence of the 4″ axle drop — generous |
 | Seatback height (seat → top) | **34 cm** | Supports both kids' backs |
 | **Front drive wheels (×2 identical)** | **Ø25.4 cm (10″)**, plastic rim + hard PVC tire | Same wheels left/right → simpler plan |
 | **Rear caster wheel (×1)** | **10″ wheel (Ø25.4 cm) on a pivoting fork**, under a **raised tail** (plate at ~33 cm), load ≥ 50 kg | Unpowered, orients freely (360°); **same wheel as the front** (shared parts); the raised tail keeps the frame **level** |
+| **Axle length budget** | **85 mm of rod per wheel** (hub + washers + lock-nut), measured | One **1/2″ × 36″** rod (914 mm) covers both: 832 track leaves 41 mm of overhang per side for the 35 mm of hardware — ~6 mm of thread past the nylock |
 | Hub / front-wheel mounting | **Metal bearing, 1/2" bore**, wide hub ~3.8 cm | Turns **free** on a **through dead axle: 1/2″ × 36″ threaded rod** (grade **8.8/B7**, hardware-store), **locknuts + washers at each end**, spacers to fix the lateral position (chain alignment), frame supports as close as possible to the hubs (≤ 3–5 cm, flex) |
 
-**Guiding idea:** low seat + **wide front track (84 cm)** = a machine **that stays stable** despite the tricycle format and two kids side by side. The firmware rollover protection complements the geometry.
+**Guiding idea:** wide front track (83 cm) + a long wheelbase = a machine **that stays stable** despite the tricycle format and two kids side by side. The deck is no longer low (the 4″ axle drop costs 21 % of tip threshold), and the bench sits at the very back of it — both paid for by the wheelbase. Every combination of the settable rollover parameters is re-validated in simulation after each of these changes; `turn_alat_vmax` is now capped AT its 0.2 default because 0.3 tips with this CG.
 
 > **Track / body decoupling**: the cabin doesn't need to be as wide as the track —
 > a **T** frame: a **wide front crossmember** carrying the **axle bearings as close as possible to
