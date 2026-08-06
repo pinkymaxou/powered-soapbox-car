@@ -39,7 +39,8 @@ and check the tooth-in-tooth meshing with the motor pinion.
   into the gear teeth), it needs **lubrication**, and it needs **sprocket alignment + tension**
   kept up — slack chain climbs a sprocket flank and gets thrown. Budget an adjustable motor mount.
 - ⚠️ **Sprockets are big**: at 3/8″ pitch a 25T sprocket is Ø 76 mm at the pitch line — nearly the
-  84.7 mm of the 80T gear next to it. Check the housing clearance; a 25T *pulley* was half that.
+  84.7 mm of the 80T gear next to it, and the 32T reaches **Ø 102 mm outside**. Check the housing
+  and frame clearance; a 25T *pulley* was half that. Generator parameters: see below.
 - Firmware: `GEAR_RATIO = 1.28` (magnet at the gearbox output). Calculated alternatives:
   25→34 = 1:17.0; 30→42 = 1:17.5; 25→36 = 1:18.0.
 
@@ -121,7 +122,31 @@ Settings that finally printed the gears cleanly after chasing a recurring extrud
 > a general PETG rule. Do not port it onto an enclosed machine (see the K1 Max profile below,
 > which runs happily at 255 °C with the chamber at 35 °C).
 
-### PETG print profile — 25T #35 sprocket (Creality K1 Max, printed)
+### Sprocket generator parameters (CAD add-in) — #35, both sprockets
+
+The "Create Sprocket" dialogs default to **#40**, whose pitch and roller are both wrong for
+this build. Four numbers, and only the tooth count changes between the two sprockets:
+
+| Field | 25T (gearbox output) | 32T (wheel) | Why |
+|---|---|---|---|
+| Chain Pitch | **0.375 in** | **0.375 in** | #35 = 3/8″ = 9.525 mm (#40's 0.50″ is the usual wrong default) |
+| Number Of Teeth | **25** | **32** | 1.28:1, and coprime → wear spreads over all teeth |
+| Roller Diameter | **0.200 in** | **0.200 in** | #35 roller Ø (#40 is 0.313″) |
+| Sprocket Thickness | **0.170 in** | **0.170 in** | 4.32 mm — must fit between the inner link plates (**4.76 mm**); 0.25″ = 6.35 mm does NOT |
+
+Check the generated body against these before printing — if the pitch was ignored, the
+diameters give it away immediately:
+
+| | pitch Ø | outside Ø | tooth-root Ø |
+|---|---|---|---|
+| 25T | 76.0 mm | 81.1 mm | 70.9 mm |
+| 32T | **97.2 mm** | **102.4 mm** | 92.1 mm |
+
+The 0.170″ thickness is not a rounded guess: it is **18 layers × 0.24 mm exactly** in the
+profile below, leaving 0.44 mm of clearance inside the link plates. Both sprockets print with
+that same profile. ✅ **32T printed and verified meshing with the real #35 chain (2026-08-05).**
+
+### PETG print profile — #35 sprockets (Creality K1 Max) — 25T and 32T printed
 
 | Setting | Value |
 |---|---|
@@ -134,7 +159,7 @@ Settings that finally printed the gears cleanly after chasing a recurring extrud
 | Elephant-foot comp. | 0.15 mm · brim **ears**, 5 mm |
 | Retraction | 0.8 mm @ 40 mm/s, z-hop 0.4 mm |
 
-Three things worth knowing about this profile before reusing it:
+Used as-is for both the 25T and the 32T. Three things worth knowing before reusing it:
 
 - **The teeth come out 100 % perimeter, by accident and happily.** A #35 tooth is ~4–5 mm
   across and 5 walls give 2.1 mm of solid from each side = 4.2 mm. Nothing is left for the
