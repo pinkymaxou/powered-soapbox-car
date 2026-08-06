@@ -30,9 +30,12 @@ struct VehicleParams
     float track_m   = 0.84f;    // front track width (centers of the drive wheels)
     float wb_m      = 0.765f;   // wheelbase axle → caster wheel pivot
     float iz_kgm2   = 12.f;     // yaw inertia (estimated: m·(L/2)²·k)
-    float xcg_m     = 0.44f;    // CG behind the front axle — battery moved to the REAR,
-                                // above the caster (2026-08-03): was 0.40 with it in the nose
-    float hcg_m     = 0.39f;    // loaded CG height (battery raised onto the caster shelf)
+    float xcg_m     = 0.40f;    // CG behind the front axle (battery back in the NOSE, 2026-08-06)
+    // Loaded CG height. The deck rides on a 4" (102 mm) riser over the front axle so the tall
+    // rear caster fits under a FLAT tail instead of a raised one — everything on the frame
+    // (children included) goes up with it: 0.38 → 0.48 m. That is the dominant rollover term
+    // (a_tip ∝ 1/h): 5.17 → 4.08 m/s², −21 %. Re-validated by the sweep in sim_main.cpp.
+    float hcg_m     = 0.482f;
     float ycg_m     = 0.f;      // LATERAL offset of the CG (+ = left) — asymmetric load
 
     // ── 12 V DC motor (per wheel) — 4615 rpm no-load, ~19.6 A nominal ──

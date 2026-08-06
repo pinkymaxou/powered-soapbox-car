@@ -3,8 +3,8 @@
 #   . .venv-schem/bin/activate && python doc/schematics/kart_dimensions.py
 # Reference: x=0 = front axle. The axle is SET BACK 325 mm into the body (nose in front):
 # the spin-in-place center moves closer to the vehicle midpoint → reduced sweep radius,
-# The 12 V battery now sits at the REAR, in a retaining tray above the caster (2026-08-03):
-# CG moves back (xcg 0.40->0.44) — rollover range re-validated in simulation (sim_main sweep).
+# The 12 V battery sits in the NOSE, loading the drive axle. The deck rides on a 4" riser over
+# the front axle (tall caster) — CG height 0.38 -> 0.48 m, re-validated by the sim_main sweep.
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -19,19 +19,23 @@ BODY0   = 20 - SHIFT                   # front of the chassis (nose): −305
 PIVOT_X = 1090 - SHIFT                 # caster wheel pivot axis: 765 (wheelbase)
 TRAIL   = 55                           # caster wheel trail
 CLEAR, LU_H, PLY = 80, 64, 12.7
-FLOOR_Z = CLEAR + LU_H                 # 144 — top of stringers
+RISER   = 101.6                        # 4" block between the axle carriers and the frame:
+                                       # lifts the deck so the tall caster needs only a small
+                                       # tail rise instead of a 188 mm one. ⚠️ CG rises with it.
+FLOOR_Z = CLEAR + LU_H + RISER         # 246 — top of stringers (was 144 without the riser)
 FLOOR_TOP = FLOOR_Z + PLY              # ~157
 SEAT_TOP = FLOOR_TOP + 30 + PLY        # ~200 (30 spacers + 1/2" plywood)
 BACK_TOP = FLOOR_TOP + 340 * math.sin(math.radians(82))  # ~494
 GUARD_TOP = FLOOR_TOP + 300            # ~457
-CASTER_PLATE = FLOOR_TOP + 175         # ~332 (underside of platform)
+CASTER_PLATE = 332                     # SET BY THE CASTER (10" wheel + fork + swivel), not by
+                                       # the deck: the tail rise is what is left over above the floor
 AXLE_Z = WHEEL_D / 2
 CASTER_WHEEL_X = PIVOT_X + TRAIL       # 820 (fork aligned)
 TOTAL_L = (CASTER_WHEEL_X + WHEEL_D / 2) - BODY0            # ≈ 1252
 SEAT_X0, SEAT_X1 = 650 - SHIFT, 950 - SHIFT                 # seat: 325..625
 GUARD_X0 = 580 - SHIFT                                      # guardrail: 255..655
 BACK_X = 950 - SHIFT                                        # seatback foot: 625
-BAT_X0, BAT_L, BAT_W, BAT_H = PIVOT_X - 75, 150, 88, 105    # 12 V battery: REAR, tray above the caster
+BAT_X0, BAT_L, BAT_W, BAT_H = 40 - SHIFT, 150, 88, 105      # 12 V motorcycle battery (nose, centered)
 BODY_W, SEAT_W, BAY_W = 600, 800, 820
 OVERALL_W = TRACK + WHEEL_W            # 910
 SWEEP_R = CASTER_WHEEL_X + WHEEL_D / 2                      # sweep radius when pivoting ≈ 947
@@ -64,31 +68,32 @@ ax.add_patch(Circle((0, AXLE_Z), WHEEL_D / 2, fc=DARK, ec='k'))            # fro
 ax.add_patch(Circle((0, AXLE_Z), WHEEL_D * 0.27, fc='#bbbbbb', ec='k'))
 ax.add_patch(Circle((CASTER_WHEEL_X, AXLE_Z), WHEEL_D / 2, fc=DARK, ec='k'))  # caster wheel
 ax.add_patch(Circle((CASTER_WHEEL_X, AXLE_Z), WHEEL_D * 0.27, fc='#bbbbbb', ec='k'))
-ax.add_patch(Rectangle((BODY0, CLEAR), 1010, LU_H, fc=WOOD, ec='k'))       # stringer
+ax.add_patch(Rectangle((BODY0, CLEAR + RISER), 1010, LU_H, fc=WOOD, ec='k'))   # stringer (on the riser)
 ax.add_patch(Rectangle((BODY0, FLOOR_Z), 1010, PLY, fc=PLYC, ec='k'))      # floor
-ax.add_patch(Rectangle((BAT_X0 - 30, CASTER_PLATE + PLY), BAT_L + 60, 8, fc=PLYC, ec='k'))  # battery tray
-ax.add_patch(Rectangle((BAT_X0, CASTER_PLATE + PLY + 8), BAT_L, BAT_H, fc='#222222', ec='k'))  # 12 V battery
+ax.add_patch(Rectangle((BAT_X0, FLOOR_TOP), BAT_L, BAT_H, fc='#222222', ec='k'))  # 12 V battery (nose)
 ax.add_patch(Rectangle((SEAT_X0, FLOOR_TOP), 300, 30 + PLY, fc=WOOD, ec='k'))  # seat
 ax.add_patch(Polygon([(BACK_X, FLOOR_TOP), (BACK_X + 340 * math.cos(math.radians(82)), BACK_TOP),
                       (BACK_X + 12 + 340 * math.cos(math.radians(82)), BACK_TOP), (BACK_X + 12, FLOOR_TOP)],
                      closed=True, fc=WOOD, ec='k'))                        # seatback
 ax.add_patch(Rectangle((GUARD_X0, FLOOR_TOP), 400, 300, fc=PLYC, ec='k', alpha=0.55))  # guardrail
-ax.add_patch(Rectangle((PIVOT_X - 60, FLOOR_TOP), 38, 175, fc=WOOD, ec='k'))       # tail post
+ax.add_patch(Rectangle((PIVOT_X - 60, FLOOR_TOP), 38, max(CASTER_PLATE - FLOOR_TOP, 0), fc=WOOD, ec='k'))  # tail post (short now)
 ax.add_patch(Rectangle((PIVOT_X - 80, CASTER_PLATE), 160, PLY, fc=PLYC, ec='k'))   # pivot platform
 ax.add_patch(Rectangle((PIVOT_X - 6, AXLE_Z - 10), 12, CASTER_PLATE - AXLE_Z + 10, fc='#777777', ec='k'))  # pivot/fork
-ax.add_patch(Rectangle((-60, CLEAR + 20), 180, 170, fc='#708090', ec='k'))          # gearbox (at the axle)
-ax.add_patch(Rectangle((115, CLEAR + 130), 80, 42, fc='#888888', ec='k'))           # motor
+ax.add_patch(Rectangle((-95, AXLE_Z + 20), 90, CLEAR + RISER - AXLE_Z - 20, fc='#8d6e63', ec='k'))  # 4" riser
+ax.add_patch(Rectangle((-60, CLEAR + RISER + 20), 180, 150, fc='#708090', ec='k'))  # gearbox (on the deck)
+ax.add_patch(Rectangle((115, CLEAR + RISER + 110), 80, 42, fc='#888888', ec='k'))   # motor
 be_x = BACK_X + 340 * math.cos(math.radians(82))
 ax.add_patch(Rectangle((be_x - 22, BACK_TOP), 45, 26, fc='red', ec='k'))            # e-stop
-ax.annotate("12 V motorcycle battery\n(REAR, tray above the caster)", xy=(BAT_X0 + BAT_L / 2, CASTER_PLATE + PLY + 8 + BAT_H),
+ax.annotate("12 V motorcycle battery\n(nose, centered)", xy=(BAT_X0 + BAT_L / 2, FLOOR_TOP + BAT_H),
             xytext=(-430, 400), fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
 
 dim(ax, (BODY0, 0), (0, 0), "nose 305", off=-95)
 dim(ax, (0, 0), (PIVOT_X, 0), "wheelbase 765 (axle → pivot)", off=-95)
 dim(ax, (BODY0, 0), (CASTER_WHEEL_X + WHEEL_D / 2, 0), f"overall length ≈ {TOTAL_L:.0f}", off=-170)
 dim(ax, (-420, 0), (-420, WHEEL_D), "Ø254 (10″)", off=0, vert=True)
-dim(ax, (240, 0), (240, CLEAR), "clearance 80", off=0, vert=True, fs=8)
-dim(ax, (290, 0), (290, SEAT_TOP), "seat ≈ 200", off=0, vert=True, fs=8)
+dim(ax, (255, 0), (255, CLEAR + RISER), f"clearance {CLEAR+RISER:.0f}", off=0, vert=True, fs=8)
+dim(ax, (-140, AXLE_Z + 20), (-140, CLEAR + RISER), '4" riser', off=0, vert=True, fs=8)
+dim(ax, (305, 0), (305, SEAT_TOP), f"seat ≈ {SEAT_TOP:.0f}", off=0, vert=True, fs=8)
 dim(ax, (1090, 0), (1090, CASTER_PLATE), "plate ≈ 332", off=0, vert=True)
 dim(ax, (1190, 0), (1190, BACK_TOP + 26), f"total height ≈ {BACK_TOP + 26:.0f}", off=0, vert=True)
 dim(ax, (GUARD_X0, GUARD_TOP), (GUARD_X0 + 400, GUARD_TOP), "guardrail 400", off=28)
@@ -116,7 +121,7 @@ ax.add_patch(Rectangle((cwx - WHEEL_D / 2, cwy - WHEEL_W / 2), WHEEL_D, WHEEL_W,
              transform=matplotlib.transforms.Affine2D().rotate_around(cwx, cwy, th) + ax.transData))
 ax.annotate("free caster wheel\n(pivots 360°)", xy=(cwx, cwy), xytext=(PIVOT_X + 180, 260),
             fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
-ax.annotate("12 V motorcycle battery", xy=(BAT_X0 + BAT_L / 2, BAT_W / 2),
+ax.annotate("12 V motorcycle battery (nose)", xy=(BAT_X0 + BAT_L / 2, BAT_W / 2),
             xytext=(BODY0 - 60, 300), fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
 ax.text((BODY0 + SWEEP_R) / 2, -570,
         "spin in place: rotation around the axle midpoint (+) → sweep radius "
