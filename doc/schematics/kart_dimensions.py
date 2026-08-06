@@ -1,8 +1,9 @@
 # kart_dimensions.py — Dimensioned drawing of the kart (side view + top view), mm.
 # Dimensions = doc/cad/kart_concept.scad (concept). Regenerate:
 #   . .venv-schem/bin/activate && python doc/schematics/kart_dimensions.py
-# Reference: x=0 = front axle. The axle is SET BACK 325 mm into the body (nose in front):
-# the spin-in-place center moves closer to the vehicle midpoint → reduced sweep radius,
+# Reference: x=0 = front axle, 305 mm behind the front edge of the 30"x46" platform.
+# The axle hangs 4" BELOW the deck on shims (tall rear caster) and the wheels sit in
+# notches, bearing on the two inboard 2x3 rails — which is what sets the 832 mm track.
 # The 12 V battery sits in the NOSE, loading the drive axle. The deck rides on a 4" riser over
 # the front axle (tall caster) — CG height 0.38 -> 0.48 m, re-validated by the sim_main sweep.
 import matplotlib
@@ -13,12 +14,18 @@ import math
 
 # ── Dimensions (mm) — identical to the OpenSCAD concept ──
 WHEEL_D, WHEEL_W = 254, 70
-TRACK   = 840
-SHIFT   = 325                          # axle set-back into the body
-BODY0   = 20 - SHIFT                   # front of the chassis (nose): −305
-PIVOT_X = 1090 - SHIFT                 # caster wheel pivot axis: 765 (wheelbase)
+# The PLATFORM drives everything now: 30" x 46" plywood deck (owner's cut).
+PLAT_W, PLAT_L = 30 * 25.4, 46 * 25.4  # 762 x 1168 mm
+NOSE    = 305                          # front edge → axle
+TRACK   = PLAT_W + WHEEL_W             # 832 — wheels sit in NOTCHES cut in the deck and bear
+                                       # laterally on the inboard 2x3 rails: the deck sets the track
+SHIFT   = NOSE                         # axle set-back into the body
+BODY0   = -NOSE                        # front of the platform: −305
+BODY1   = PLAT_L - NOSE                # rear edge of the platform: 863
+EXT     = 150                          # caster extension BEYOND the platform
+PIVOT_X = BODY1 + EXT                  # caster pivot: 1013 (wheelbase)
 TRAIL   = 55                           # caster wheel trail
-CLEAR, LU_H, PLY = 80, 64, 12.7
+CLEAR, LU_H, LU_W, PLY = 80, 64, 38, 12.7
 RISER   = 101.6                        # 4" block between the axle carriers and the frame:
                                        # lifts the deck so the tall caster needs only a small
                                        # tail rise instead of a 188 mm one. ⚠️ CG rises with it.
@@ -32,13 +39,14 @@ CASTER_PLATE = 332                     # SET BY THE CASTER (10" wheel + fork + s
 AXLE_Z = WHEEL_D / 2
 CASTER_WHEEL_X = PIVOT_X + TRAIL       # 820 (fork aligned)
 TOTAL_L = (CASTER_WHEEL_X + WHEEL_D / 2) - BODY0            # ≈ 1252
-SEAT_X0, SEAT_X1 = 650 - SHIFT, 950 - SHIFT                 # seat: 325..625
-GUARD_X0 = 580 - SHIFT                                      # guardrail: 255..655
-BACK_X = 950 - SHIFT                                        # seatback foot: 625
-BAT_X0, BAT_L, BAT_W, BAT_H = 40 - SHIFT, 150, 88, 105      # 12 V motorcycle battery (nose, centered)
-BODY_W, SEAT_W, BAY_W = 600, 800, 820
+SEAT_X0, SEAT_X1 = 325, 625                                 # seat, unchanged w.r.t. the axle
+GUARD_X0 = 255                                              # guardrail: 255..655
+BACK_X = 625                                                # seatback foot
+BAT_X0, BAT_L, BAT_W, BAT_H = -265, 150, 88, 105            # 12 V motorcycle battery (nose, centered)
+BODY_W = SEAT_W = BAY_W = PLAT_W       # one deck, full width throughout (bench 762 inner:
+                                       # ~381 mm/child instead of 400 — the 30" cut's cost)
 OVERALL_W = TRACK + WHEEL_W            # 910
-SWEEP_R = CASTER_WHEEL_X + WHEEL_D / 2                      # sweep radius when pivoting ≈ 947
+SWEEP_R = CASTER_WHEEL_X + WHEEL_D / 2                      # sweep radius when pivoting ≈ 1195
 
 WOOD, PLYC, DARK, ACC = '#c9a066', '#e8d3a3', '#555555', '#1565c0'
 
@@ -57,7 +65,7 @@ def dim(ax, p0, p1, txt, off=0.0, vert=False, fs=8.5):
         ax.text((x0 + x1) / 2, y0 + 12, txt, fontsize=fs, color=ACC, ha='center')
 
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12.5, 12))
-fig.suptitle("Tricycle kart — dimensioned drawing (mm) · 10″ wheels · 2×3 lumber + 1/2″ plywood · axle set back (short turning)",
+fig.suptitle("Tricycle kart — dimensioned drawing (mm) · 30″×46″ deck · 10″ wheels · 2×3 rails · axle dropped 4″ on shims",
              fontsize=13, fontweight='bold')
 
 # ═════════════════ SIDE VIEW ═════════════════
@@ -68,8 +76,9 @@ ax.add_patch(Circle((0, AXLE_Z), WHEEL_D / 2, fc=DARK, ec='k'))            # fro
 ax.add_patch(Circle((0, AXLE_Z), WHEEL_D * 0.27, fc='#bbbbbb', ec='k'))
 ax.add_patch(Circle((CASTER_WHEEL_X, AXLE_Z), WHEEL_D / 2, fc=DARK, ec='k'))  # caster wheel
 ax.add_patch(Circle((CASTER_WHEEL_X, AXLE_Z), WHEEL_D * 0.27, fc='#bbbbbb', ec='k'))
-ax.add_patch(Rectangle((BODY0, CLEAR + RISER), 1010, LU_H, fc=WOOD, ec='k'))   # stringer (on the riser)
-ax.add_patch(Rectangle((BODY0, FLOOR_Z), 1010, PLY, fc=PLYC, ec='k'))      # floor
+ax.add_patch(Rectangle((BODY0, CLEAR + RISER), PLAT_L, LU_H, fc=WOOD, ec='k'))  # 2x3 rails (on the shims)
+ax.add_patch(Rectangle((BODY0, FLOOR_Z), PLAT_L, PLY, fc=PLYC, ec='k'))    # 30"x46" platform
+ax.add_patch(Rectangle((BODY1, FLOOR_Z), EXT, PLY, fc='#d8c090', ec='k'))  # caster extension
 ax.add_patch(Rectangle((BAT_X0, FLOOR_TOP), BAT_L, BAT_H, fc='#222222', ec='k'))  # 12 V battery (nose)
 ax.add_patch(Rectangle((SEAT_X0, FLOOR_TOP), 300, 30 + PLY, fc=WOOD, ec='k'))  # seat
 ax.add_patch(Polygon([(BACK_X, FLOOR_TOP), (BACK_X + 340 * math.cos(math.radians(82)), BACK_TOP),
@@ -87,14 +96,14 @@ ax.add_patch(Rectangle((be_x - 22, BACK_TOP), 45, 26, fc='red', ec='k'))        
 ax.annotate("12 V motorcycle battery\n(nose, centered)", xy=(BAT_X0 + BAT_L / 2, FLOOR_TOP + BAT_H),
             xytext=(-430, 400), fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
 
-dim(ax, (BODY0, 0), (0, 0), "nose 305", off=-95)
-dim(ax, (0, 0), (PIVOT_X, 0), "wheelbase 765 (axle → pivot)", off=-95)
+dim(ax, (BODY0, 0), (0, 0), f"nose {NOSE}", off=-95)
+dim(ax, (0, 0), (PIVOT_X, 0), f"wheelbase {PIVOT_X:.0f} (axle → pivot)", off=-95)
 dim(ax, (BODY0, 0), (CASTER_WHEEL_X + WHEEL_D / 2, 0), f"overall length ≈ {TOTAL_L:.0f}", off=-170)
 dim(ax, (-420, 0), (-420, WHEEL_D), "Ø254 (10″)", off=0, vert=True)
 dim(ax, (255, 0), (255, CLEAR + RISER), f"clearance {CLEAR+RISER:.0f}", off=0, vert=True, fs=8)
 dim(ax, (-140, AXLE_Z + 20), (-140, CLEAR + RISER), '4" riser', off=0, vert=True, fs=8)
 dim(ax, (305, 0), (305, SEAT_TOP), f"seat ≈ {SEAT_TOP:.0f}", off=0, vert=True, fs=8)
-dim(ax, (1090, 0), (1090, CASTER_PLATE), "plate ≈ 332", off=0, vert=True)
+dim(ax, (PIVOT_X + 210, 0), (PIVOT_X + 210, CASTER_PLATE), "caster plate ≈ 332", off=0, vert=True, fs=8)
 dim(ax, (1190, 0), (1190, BACK_TOP + 26), f"total height ≈ {BACK_TOP + 26:.0f}", off=0, vert=True)
 dim(ax, (GUARD_X0, GUARD_TOP), (GUARD_X0 + 400, GUARD_TOP), "guardrail 400", off=28)
 dim(ax, (SEAT_X0, SEAT_TOP + 8), (SEAT_X1, SEAT_TOP + 8), "seat 300", off=20)
@@ -106,8 +115,12 @@ ax = ax2
 ax.set_title("Top view", fontsize=10)
 for sy in (-1, 1):
     ax.add_patch(Rectangle((-WHEEL_D / 2, sy * TRACK / 2 - WHEEL_W / 2), WHEEL_D, WHEEL_W, fc=DARK, ec='k'))
-ax.add_patch(Rectangle((BODY0, -BAY_W / 2), 310, BAY_W, fc=PLYC, ec='k'))        # technical bay (nose)
-ax.add_patch(Rectangle((BODY0 + 310, -BODY_W / 2), 700, BODY_W, fc=PLYC, ec='k'))  # cabin
+ax.add_patch(Rectangle((BODY0, -PLAT_W / 2), PLAT_L, PLAT_W, fc=PLYC, ec='k'))   # 30"x46" platform
+ax.add_patch(Rectangle((BODY1, -160), EXT, 320, fc='#d8c090', ec='k'))           # caster extension
+for sy in (-1, 1):   # the two inboard 2x3 rails the wheels bear against
+    ax.add_patch(Rectangle((BODY0, sy * PLAT_W / 2 - (LU_W if sy > 0 else 0)), PLAT_L, LU_W,
+                           fc=WOOD, ec='k'))
+
 ax.add_patch(Rectangle((BAT_X0, -BAT_W / 2), BAT_L, BAT_W, fc='#222222', ec='k'))  # 12 V battery
 ax.add_patch(Rectangle((SEAT_X0, -SEAT_W / 2), 300, SEAT_W, fc=WOOD, ec='k'))    # bench (overhanging)
 for sy in (-1, 1):
@@ -125,16 +138,16 @@ ax.annotate("12 V motorcycle battery (nose)", xy=(BAT_X0 + BAT_L / 2, BAT_W / 2)
             xytext=(BODY0 - 60, 300), fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
 ax.text((BODY0 + SWEEP_R) / 2, -570,
         "spin in place: rotation around the axle midpoint (+) → sweep radius "
-        f"≈ {SWEEP_R:.0f} mm (the set-back axle shortens the turning)",
+        f"≈ {SWEEP_R:.0f} mm (long wheelbase: bigger sweep, but a much better tip threshold)",
         fontsize=8, style='italic', ha='center')
 
-dim(ax, (-370, -TRACK / 2), (-370, TRACK / 2), "track 840", off=0, vert=True)
+dim(ax, (-370, -TRACK / 2), (-370, TRACK / 2), f"track {TRACK:.0f}", off=0, vert=True)
 dim(ax, (-460, -TRACK / 2 - WHEEL_W / 2), (-460, TRACK / 2 + WHEEL_W / 2), f"overall width {OVERALL_W}", off=0, vert=True)
-dim(ax, (SEAT_X0 + 50, -SEAT_W / 2), (SEAT_X0 + 50, SEAT_W / 2), "bench 800 (2 children)", off=0, vert=True)
-dim(ax, (665, -BODY_W / 2), (665, BODY_W / 2), "body 600", off=0, vert=True)
-dim(ax, (BODY0, BAY_W / 2), (BODY0 + 310, BAY_W / 2), "tech bay 310", off=45)
+dim(ax, (SEAT_X0 + 50, -SEAT_W / 2), (SEAT_X0 + 50, SEAT_W / 2), f"bench {SEAT_W:.0f} (2 children)", off=0, vert=True)
+dim(ax, (BODY0, -PLAT_W / 2), (BODY1, -PLAT_W / 2), f'platform 46" = {PLAT_L:.0f}', off=-80)
+dim(ax, (BODY0 + 40, -PLAT_W / 2), (BODY0 + 40, PLAT_W / 2), f'platform 30" = {PLAT_W:.0f}', off=0, vert=True)
 dim(ax, (SEAT_X0, SEAT_W / 2), (SEAT_X1, SEAT_W / 2), "seat 300", off=95)
-dim(ax, (0, -TRACK / 2 - WHEEL_W / 2), (PIVOT_X, -TRACK / 2 - WHEEL_W / 2), "wheelbase 765", off=-70)
+dim(ax, (0, -TRACK / 2 - WHEEL_W / 2), (PIVOT_X, -TRACK / 2 - WHEEL_W / 2), f"wheelbase {PIVOT_X:.0f}", off=-70)
 ax.set_xlim(-620, 1300); ax.set_ylim(-660, 660)
 ax.set_aspect('equal'); ax.axis('off')
 

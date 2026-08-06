@@ -27,14 +27,19 @@ struct VehicleParams
     float mass_kart_kg = 32.f;  // wood chassis + motors + battery + electronics
     float mass_pass_kg = 66.f;  // PASSENGERS: 2 children ~10 y.o. (≈ 33 kg each)
     float mass() const { return mass_kart_kg + mass_pass_kg; }
-    float track_m   = 0.84f;    // front track width (centers of the drive wheels)
-    float wb_m      = 0.765f;   // wheelbase axle → caster wheel pivot
+    float track_m   = 0.832f;   // front track: set by the 30" platform + wheel width — the
+                                // wheels sit in notches and bear on the inboard 2x3 rails
+    float wb_m      = 1.013f;   // wheelbase axle → caster pivot: (46" platform − 12" nose)
+                                // + 150 mm caster extension. Long wheelbase = the CG sits
+                                // relatively closer to the drive axle = more effective
+                                // half-track, which is what pays back the 4" riser.
     float iz_kgm2   = 12.f;     // yaw inertia (estimated: m·(L/2)²·k)
     float xcg_m     = 0.40f;    // CG behind the front axle (battery back in the NOSE, 2026-08-06)
     // Loaded CG height. The deck rides on a 4" (102 mm) riser over the front axle so the tall
     // rear caster fits under a FLAT tail instead of a raised one — everything on the frame
     // (children included) goes up with it: 0.38 → 0.48 m. That is the dominant rollover term
-    // (a_tip ∝ 1/h): 5.17 → 4.08 m/s², −21 %. Re-validated by the sweep in sim_main.cpp.
+    // (a_tip ∝ 1/h): 5.17 → 4.08 m/s², −21 %. The longer platform hands that back (final
+    // geometry: 5.12 m/s²). Re-validated by the sweep in sim_main.cpp.
     float hcg_m     = 0.482f;
     float ycg_m     = 0.f;      // LATERAL offset of the CG (+ = left) — asymmetric load
 
