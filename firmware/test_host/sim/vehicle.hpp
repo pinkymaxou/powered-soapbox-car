@@ -45,6 +45,12 @@ struct VehicleParams
     // geometry: 5.12 m/s²). Re-validated by the sweep in sim_main.cpp.
     float hcg_m     = 0.482f;
     float ycg_m     = 0.f;      // LATERAL offset of the CG (+ = left) — asymmetric load
+    // 3 = tricycle (2 driven front + 1 rear caster) · 4 = two REAR CASTERS on a rigid beam.
+    // This single number changes the rollover geometry completely: a tricycle tips about the
+    // line joining a front wheel to the single rear contact, so the usable half-track shrinks
+    // as (1 − xcg/wb); with four contacts the tip line is parallel to the centreline and the
+    // FULL half-track counts, whatever the CG's fore/aft position (see wEff).
+    int   wheels    = 3;
 
     // ── 12 V DC motor (per wheel) — 4615 rpm no-load, ~19.6 A nominal ──
     float ke        = 12.f / (4615.f * 2.f * PI_F / 60.f);   // V·s/rad ≈ 0.0248 (= kt)
@@ -363,7 +369,11 @@ private:
         return torque_wheel / m_p.wheel_r_m;
     }
 
-    float wEff() const { return (m_p.track_m / 2.f) * (1.f - m_p.xcg_m / m_p.wb_m); }
+    float wEff() const
+    {
+        const float half = m_p.track_m / 2.f;
+        return (4 == m_p.wheels) ? half : half * (1.f - m_p.xcg_m / m_p.wb_m);
+    }
     float vlNow() const { return m_v + m_w * m_p.track_m / 2.f; }
     float vrNow() const { return m_v - m_w * m_p.track_m / 2.f; }
 
