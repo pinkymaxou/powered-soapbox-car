@@ -42,10 +42,14 @@ def build_sim() -> None:
         str(FW / "test_host/sim_main.cpp"),
         str(FW / "main/controller_core.cpp"),
         str(FW / "main/config_params.cpp"),
-        "-o", str(SIM_BIN),
+        "-o", str(SIM_BIN) + ".new",
     ]
     print("compiling:", " ".join(cmd))
     subprocess.run(cmd, check=True)
+    # Atomic swap: a scenario or a drive session may be running THIS binary right now, and
+    # writing over a running executable fails with ETXTBSY. Rename instead — running
+    # processes keep the old inode, the next Popen picks up the new one.
+    pathlib.Path(str(SIM_BIN) + ".new").replace(SIM_BIN)
 
 
 def scenario_list():
@@ -91,6 +95,10 @@ class Handler(BaseHTTPRequestHandler):
             body = (HERE / "sim_viewer.html").read_bytes()
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
+            # The page is edited constantly and IS the app: never let a browser serve a stale
+            # copy from its heuristic cache, or a fix to the render loop looks like it did
+            # nothing. (chart.js below is vendored and immutable — that one stays cached.)
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -120,6 +128,13 @@ class Handler(BaseHTTPRequestHandler):
     def stream(self, name: str):
         """SSE: relays each JSON line from the simulator to the browser.
         The pseudo-scenario __drive__ = MANUAL driving: stdin open for the keyboard."""
+        # ⚠️ Staleness was only checked at server startup, so a server left running while the
+        # physics is edited keeps serving the binary it built on launch — you drive an old
+        # kart and nothing says so. Re-check per stream: the rebuild costs ~4 s ONCE, and it
+        # is announced on the console so it is not mistaken for the sim being slow.
+        if sim_stale():
+            print("sources changed since the last build — recompiling the simulator…")
+            build_sim()
         if name == "__drive__":
             proc = subprocess.Popen([str(SIM_BIN), "--drive"],
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)

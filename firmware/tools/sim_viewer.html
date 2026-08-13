@@ -93,7 +93,7 @@
  <ul>
   <li><b>Controller</b>: the <b>real firmware logic</b> (controller_core.cpp, identical to the kart) at 500 Hz — same config defaults (PARAMS), same <code>hw::</code> thresholds.</li>
   <li><b>Chassis</b>: planar rigid body with 2 degrees of freedom (longitudinal speed + yaw). The wheels <b>do not slip</b> laterally (side-slip only appears as yaw damping).</li>
-  <li><b>Rollover</b>: <b>quasi-static</b> criterion — tipping about the front-wheel↔caster-wheel edge of the support triangle. Effective half-width at the CG: w_eff = (track/2)·(1 − x_cg/wheelbase); limit a_tip = g·w_eff/h_cg. Suspension/tire transients are ignored.</li>
+  <li><b>Rollover</b>: <b>quasi-static</b> criterion — a tricycle tips about the edge running from its <b>single</b> wheel (the front caster) to one of the <b>paired</b> wheels (the rear driven ones). Effective half-width at the CG: w_eff = (track/2)·(1 − x_cg/wheelbase), with <b>x_cg measured from the PAIRED axle</b>; limit a_tip = g·w_eff/h_cg. Suspension/tire transients are ignored.</li>
   <li><b>Motors</b>: linear DC (k<sub>t</sub> = k<sub>e</sub>), current i = (V − k<sub>e</sub>·ω)/R<sub>a</sub>,
       <b>clamped to ±19.6 A per motor</b> — the theoretical capacity of the MOTOR (12 V / ~19.6 A,
       ~172 W, below the driver limit of 20 A continuous / 60 A peak): torque, force, battery
@@ -137,20 +137,26 @@
  </ul>
  <h3>Masses and center of gravity</h3>
  <ul>
-  <li><b>Total mass ≈ 98 kg</b>: kart ≈ 32 kg (wooden chassis, motors, battery at the nose,
+  <li><b>Total mass ≈ 98 kg</b>: kart ≈ 32 kg (wooden chassis, motors, battery in the nose,
       electronics) + <b>passengers ≈ 66 kg</b> — two children about 10 years old (~33 kg each),
-      seated side by side on the bench.</li>
-  <li><b>Center of gravity assumed FIXED</b>: x_cg ≈ 0.40 m behind the drive axle (the
-      children sit toward the rear, the battery in the nose pulls the CG forward),
-      h_cg ≈ 0.38 m above the ground (low seating ~20 cm, children's torsos above).</li>
-  <li><b>Geometric consequence (tricycle)</b>: the effective support half-width at
-      the CG is w_eff = (track/2)·(1 − x_cg/wheelbase) ≈ 0.42 × (1 − 0.40/0.765)
-      ≈ <b>0.20 m</b> → tip limit a_tip = g·w_eff/h_cg ≈ <b>5.2 m/s²</b>.</li>
+      seated side by side on the bench, <b>over the driven axle</b>.</li>
+  <li><b>Center of gravity assumed FIXED</b>: x_cg ≈ 0.46 m <b>ahead of the driven axle</b>
+      (since 2026-08-10 the bench sits 6″ ahead of that axle and the axle itself moved 6″ back),
+      h_cg ≈ 0.48 m above the ground (deck raised on 4″ shims, children's torsos above).</li>
+  <li><b>Geometric consequence (reversed tricycle)</b>: w_eff = (track/2)·(1 − x_cg/wheelbase)
+      ≈ 0.416 × (1 − 0.455/1.165) ≈ <b>0.25 m</b> → tip limit a_tip = g·w_eff/h_cg
+      ≈ <b>5.2 m/s²</b> (0.53 g). It was 6.8 m/s² while the bench sat ON the driven axle —
+      moving the two 6″ apart cost 78 mm of w_eff. ⚠️ Consequence: the software turn limiter is
+      no longer redundancy. Tick <b>rollover protection off</b> and drive a full-speed turn and
+      the kart <b>rolls over</b> (<code>virage_sans_protection</code>, −0.60 m/s²), where the
+      previous layout stayed planted at +0.92. Turn the layout fully around — caster at the
+      rear, x_cg 0.56 — and it is worse again: <code>ancienne_disposition</code>, 3.8 m/s².</li>
   <li><b>Offset load modeled</b> (y_cg): tipping becomes asymmetric — the edge
       on the loaded side loses its margin. The <code>enfant_seul_cote</code> and
       <code>adulte_enfant</code> scenarios show that with the DEFAULT settings an offset CG can
-      tip over in an extreme maneuver; the iso-a_lat limit (∝ 1/v, <code>turn_at_vmax = 0.2</code>,
-      turn gain 1.0) also protects these cases.</li>
+      tip over in an extreme maneuver; the iso-a_lat limit (∝ 1/v, <code>turn_alat_vmax = 0.2</code>,
+      turn gain 1.0) also protects these cases — <code>enfant_seul_cote</code> is in fact the
+      binding case of the whole parameter sweep, which is why the settable range stops at 0.3.</li>
   <li><b>Model limitation</b>: passengers leaning shift the real CG dynamically
       — which is why the tests require a <b>margin</b> and not just "does not tip over".</li>
  </ul>
@@ -499,37 +505,43 @@ for (let i = 0; i < 2; i++){
 let inBackrooms = false;
 scene.add(trees);
 
-// ── Kart (design proportions: track 0.84, wheels Ø0.254, nose, bench) ──
+// ── Kart (design proportions: REVERSED tricycle — 2 driven wheels at the REAR under the
+//    bench, 1 free 10" caster at the FRONT centre, battery in the nose over it.
+//    LOCAL frame: DRIVEN axle at the origin, nose toward −x, deck 1.168 × 0.762, riser 4". ──
 const kart = new THREE.Group();
 const mat = c => new THREE.MeshStandardMaterial({color:c});
 const woodMat = new THREE.MeshStandardMaterial({map: woodTex});
-const floor = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.05, 0.62), woodMat);
-floor.position.set(0.17, 0.15, 0);   // axle at the origin (LOCAL frame: nose toward −x)
+const floor = new THREE.Mesh(new THREE.BoxGeometry(1.168, 0.05, 0.762), woodMat);
+floor.position.set(-0.431, 0.23, 0);  // deck: 1.015 ahead of the driven axle, 0.153 behind it
 kart.add(floor);
-const nose = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.09, 0.09), mat(0x222222));
-nose.position.set(-0.2, 0.23, 0);    // battery in the nose
+const beam = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.06, 0.20), woodMat);
+beam.position.set(-1.10, 0.22, 0);    // the 2x3 rails overhang the nose to carry the caster
+kart.add(beam);
+const nose = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.105, 0.088), mat(0x222222));
+nose.position.set(-0.915, 0.31, 0);   // battery in the nose, OVER the caster
 kart.add(nose);
-const seat = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.8), woodMat);
-seat.position.set(0.42, 0.24, 0);
+const seat = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.762), woodMat);
+seat.position.set(-0.149, 0.30, 0);   // bench: 6" AHEAD of the driven axle since 2026-08-10
 kart.add(seat);
-const back = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.36, 0.8), mat(0xa0714f));
-back.position.set(0.62, 0.42, 0);
+const back = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.36, 0.762), mat(0xa0714f));
+back.position.set(-0.011, 0.44, 0);   // seatback moved forward with the bench
 back.rotation.z = -0.14;
 kart.add(back);
 const estop = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 16), mat(0xdd2222));
-estop.position.set(0.66, 0.63, 0);
+estop.position.set(0.036, 0.62, 0);
 kart.add(estop);
 const wheelGeo = new THREE.CylinderGeometry(0.127, 0.127, 0.07, 24);
 wheelGeo.rotateX(Math.PI/2);
-const wl = new THREE.Mesh(wheelGeo, mat(0x333333)); wl.position.set(0, 0.127, -0.42);
-const wr = new THREE.Mesh(wheelGeo, mat(0x333333)); wr.position.set(0, 0.127,  0.42);
-kart.add(wl, wr);
-const caster = new THREE.Mesh(new THREE.CylinderGeometry(0.127, 0.127, 0.05, 20).rotateX(Math.PI/2),
+const wl = new THREE.Mesh(wheelGeo, mat(0x333333)); wl.position.set(0, 0.127, -0.416);
+const wr = new THREE.Mesh(wheelGeo, mat(0x333333)); wr.position.set(0, 0.127,  0.416);
+kart.add(wl, wr);   // DRIVEN wheels — at the origin, i.e. under the bench
+const caster = new THREE.Mesh(new THREE.CylinderGeometry(0.127, 0.127, 0.06, 20).rotateX(Math.PI/2),
                               mat(0x555555));
-caster.position.set(0.82, 0.127, 0);
+caster.position.set(-1.165, 0.127, 0);   // free 10" caster: FRONT centre, one wheelbase ahead
 kart.add(caster);
-// Center of mass: sphere + plumb line (position updated from the scenario
-// parameters — LOCAL frame: the rear is toward +x before the group is flipped).
+// Center of mass: sphere + plumb line (position updated from the scenario parameters).
+// ⚠️ x_cg is measured AHEAD of the driven axle (toward the caster), and the local frame has
+// the nose toward −x — hence the sign flip when placing the ball.
 const cg = new THREE.Group();
 const cgBall = new THREE.Mesh(new THREE.SphereGeometry(0.055, 20, 14),
   new THREE.MeshStandardMaterial({color:0xff2ea6, emissive:0x88185a}));
@@ -537,7 +549,8 @@ cg.add(cgBall);
 const cgLineGeo = new THREE.BufferGeometry().setFromPoints(
   [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -1, 0)]);
 cg.add(new THREE.Line(cgLineGeo, new THREE.LineDashedMaterial({color:0xff2ea6})));
-cg.position.set(0.40, 0.38, 0);   // defaults (overwritten by the scenario meta-message)
+cg.position.set(-0.455, 0.482, 0);   // defaults (overwritten by the scenario meta-message)
+cg.children[1].scale.y = 0.482;      // plumb line stops at the ground, not below it
 kart.add(cg);
 scene.add(kart);
 // The group is built nose toward −x; we flip it so the FRONT of the kart points
@@ -644,6 +657,8 @@ function mkChart(id, series, ymin, ymax){
       plugins:{legend:{labels:{color:'#e6edf3', boxWidth:14}}}}});
 }
 let chV, chA, chO, chE, chP, chW, lastChartUpd = 0;
+const CHART_MAX = 2000;   // points kept per series ≈ 2 min of history at the 16 Hz push rate
+let frameSeq = 0;         // frame counter used to decimate the chart pushes
 function initCharts(){
   chV = mkChart('cv', [{l:'v', c:'#58a6ff'}, {l:'limit', c:'#8b949e', d:[5,4]}], -1, 4);
   chA = mkChart('ca', [{l:'|a_lat|', c:'#d29922'}, {l:'a_tip (tip)', c:'#f85149', d:[5,4]}], 0, 7);
@@ -674,15 +689,30 @@ function chartPush(m){
   chP.data.datasets[3].data.push({x:m.t, y:m.pady});
   chW.data.datasets[0].data.push({x:m.t, y:m.e_wh});
   chW.data.datasets[1].data.push({x:m.t, y:m.p_w / 100});
+  // ⚠️ MANUAL DRIVING NEVER ENDS. A bounded scenario tops out at ~15 s of frames, but the
+  // __drive__ stream runs until the tab closes: at 62.5 Hz × 16 series that is 1000 points a
+  // second, forever. Unbounded, Chart.js re-lays-out every accumulated point four times a
+  // second and the main thread stalls for longer and longer — which starves the 20 Hz input
+  // interval too, so the kart answers the keyboard seconds late. Keep a sliding window.
+  for (const ch of [chV, chA, chO, chE, chP, chW])
+    for (const d of ch.data.datasets)
+      if (d.data.length > CHART_MAX) d.data.splice(0, d.data.length - CHART_MAX);
   const now = performance.now();
-  if (now - lastChartUpd > 250){
+  // …and do not re-render at all while the panel is closed: it is a hidden canvas, but
+  // update() still costs a full scale/layout pass over every dataset.
+  if (now - lastChartUpd > 250 && chartsVisible()){
     lastChartUpd = now;
     for (const ch of [chV, chA, chO, chE, chP, chW]) ch.update('none');
   }
 }
+function chartsVisible(){
+  return getComputedStyle(document.getElementById('charts')).display !== 'none';
+}
 function toggleCharts(){
   const el = document.getElementById('charts');
-  el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+  el.style.display = chartsVisible() ? 'none' : 'block';
+  // Re-opening: catch up immediately instead of waiting for the next 250 ms tick.
+  if (chartsVisible()) for (const ch of [chV, chA, chO, chE, chP, chW]) ch.update('none');
 }
 // Table of physical parameters (simulator meta-message: source of truth).
 function fillParams(p){
@@ -725,11 +755,11 @@ function play(){
       if (m.params){
         fillParams(m.params);
         const p = m.params;
-        cg.position.set(p.xcg_m, p.hcg_m, -(p.ycg_m || 0));   // scenario CG (sim y + = left)
+        cg.position.set(-p.xcg_m, p.hcg_m, -(p.ycg_m || 0));  // −x: ahead of the driven axle
         cg.children[1].scale.y = p.hcg_m;                     // plumb line down to the ground
         document.getElementById('massinfo').innerHTML =
           `⚖️ <b>${p.masse_totale_kg} kg</b> (kart ${p.masse_kart_kg} + passengers ${p.masse_passagers_kg})<br>` +
-          `<b>CG</b> x=${p.xcg_m.toFixed(2)} m behind the axle · ` +
+          `<b>CG</b> x=${p.xcg_m.toFixed(2)} m ahead of the driven axle · ` +
           `y=${(p.ycg_m || 0).toFixed(2)} m ${p.ycg_m > 0.001 ? '(left)' : (p.ycg_m < -0.001 ? '(right)' : '(centered)')} · ` +
           `h=${p.hcg_m.toFixed(2)} m · tips at ${m.atip.toFixed(1)} m/s²`;
       }
@@ -737,11 +767,18 @@ function play(){
       return;
     }
     cur = m;
-    chartPush(m);
+    // Charts at 62.5 Hz is four times more resolution than a 400 px canvas can show, and
+    // every push is work on the main thread — the same thread the 20 Hz input interval and
+    // the render loop live on. Decimate to ~16 Hz: identical curves, a quarter of the cost.
+    if (0 === (++frameSeq & 3)) chartPush(m);
     if (trailN < TRAIL_MAX){
       trailPos[trailN*3] = m.x; trailPos[trailN*3+1] = (m.z || 0) + 0.03; trailPos[trailN*3+2] = m.y;
       trailGeo.setDrawRange(0, ++trailN);
-      trailGeo.attributes.position.needsUpdate = true;
+      // Upload ONLY the vertex just written. Without this, needsUpdate re-sends the whole
+      // 4000-point buffer (48 kB) to the GPU on every frame of the drive stream.
+      const pos = trailGeo.attributes.position;
+      if (pos.updateRange) { pos.updateRange.offset = (trailN - 1) * 3; pos.updateRange.count = 3; }
+      pos.needsUpdate = true;
     }
   };
   es.addEventListener('end', () => es.close());
@@ -792,8 +829,11 @@ function animate(){
     const off = new THREE.Vector3(Math.cos(az) * Math.cos(cam.pitch) * cam.dist,
                                   Math.sin(cam.pitch) * cam.dist,
                                   Math.sin(az) * Math.cos(cam.pitch) * cam.dist);
-    camera.position.lerp(new THREE.Vector3(cur.x, gz, cur.y).add(off), 0.08);
-    camera.lookAt(cur.x, gz + 0.3, cur.y);
+    // The kart's origin is the DRIVEN axle, which now sits at the REAR — aim the chase
+    // camera half a metre ahead of it so the whole deck stays in frame.
+    const fx = cur.x + 0.65 * Math.cos(cur.h), fz = cur.y + 0.65 * Math.sin(cur.h);
+    camera.position.lerp(new THREE.Vector3(fx, gz, fz).add(off), 0.08);
+    camera.lookAt(fx, gz + 0.3, fz);
 
     // HUD
     document.getElementById('st').textContent = cur.t.toFixed(1);
