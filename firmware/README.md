@@ -1,8 +1,8 @@
 # ESP32 Firmware — Differential-Drive Kart
 
-**ESP-IDF 6.1** firmware (C++) driving **2 independent front motors** (one per wheel):
+**ESP-IDF 6.1** firmware (C++) driving **2 independent rear motors** (one per wheel):
 **steering is done by the speed difference** between the two wheels (*differential /
-skid steer*). The **rear wheel is idle** (free-pivoting caster wheel). Controlled by a
+skid steer*). The **front wheel is idle**: one free-pivoting 10″ caster, centred. Controlled by a
 **Bluetooth gamepad**, speed feedback from **2 AS5600 angle sensors** (one per wheel,
 on 2 I²C buses), safety features, a **WS2812B strip** and **Wi-Fi configuration**.
 
@@ -10,12 +10,15 @@ on 2 I²C buses), safety features, a **WS2812B strip** and **Wi-Fi configuration
 
 ```
         FRONT
-   🛞 L        🛞 R     ← 2 drive wheels, each its own motor + its own AS5600
-    \          /
-     \        /         steering = L/R speed differential
-      \      /          (pivots in place if forward ≈ 0)
-        🛞               ← 1 IDLE rear wheel (pivoting caster)
-        REAR
+        🛞               ← 1 IDLE 10″ caster, centred (battery sits over it)
+       /  \
+      /    \             steering = L/R speed differential
+     /      \            (pivots in place if forward ≈ 0)
+     [bench]             ← 2 kids, 6″ AHEAD of the driven axle since 2026-08-10
+   🛞 L      🛞 R       ← 2 DRIVE wheels, each its own motor + its own AS5600
+        REAR              (the CG sits 61 % of the way back from the caster; it
+                           was 80 % when the bench sat ON the axle — that move
+                           cost a quarter of the rollover margin)
 ```
 
 - **"Arcade" mixing**: `left = forward + turn·gain`, `right = forward − turn·gain` (stick to
@@ -23,8 +26,9 @@ on 2 I²C buses), safety features, a **WS2812B strip** and **Wi-Fi configuration
   **pluggable** (`mix_type`, Drive feel group): **0 linear**, **1 expo** (gentle around
   center, full authority at the stops — recommended for a child), **2 expo + speed-soft**
   (the accelerating throttle also tapers with measured speed; braking never does).
-- **Rollover protection**: a tricycle tips over easily → the **turn limit follows
-  the measured speed** (iso-lateral-acceleration 1/v curve, ±100% at low speed down to
+- **Rollover protection** (a_tip ≈ 0.53 g — ⚠️ NOT a second layer any more, this is what
+  keeps the kart upright: with it off the simulation rolls it over): the
+  **turn limit follows the measured speed** (iso-lateral-acceleration 1/v curve, ±100% at low speed down to
   `turn_alat_vmax` at the limit) and **reverse is capped**.
   See [Rollover protection](#rollover-protection-turn-too-sharp).
 
@@ -240,7 +244,8 @@ identify the specific buttons of a gamepad).
 
 The SAME logic (`controller_core.cpp`) drives a **physics model of the vehicle**
 (`test_host/sim/vehicle.hpp`: differential dynamics, DC motors with back-EMF, battery
-with internal resistance, simulated sensors, slope, **tricycle rollover criterion**)
+with internal resistance, simulated sensors, slope, **rollover criterion for 3 OR 4 wheels**
+(`VehicleParams::wheels` — the abandoned tricycle is kept so the scenarios can still show why)
 through **extreme and realistic scenarios** (`test_host/sim/scenarios.hpp`): full turn
 at full speed (with AND without rollover protection — the counter-test tips over), slalom, erratic
 driving, stick braking, gamepad loss (heartbeat), encoder failures, LVC, descent…
@@ -315,8 +320,13 @@ by the time anyone looks, the **System** tab's event log holds the history.
 
 ### Rollover protection (turn too sharp)
 
-A tricycle (2 drive wheels + 1 caster) tips over easily if you turn too hard or
-too fast. The turn is protected on **two fronts**:
+A tricycle tips about the line from its SINGLE wheel to one of the paired wheels, so the
+usable half-track is `(distance CG→single wheel)/wheelbase`. This kart puts the bench 6″
+ahead of the PAIRED (driven) axle, which keeps 61 % of it — 254 mm of a 416 mm half-track,
+a_tip 5.16 m/s². ⚠️ Since 2026-08-10 that is NOT enough on its own: the counter-test
+`virage_sans_protection` (limiter off, full-speed turn) **rolls the kart over** at
+−0.60 m/s², where the same run stayed planted at +0.92 while the bench sat on the axle.
+`turn_limit_en` is safety-critical firmware now. The turn is shaped on **two fronts**:
 
 1. **Speed→turn ISO-a_lat limit** (`ctl::turnLimit`, tested on the host) — the limit
    follows the **MEASURED vehicle speed** (m/s, signed average of the 2 wheels):
@@ -324,7 +334,7 @@ too fast. The turn is protected on **two fronts**:
      turn **±100%**: **full-power pivot in place** (`turn_gain` default 1.0)
      stays allowed;
    - beyond that, the limit decreases as **1/v** (same lateral acceleration at any speed)
-     down to **`turn_alat_vmax`** (default ±20%) at `speed_limit_ms`, then **keeps
+     down to **`turn_alat_vmax`** (±20%, which is now also its MAXIMUM) at `speed_limit_ms`, then **keeps
      tightening** in case of runaway. Calibrated by simulation: the old linear ramp
      tipped over offset loads as soon as `turn_gain = 1`.
    ⚠️ Relies on the measured speed: with `use_encoders = 0`, v = 0 → no capping.
@@ -338,7 +348,7 @@ In addition, **reverse** has **its own speed limit** (`rev_speed_ms`,
 default 1 m/s): same PID limiter as forward (`speed_limit_ms`), the target is chosen according
 to the **measured direction** — during plugging (stick back, kart still moving forward) the braking
 authority stays full. No more dedicated PWM cap. Rollover protection works on |v|:
-it bounds the turn in reverse as in forward (the rear caster does not steer in reverse).
+it bounds the turn in reverse as in forward (the caster simply swivels round).
 
 Web parameters: **`turn_gain`**, **`turn_full_ms`**, **`turn_alat_vmax`**, **`turn_rate`**
 (and the Drive feel group: **`mix_type`**, **`mix_expo_fwd`**, **`mix_expo_turn`**,

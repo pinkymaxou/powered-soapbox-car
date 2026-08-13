@@ -46,58 +46,57 @@
   <div class="chart-title">🚨 Currently active faults</div>
   <div class="hudcard">
   <svg id="faultdiag" viewBox="0 0 300 392" role="img" aria-label="Fault location on the vehicle (top view)">
-   <text class="diagfront" x="150" y="15" text-anchor="middle">▲ FRONT</text>
-   <!-- chassis deck (tapers to the rear caster) -->
-   <path class="body" d="M112 48 H188 Q214 48 214 100 V234 Q214 270 176 298 Q150 314 124 298 Q86 270 86 234 V100 Q86 48 112 48 Z"/>
-   <!-- 12 V battery in the front tech bay (nose) -->
+   <text class="diagfront" x="150" y="13" text-anchor="middle">▲ FRONT</text>
+   <!-- free 10" caster: front centre, on a beam ahead of the deck -->
+   <rect class="casterw" x="139" y="26" width="22" height="12" rx="5" transform="rotate(22 150 32)"/>
+   <line class="fork" x1="150" y1="38" x2="150" y2="54"/>
+   <!-- chassis deck: nose tapers to the caster, square at the rear -->
+   <path class="body" d="M124 62 Q150 46 176 62 Q214 90 214 126 V300 Q214 344 188 344 H112 Q86 344 86 300 V126 Q86 90 124 62 Z"/>
+   <!-- 12 V battery in the nose, over the caster (counterweight) -->
    <g class="fz" id="fz-batt">
     <title>Measured pack voltage — 15 s sliding median</title>
-    <rect class="zsh" x="118" y="26" width="64" height="32" rx="6"/>
-    <text class="zlab" id="fd-vbat" x="150" y="43" text-anchor="middle">— V</text>
-    <text class="zsub" id="fd-batttype" x="150" y="54" text-anchor="middle">detecting…</text>
-   </g>
-   <!-- bench: two seats side by side -->
-   <rect class="seatback" x="99" y="150" width="46" height="12" rx="5"/>
-   <rect class="seatback" x="155" y="150" width="46" height="12" rx="5"/>
-   <rect class="seat" x="99" y="160" width="46" height="60" rx="8"/>
-   <rect class="seat" x="155" y="160" width="46" height="60" rx="8"/>
-   <text class="ctxlab" x="150" y="240" text-anchor="middle">2 seats</text>
-   <!-- rear caster (free, pivots) -->
-   <line class="fork" x1="150" y1="300" x2="150" y2="316"/>
-   <rect class="casterw" x="139" y="312" width="22" height="12" rx="5" transform="rotate(22 150 318)"/>
-   <text class="ctxlab" x="150" y="342" text-anchor="middle">rear caster (free)</text>
-   <!-- front drive wheels (stand proud of the body) -->
-   <g class="fz" id="fz-wl">
-    <rect class="zsh tire" x="56" y="88" width="26" height="66" rx="9"/>
-    <line class="tread" x1="69" y1="96" x2="69" y2="146"/>
-    <text class="zlab lab-l" x="69" y="126" text-anchor="middle">L</text>
-   </g>
-   <g class="fz" id="fz-wr">
-    <rect class="zsh tire" x="218" y="88" width="26" height="66" rx="9"/>
-    <line class="tread" x1="231" y1="96" x2="231" y2="146"/>
-    <text class="zlab lab-r" x="231" y="126" text-anchor="middle">R</text>
+    <rect class="zsh" x="118" y="68" width="64" height="32" rx="6"/>
+    <text class="zlab" id="fd-vbat" x="150" y="85" text-anchor="middle">— V</text>
+    <text class="zsub" id="fd-batttype" x="150" y="96" text-anchor="middle">detecting…</text>
    </g>
    <!-- live readouts (from status): per-wheel encoder rpm + final vehicle speed -->
-   <text class="ctxlab" x="150" y="102" text-anchor="middle">vehicle speed</text>
-   <g><title>Final vehicle speed — gear ratio applied (m/s)</title><text class="fdms"  id="fd-ms"   x="150" y="121" text-anchor="middle">— m/s</text></g>
-   <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpml" x="69"  y="176" text-anchor="middle">— rpm</text></g>
-   <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpmr" x="231" y="176" text-anchor="middle">— rpm</text></g>
-   <g><title>5 s sliding median of the encoder rpm</title><text class="fdrpm5" id="fd-rpml5" x="69"  y="192" text-anchor="middle">—</text></g>
-   <g><title>5 s sliding median of the encoder rpm</title><text class="fdrpm5" id="fd-rpmr5" x="231" y="192" text-anchor="middle">—</text></g>
+   <text class="ctxlab" x="150" y="126" text-anchor="middle">vehicle speed</text>
+   <g><title>Final vehicle speed — gear ratio applied (m/s)</title><text class="fdms"  id="fd-ms"   x="150" y="145" text-anchor="middle">— m/s</text></g>
+   <g><title>Drive command: forward/reverse/stop + turn (after mixing)</title><text class="fdmix" id="fd-mix" x="150" y="172" text-anchor="middle">—</text></g>
+   <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpml" x="69"  y="186" text-anchor="middle">— rpm</text></g>
+   <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpmr" x="231" y="186" text-anchor="middle">— rpm</text></g>
+   <g><title>5 s sliding median of the encoder rpm</title><text class="fdrpm5" id="fd-rpml5" x="69"  y="202" text-anchor="middle">—</text></g>
+   <g><title>5 s sliding median of the encoder rpm</title><text class="fdrpm5" id="fd-rpmr5" x="231" y="202" text-anchor="middle">—</text></g>
+   <g><title>Motor PWM (signed): ▲ forward, ▼ reverse</title><text class="fdpwm fdpwml" id="fd-pwml" x="69"  y="218" text-anchor="middle">PWM —</text></g>
+   <g><title>Motor PWM (signed): ▲ forward, ▼ reverse</title><text class="fdpwm fdpwmr" id="fd-pwmr" x="231" y="218" text-anchor="middle">PWM —</text></g>
+   <text class="ctxlab" x="150" y="234" text-anchor="middle">bench, 6″ ahead of the driven axle</text>
+   <!-- bench: two seats side by side, 6" AHEAD of the driven axle -->
+   <rect class="seat" x="99" y="240" width="46" height="64" rx="8"/>
+   <rect class="seat" x="155" y="240" width="46" height="64" rx="8"/>
+   <rect class="seatback" x="99" y="304" width="46" height="12" rx="5"/>
+   <rect class="seatback" x="155" y="304" width="46" height="12" rx="5"/>
+   <!-- rear drive wheels: axle at y=309, i.e. BEHIND the seatback (the 6"/6" move) -->
+   <g class="fz" id="fz-wl">
+    <rect class="zsh tire" x="56" y="276" width="26" height="66" rx="9"/>
+    <line class="tread" x1="69" y1="284" x2="69" y2="334"/>
+    <text class="zlab lab-l" x="69" y="314" text-anchor="middle">L</text>
+   </g>
+   <g class="fz" id="fz-wr">
+    <rect class="zsh tire" x="218" y="276" width="26" height="66" rx="9"/>
+    <line class="tread" x1="231" y1="284" x2="231" y2="334"/>
+    <text class="zlab lab-r" x="231" y="314" text-anchor="middle">R</text>
+   </g>
    <!-- per-wheel motor PWM as a vertical gauge (fills up = forward, down = reverse) + % label -->
    <g class="pwmg"><title>Motor PWM (signed) — fills up for forward, down for reverse</title>
-    <rect class="pwmtrack" x="44"  y="88" width="8" height="66" rx="4"/>
-    <rect class="pwmfill fdpwml" id="fd-pwml-bar" x="44"  y="121" width="8" height="0"/>
-    <line class="pwmzero" x1="42"  y1="121" x2="54"  y2="121"/>
+    <rect class="pwmtrack" x="44"  y="276" width="8" height="66" rx="4"/>
+    <rect class="pwmfill fdpwml" id="fd-pwml-bar" x="44"  y="309" width="8" height="0"/>
+    <line class="pwmzero" x1="42"  y1="309" x2="54"  y2="309"/>
    </g>
    <g class="pwmg"><title>Motor PWM (signed) — fills up for forward, down for reverse</title>
-    <rect class="pwmtrack" x="248" y="88" width="8" height="66" rx="4"/>
-    <rect class="pwmfill fdpwmr" id="fd-pwmr-bar" x="248" y="121" width="8" height="0"/>
-    <line class="pwmzero" x1="246" y1="121" x2="258" y2="121"/>
+    <rect class="pwmtrack" x="248" y="276" width="8" height="66" rx="4"/>
+    <rect class="pwmfill fdpwmr" id="fd-pwmr-bar" x="248" y="309" width="8" height="0"/>
+    <line class="pwmzero" x1="246" y1="309" x2="258" y2="309"/>
    </g>
-   <g><title>Motor PWM (signed): ▲ forward, ▼ reverse</title><text class="fdpwm fdpwml" id="fd-pwml" x="69"  y="208" text-anchor="middle">PWM —</text></g>
-   <g><title>Motor PWM (signed): ▲ forward, ▼ reverse</title><text class="fdpwm fdpwmr" id="fd-pwmr" x="231" y="208" text-anchor="middle">PWM —</text></g>
-   <g><title>Drive command: forward/reverse/stop + turn (after mixing)</title><text class="fdmix" id="fd-mix" x="150" y="264" text-anchor="middle">—</text></g>
    <!-- gamepad (wireless remote) -->
    <path class="wave" d="M138 356 q12 -9 24 0 M132 350 q18 -14 36 0"/>
    <g class="fz" id="fz-pad">
@@ -225,7 +224,7 @@
    which one is active right now.</p>
 
   <div class="dochead">⚙️ Gear &amp; sprocket ratios <span class="docsub">— motor to wheel, per side</span></div>
-  <p class="note">Each front wheel has its own drivetrain: a printed <b>two-stage gearbox</b>, then
+  <p class="note">Each rear (driven) wheel has its own drivetrain: a printed <b>two-stage gearbox</b>, then
    a <b>#35 roller chain</b> to the wheel. What makes two reductions fit in one small box is the
    <b>compound gear</b> — the 80T of stage 1 and the 30T of stage 2 are a single printed part on
    one shaft. Plan view; gears and sprockets are drawn <b>proportional to their pitch diameters</b>
@@ -374,8 +373,8 @@
   <div class="chart-title">📌 ESP32 pinout</div>
   <table class="pins">
    <tr><th>GPIO</th><th>Function</th><th>Direction</th></tr>
-   <tr><td>25 / 26</td><td>PWM / DIR front-left motor</td><td>output</td></tr>
-   <tr><td>32 / 33</td><td>PWM / DIR front-right motor</td><td>output</td></tr>
+   <tr><td>25 / 26</td><td>PWM / DIR rear-left motor</td><td>output</td></tr>
+   <tr><td>32 / 33</td><td>PWM / DIR rear-right motor</td><td>output</td></tr>
    <tr><td>18 / 19</td><td>I²C bus 0 (SDA/SCL) — AS5600 left wheel (0x36) + ADS1115 (0x48)</td><td>I/O</td></tr>
    <tr><td>27 / 14</td><td>I²C bus 1 (SDA/SCL) — AS5600 right wheel (0x36)</td><td>I/O</td></tr>
    <tr><td>16</td><td>Arming button (START)</td><td>input (pull-up)</td></tr>
@@ -390,7 +389,7 @@
    <tr><td>21 / 23</td><td>unused</td><td>—</td></tr>
    <tr><td>34 / 35 / 36 / 39</td><td>unused</td><td>input-only, no internal pulls</td></tr>
   </table>
-  <p class="note">Control = <b>Bluetooth gamepad</b> (Gamepad tab). Tricycle: 2 driven front wheels + rear caster wheel.<br>
+  <p class="note">Control = <b>Bluetooth gamepad</b> (Gamepad tab). Reversed tricycle: 2 driven wheels at the REAR (6″ behind the bench) + 1 free 10″ caster at the front centre. a_tip ≈ 0.53 g — the turn limiter is what keeps it upright, never disable it with a child aboard.<br>
   Disconnected or uncalibrated gamepad → <b>braking / refuses to drive</b>. Emergency stop = mushroom
   opening the 40 A motor relay (its coil runs through the button); the logic stays alive, reports the
   fault, and a deliberate re-arm on START is required.</p>
@@ -763,10 +762,12 @@ function showStatus(s){
    else if(Math.abs(s.fwd)<0.02 && Math.abs(s.turn)<0.02){ _fm.textContent='○ FREEWHEEL'; _fm.setAttribute('class','fdmix free'); }
    else { _fm.textContent=_drv+_trn; _fm.setAttribute('class','fdmix'); }
  }
- // PWM gauge: 33 px = half of the 66 px track; fill grows up (forward) or down (reverse) from centre y=121.
+ // PWM gauge: 33 px = half of the 66 px track; fill grows up (forward) or down (reverse)
+ // from the zero line, which sits on the driven axle, behind the bench.
+ const PWM0=309;
  const _pwm=(id,v)=>{const b=document.getElementById(id); if(!b)return;
    const h=Math.min(Math.abs(v),1)*33;
-   b.setAttribute('y',(v>=0?121-h:121).toFixed(1)); b.setAttribute('height',h.toFixed(1));};
+   b.setAttribute('y',(v>=0?PWM0-h:PWM0).toFixed(1)); b.setAttribute('height',h.toFixed(1));};
  _pwm('fd-pwml-bar',s.out_l); _pwm('fd-pwmr-bar',s.out_r);
  _sv('fd-pwml','PWM '+_arw(s.out_l)+_pct(s.out_l)+'%');
  _sv('fd-pwmr','PWM '+_arw(s.out_r)+_pct(s.out_r)+'%');

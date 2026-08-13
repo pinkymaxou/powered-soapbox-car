@@ -1,7 +1,7 @@
 // vehicle.hpp — Physics model of the kart (pure, header-only) for the host simulation.
 // Planar differential dynamics (rigid body: longitudinal speed + yaw), DC motors
 // with back-EMF, battery with internal resistance, simulated sensors
-// (quantized AS5600, voltage), optional slope, and the tricycle's ROLLOVER CRITERION.
+// (quantized AS5600, voltage), optional slope, and the ROLLOVER CRITERION (3 or 4 wheels).
 //
 // "Order of magnitude" fidelity: the estimated parameters (Ra, Iz, h_cg, x_cg, frictions)
 // are gathered in VehicleParams, commented, and recalibratable with real measurements.
@@ -29,27 +29,42 @@ struct VehicleParams
     float mass() const { return mass_kart_kg + mass_pass_kg; }
     float track_m   = 0.832f;   // front track: set by the 30" platform + wheel width — the
                                 // wheels sit in notches and bear on the inboard 2x3 rails
-    float wb_m      = 1.013f;   // wheelbase axle → caster pivot: (46" platform − 12" nose)
-                                // + 150 mm caster extension. Long wheelbase = the CG sits
-                                // relatively closer to the drive axle = more effective
-                                // half-track, which is what pays back the 4" riser.
+    float wb_m      = 1.165f;   // wheelbase: front caster ↔ rear driven axle. The axle went
+                                // BACK 6" (2026-08-10) — the deck and the caster beam did not move.
     float iz_kgm2   = 12.f;     // yaw inertia (estimated: m·(L/2)²·k)
-    float xcg_m     = 0.560f;   // CG behind the front axle. Battery in the NOSE, but the bench
-                                // sits as far back as the deck allows (rear edge at 863 mm, the
-                                // reclined seatback then overhangs the caster): the passengers are
-                                // 66 of the 98 kg, so the seat position dominates xcg.
-    // Loaded CG height. The deck rides on a 4" (102 mm) riser over the front axle so the tall
-    // rear caster fits under a FLAT tail instead of a raised one — everything on the frame
-    // (children included) goes up with it: 0.38 → 0.48 m. That is the dominant rollover term
-    // (a_tip ∝ 1/h): 5.17 → 4.08 m/s², −21 %. The longer platform hands that back (final
-    // geometry: 5.12 m/s²). Re-validated by the sweep in sim_main.cpp.
+    // ⚠️ CONVENTION: distance from the PAIRED axle (the two driven wheels at the rear), because
+    // that is what the tip criterion needs — see wEff. The layout is a REVERSED tricycle: one
+    // free 10" caster at the front centre, two driven wheels at the rear, and the bench sits
+    // OVER the driven axle. That is the whole trick: the tip line runs from the single front
+    // caster to a rear wheel, so the usable half-track is (distance CG→caster)/wheelbase — put
+    // the mass near the PAIRED axle and it approaches the full half-track.
+    // ⚠️ 2026-08-10 — the bench moved 6" FORWARD and the axle 6" BACK, i.e. 12" (305 mm) of
+    // separation between the passengers and the axle they used to sit on. Same component
+    // positions otherwise, so the loaded CG shifts by (66 kg ahead − 8 kg of motors behind)
+    // × 152 mm / 98 kg ≈ 90 mm forward, while the axle itself moves 152 mm back:
+    //   xcg 213 → 455 mm, wheelbase 1013 → 1165 mm
+    //   w_eff = 416 × (1 − 455/1165) = 254 mm of a 416 mm half-track (61 %, was 79 %)
+    //   a_tip 6.75 → 5.16 m/s² (0.69 g → 0.53 g)
+    // That is a QUARTER of the rollover margin, and the same 61/39 split now applies to
+    // traction and electric braking. The price: the software turn limiter is no longer
+    // redundancy — virage_sans_protection used to survive with it off, and now rolls over.
+    // The battery sits in the nose OVER the caster — it keeps that wheel planted at a cost
+    // of a few mm of w_eff.
+    float xcg_m     = 0.455f;
+    // Loaded CG height: the deck rides on 4" shims over the driven axle so the 10" caster fits
+    // under a short front pad. Height is the other dominant rollover term (a_tip ∝ 1/h) — this
+    // is the number to attack if more margin is ever wanted (every 50 mm is worth ~10 %).
     float hcg_m     = 0.482f;
     float ycg_m     = 0.f;      // LATERAL offset of the CG (+ = left) — asymmetric load
-    // 3 = tricycle (2 driven front + 1 rear caster) · 4 = two REAR CASTERS on a rigid beam.
+    // 3 = the built layout: 1 free 10" caster at the FRONT centre + 2 driven wheels at the
+    // REAR under the bench. 4 = the two-caster variant that was evaluated and not built
+    // (0.97 g instead of 0.69) — kept so the scenarios can quantify what it would buy.
     // This single number changes the rollover geometry completely: a tricycle tips about the
     // line joining a front wheel to the single rear contact, so the usable half-track shrinks
     // as (1 − xcg/wb); with four contacts the tip line is parallel to the centreline and the
-    // FULL half-track counts, whatever the CG's fore/aft position (see wEff).
+    // FULL half-track counts, whatever the CG's fore/aft position (see wEff). Measured on the
+    // same manoeuvres: 3.79 (tricycle with the mass at the wrong end) → 6.75 (this layout)
+    // → 9.47 (four wheels).
     int   wheels    = 3;
 
     // ── 12 V DC motor (per wheel) — 4615 rpm no-load, ~19.6 A nominal ──

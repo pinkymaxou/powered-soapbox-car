@@ -1,53 +1,57 @@
 # kart_dimensions.py — Dimensioned drawing of the kart (side view + top view), mm.
 # Dimensions = doc/cad/kart_concept.scad (concept). Regenerate:
 #   . .venv-schem/bin/activate && python doc/schematics/kart_dimensions.py
-# Reference: x=0 = front axle, 305 mm behind the front edge of the 30"x46" platform.
-# The axle hangs 4" BELOW the deck on shims (tall rear caster) and the wheels sit in
-# notches, bearing on the two inboard 2x3 rails — which is what sets the 832 mm track.
-# The 12 V battery sits in the NOSE, loading the drive axle. The deck rides on a 4" riser over
-# the front axle (tall caster) — CG height 0.38 -> 0.48 m, re-validated by the sim_main sweep.
+#
+# REVERSED TRICYCLE (2026-08-06): ONE free 10" caster at the FRONT CENTRE + 2 driven 10"
+# wheels at the REAR, under the bench, with the battery in the nose over the caster.
+# Reference: x = 0 at the caster, +x toward the rear. Why this way round:
+#   · a tricycle tips about the line from the SINGLE wheel to one of the paired wheels, so the
+#     usable half-track is (distance CG->single wheel)/wheelbase. Putting the mass over the
+#     PAIRED (driven) axle takes that from 45 % to 80 %: 0.39 g -> 0.69 g, same three wheels
+#   · the same move puts the load on the driven wheels — traction and braking both act there
+#     — and the battery over the caster keeps that wheel planted
+# ⚠️ 2026-08-10 (build decision): the bench moved 6" FORWARD and the axle 6" BACK — 12" of
+# separation between the passengers and the axle they used to sit on.
+# w_eff 332 -> 254 mm, a_tip 0.69 g -> 0.53 g, load on the driven wheels 79 % -> 61 %.
+# The software turn limiter stopped being redundancy at that point — with it off the
+# simulation now rolls the kart over (see firmware/test_host/sim_main.cpp).
+# The deck hangs 4" of shim above the driven axle and the 10" wheels poke through side
+# NOTCHES beside it, bearing laterally on the two inboard 2x3 rails — which sets the track.
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Rectangle, Polygon
 import math
 
-# ── Dimensions (mm) — identical to the OpenSCAD concept ──
-WHEEL_D, WHEEL_W = 254, 70
-# The PLATFORM drives everything now: 30" x 46" plywood deck (owner's cut).
-PLAT_W, PLAT_L = 30 * 25.4, 46 * 25.4  # 762 x 1168 mm
-NOSE    = 305                          # front edge → axle
-TRACK   = PLAT_W + WHEEL_W             # 832 — wheels sit in NOTCHES cut in the deck and bear
-                                       # laterally on the inboard 2x3 rails: the deck sets the track
-SHIFT   = NOSE                         # axle set-back into the body
-BODY0   = -NOSE                        # front of the platform: −305
-BODY1   = PLAT_L - NOSE                # rear edge of the platform: 863
-EXT     = 150                          # caster extension BEYOND the platform
-PIVOT_X = BODY1 + EXT                  # caster pivot: 1013 (wheelbase)
-TRAIL   = 55                           # caster wheel trail
+# ── Dimensions (mm) ──
+DRIVE_D, WHEEL_W = 254, 70             # driven wheels: 10"
+CASTER_D = 254                         # single front caster: 10"
+CASTER_PLATE = CASTER_D + 78           # mounting plate height, fork included = 332
+PLAT_W, PLAT_L = 30 * 25.4, 46 * 25.4  # 30" x 46" plywood deck: 762 x 1168
+TRACK = PLAT_W + WHEEL_W               # 832 — the deck sets the track (notches + 2x3 rails)
+EXT = 150                              # caster beam ahead of the deck
+DECK_X0 = EXT                          # deck front edge
+DECK_X1 = EXT + PLAT_L                 # deck rear edge: 1318
+SHIFT_6IN = 6 * 25.4                   # the 2026-08-10 move: 6" each way
+DRIVE_X = 1013 + SHIFT_6IN             # 1165 — driven axle went BACK 6" (deck did not move)
 CLEAR, LU_H, LU_W, PLY = 80, 64, 38, 12.7
-RISER   = 101.6                        # 4" block between the axle carriers and the frame:
-                                       # lifts the deck so the tall caster needs only a small
-                                       # tail rise instead of a 188 mm one. ⚠️ CG rises with it.
-FLOOR_Z = CLEAR + LU_H + RISER         # 246 — top of stringers (was 144 without the riser)
-FLOOR_TOP = FLOOR_Z + PLY              # ~157
-SEAT_TOP = FLOOR_TOP + 30 + PLY        # ~200 (30 spacers + 1/2" plywood)
-BACK_TOP = FLOOR_TOP + 340 * math.sin(math.radians(82))  # ~494
-GUARD_TOP = FLOOR_TOP + 300            # ~457
-CASTER_PLATE = 332                     # SET BY THE CASTER (10" wheel + fork + swivel), not by
-                                       # the deck: the tail rise is what is left over above the floor
-AXLE_Z = WHEEL_D / 2
-CASTER_WHEEL_X = PIVOT_X + TRAIL       # 820 (fork aligned)
-TOTAL_L = (CASTER_WHEEL_X + WHEEL_D / 2) - BODY0            # ≈ 1252
-SEAT_X0, SEAT_X1 = 563, 863                                 # bench pushed to the deck's rear edge
-GUARD_X0 = 493                                              # guardrail follows the bench
-BACK_X = 863                                                # seatback foot = deck rear edge;
-                                                            # the incline then passes OVER the caster
-BAT_X0, BAT_L, BAT_W, BAT_H = -265, 150, 88, 105            # 12 V motorcycle battery (nose, centered)
-BODY_W = SEAT_W = BAY_W = PLAT_W       # one deck, full width throughout (bench 762 inner:
-                                       # ~381 mm/child instead of 400 — the 30" cut's cost)
-OVERALL_W = TRACK + WHEEL_W            # 910
-SWEEP_R = CASTER_WHEEL_X + WHEEL_D / 2                      # sweep radius when pivoting ≈ 1195
+RISER = 102                            # 4" shim between the deck and the axle carriers
+FLOOR_Z = CLEAR + RISER + LU_H         # 246 — top of the 2x3 rails
+FLOOR_TOP = FLOOR_Z + PLY              # ~259 — deck surface
+SEAT_TOP = FLOOR_TOP + 30 + PLY        # ~302 — cushion top
+BACK_TOP = FLOOR_TOP + 340 * math.sin(math.radians(82))
+GUARD_TOP = FLOOR_TOP + 300
+DRIVE_Z, CASTER_Z = DRIVE_D / 2, CASTER_D / 2
+# The bench went FORWARD 6": it used to sit ON the driven axle. The 12" of separation this
+# opens up with the axle is what costs 78 mm of w_eff.
+SEAT_X0, SEAT_X1 = DECK_X1 - 300 - SHIFT_6IN, DECK_X1 - SHIFT_6IN
+GUARD_X0 = SEAT_X0 - 70
+BACK_X = DECK_X1 - 12 - SHIFT_6IN             # seatback follows the bench forward
+BAT_X0, BAT_L, BAT_W, BAT_H = DECK_X0 + 25, 150, 88, 105   # battery in the nose = counterweight
+OVERALL_W = TRACK + WHEEL_W
+TOTAL_L = DECK_X1 - (-DRIVE_D / 2 + 0) + 0    # placeholder, recomputed below
+TOTAL_L = DECK_X1 + 0 - (0 - CASTER_D / 2)    # nose of the caster wheel → deck rear edge
+SWEEP_R = max(DRIVE_X + TRACK / 2, DECK_X1)   # pivot envelope: rotation about the driven axle
 
 WOOD, PLYC, DARK, ACC = '#c9a066', '#e8d3a3', '#555555', '#1565c0'
 
@@ -58,7 +62,7 @@ def dim(ax, p0, p1, txt, off=0.0, vert=False, fs=8.5):
         x0 += off; x1 += off
         ax.annotate('', xy=(x1, y1), xytext=(x0, y0), arrowprops=dict(arrowstyle='<->', lw=1, color=ACC))
         ax.plot([p0[0], x0], [y0, y0], lw=0.5, color=ACC); ax.plot([p1[0], x1], [y1, y1], lw=0.5, color=ACC)
-        ax.text(x0 + 14, (y0 + y1) / 2, txt, fontsize=fs, color=ACC, rotation=90, va='center')
+        ax.text(x0 - 14, (y0 + y1) / 2, txt, fontsize=fs, color=ACC, rotation=90, va='center', ha='right')
     else:
         y0 += off; y1 += off
         ax.annotate('', xy=(x1, y1), xytext=(x0, y0), arrowprops=dict(arrowstyle='<->', lw=1, color=ACC))
@@ -66,92 +70,88 @@ def dim(ax, p0, p1, txt, off=0.0, vert=False, fs=8.5):
         ax.text((x0 + x1) / 2, y0 + 12, txt, fontsize=fs, color=ACC, ha='center')
 
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12.5, 12))
-fig.suptitle("Tricycle kart — dimensioned drawing (mm) · 30″×46″ deck · 10″ wheels · 2×3 rails · axle dropped 4″ on shims",
+fig.suptitle("Reversed tricycle — dimensioned drawing (mm) · 30″×46″ deck · 1 free 10″ caster FRONT + 2 driven 10″ REAR",
              fontsize=13, fontweight='bold')
 
 # ═════════════════ SIDE VIEW ═════════════════
 ax = ax1
-ax.set_title("Side view", fontsize=10)
-ax.axhline(0, color='k', lw=1)                                             # ground
-ax.add_patch(Circle((0, AXLE_Z), WHEEL_D / 2, fc=DARK, ec='k'))            # front wheel (driven)
-ax.add_patch(Circle((0, AXLE_Z), WHEEL_D * 0.27, fc='#bbbbbb', ec='k'))
-ax.add_patch(Circle((CASTER_WHEEL_X, AXLE_Z), WHEEL_D / 2, fc=DARK, ec='k'))  # caster wheel
-ax.add_patch(Circle((CASTER_WHEEL_X, AXLE_Z), WHEEL_D * 0.27, fc='#bbbbbb', ec='k'))
-ax.add_patch(Rectangle((BODY0, CLEAR + RISER), PLAT_L, LU_H, fc=WOOD, ec='k'))  # 2x3 rails (on the shims)
-ax.add_patch(Rectangle((BODY0, FLOOR_Z), PLAT_L, PLY, fc=PLYC, ec='k'))    # 30"x46" platform
-ax.add_patch(Rectangle((BODY1, FLOOR_Z), EXT, PLY, fc='#d8c090', ec='k'))  # caster extension
-ax.add_patch(Rectangle((BAT_X0, FLOOR_TOP), BAT_L, BAT_H, fc='#222222', ec='k'))  # 12 V battery (nose)
-ax.add_patch(Rectangle((SEAT_X0, FLOOR_TOP), 300, 30 + PLY, fc=WOOD, ec='k'))  # seat
-ax.add_patch(Polygon([(BACK_X, FLOOR_TOP), (BACK_X + 340 * math.cos(math.radians(82)), BACK_TOP),
-                      (BACK_X + 12 + 340 * math.cos(math.radians(82)), BACK_TOP), (BACK_X + 12, FLOOR_TOP)],
-                     closed=True, fc=WOOD, ec='k'))                        # seatback
-ax.add_patch(Rectangle((GUARD_X0, FLOOR_TOP), 400, 300, fc=PLYC, ec='k', alpha=0.55))  # guardrail
-ax.add_patch(Rectangle((PIVOT_X - 60, FLOOR_TOP), 38, max(CASTER_PLATE - FLOOR_TOP, 0), fc=WOOD, ec='k'))  # tail post (short now)
-ax.add_patch(Rectangle((PIVOT_X - 80, CASTER_PLATE), 160, PLY, fc=PLYC, ec='k'))   # pivot platform
-ax.add_patch(Rectangle((PIVOT_X - 6, AXLE_Z - 10), 12, CASTER_PLATE - AXLE_Z + 10, fc='#777777', ec='k'))  # pivot/fork
-ax.add_patch(Rectangle((-95, AXLE_Z + 20), 90, CLEAR + RISER - AXLE_Z - 20, fc='#8d6e63', ec='k'))  # 4" riser
-ax.add_patch(Rectangle((-60, CLEAR + RISER + 20), 180, 150, fc='#708090', ec='k'))  # gearbox (on the deck)
-ax.add_patch(Rectangle((115, CLEAR + RISER + 110), 80, 42, fc='#888888', ec='k'))   # motor
-be_x = BACK_X + 340 * math.cos(math.radians(82))
-ax.add_patch(Rectangle((be_x - 22, BACK_TOP), 45, 26, fc='red', ec='k'))            # e-stop
-ax.annotate("12 V motorcycle battery\n(nose, centered)", xy=(BAT_X0 + BAT_L / 2, FLOOR_TOP + BAT_H),
-            xytext=(-430, 400), fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
+ax.set_title("Side view — free caster left (battery over it), driven wheels right (under the bench)", fontsize=10)
+ax.axhline(0, color='k', lw=1)
+ax.add_patch(Circle((0, CASTER_Z), CASTER_D / 2, fc=DARK, ec='k'))              # 10" caster
+ax.add_patch(Circle((0, CASTER_Z), CASTER_D * 0.27, fc='#bbbbbb', ec='k'))
+ax.add_patch(Circle((DRIVE_X, DRIVE_Z), DRIVE_D / 2, fc=DARK, ec='k'))          # 10" driven
+ax.add_patch(Circle((DRIVE_X, DRIVE_Z), DRIVE_D * 0.27, fc='#bbbbbb', ec='k'))
+ax.add_patch(Rectangle((DECK_X0, CLEAR + RISER), PLAT_L, LU_H, fc=WOOD, ec='k'))   # 2x3 rails
+ax.add_patch(Rectangle((DECK_X0, FLOOR_Z), PLAT_L, PLY, fc=PLYC, ec='k'))          # 30"x46" deck
+ax.add_patch(Rectangle((0 - 60, FLOOR_Z), EXT + 60, PLY, fc='#d8c090', ec='k'))    # caster nose
+# caster post: from the deck up to the 10" caster's mounting plate (73 mm pad)
+ax.add_patch(Rectangle((-45, CASTER_PLATE), 90, PLY, fc=PLYC, ec='k'))             # caster plate
+ax.add_patch(Rectangle((-6, CASTER_Z - 10), 12, CASTER_PLATE - CASTER_Z + 10, fc='#777777', ec='k'))
+ax.add_patch(Rectangle((-30, FLOOR_TOP), 60, CASTER_PLATE - FLOOR_TOP, fc=WOOD, ec='k'))  # short post
+# 2" shim stack over the driven axle
+ax.add_patch(Rectangle((DRIVE_X - 45, DRIVE_Z + 20), 90, CLEAR + RISER - DRIVE_Z - 20,
+                       fc='#8d6e63', ec='k'))
+ax.add_patch(Rectangle((BAT_X0, FLOOR_TOP), BAT_L, BAT_H, fc='#222222', ec='k'))   # battery (nose)
+ax.add_patch(Rectangle((SEAT_X0, FLOOR_TOP), 300, 30 + PLY, fc=WOOD, ec='k'))      # bench
+ax.add_patch(Polygon([(BACK_X, FLOOR_TOP), (BACK_X + 340 * math.cos(math.radians(98)), BACK_TOP),
+                      (BACK_X - 12 + 340 * math.cos(math.radians(98)), BACK_TOP), (BACK_X - 12, FLOOR_TOP)],
+                     closed=True, fc=WOOD, ec='k'))                                # seatback (leans back)
+ax.add_patch(Rectangle((GUARD_X0, FLOOR_TOP), 370, 300, fc=PLYC, ec='k', alpha=0.55))
+ax.add_patch(Rectangle((DRIVE_X - 90, CLEAR + RISER + 20), 180, 150, fc='#708090', ec='k'))  # gearbox
+ax.add_patch(Rectangle((DRIVE_X - 175, CLEAR + RISER + 110), 80, 42, fc='#888888', ec='k'))  # motor
+be_x = BACK_X + 340 * math.cos(math.radians(98))
+ax.add_patch(Rectangle((be_x - 22, BACK_TOP), 45, 26, fc='red', ec='k'))           # e-stop
+ax.annotate("12 V battery, nose, OVER the caster:\nkeeps that single wheel planted (~20 % of the load)",
+            xy=(BAT_X0 + BAT_L / 2, FLOOR_TOP + BAT_H), xytext=(120, 640),
+            fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
+ax.annotate("the 10″ caster needs its plate at 332 mm:\na short pad (73 mm) over the deck",
+            xy=(60, CASTER_PLATE + 10), xytext=(230, 500), fontsize=8, color='#b71c1c',
+            arrowprops=dict(arrowstyle='->', lw=0.8, color='#b71c1c'))
+ax.annotate("bench 6″ AHEAD of the driven axle (axle went back 6″):\nthe 12″ gap costs 78 mm of w_eff — a_tip 0.69 g → 0.53 g,\nso the turn limiter is now load-bearing, not redundancy",
+            xy=(SEAT_X0 + 150, FLOOR_TOP + 45), xytext=(440, 570),
+            fontsize=8.5, color='#b71c1c',
+            arrowprops=dict(arrowstyle='->', lw=0.8, color='#b71c1c'))
 
-dim(ax, (BODY0, 0), (0, 0), f"nose {NOSE}", off=-95)
-dim(ax, (0, 0), (PIVOT_X, 0), f"wheelbase {PIVOT_X:.0f} (axle → pivot)", off=-95)
-dim(ax, (BODY0, 0), (CASTER_WHEEL_X + WHEEL_D / 2, 0), f"overall length ≈ {TOTAL_L:.0f}", off=-170)
-dim(ax, (-420, 0), (-420, WHEEL_D), "Ø254 (10″)", off=0, vert=True)
-dim(ax, (255, 0), (255, CLEAR + RISER), f"clearance {CLEAR+RISER:.0f}", off=0, vert=True, fs=8)
-dim(ax, (-140, AXLE_Z + 20), (-140, CLEAR + RISER), '4" riser', off=0, vert=True, fs=8)
-dim(ax, (305, 0), (305, SEAT_TOP), f"seat ≈ {SEAT_TOP:.0f}", off=0, vert=True, fs=8)
-dim(ax, (PIVOT_X + 210, 0), (PIVOT_X + 210, CASTER_PLATE), "caster plate ≈ 332", off=0, vert=True, fs=8)
-dim(ax, (1190, 0), (1190, BACK_TOP + 26), f"total height ≈ {BACK_TOP + 26:.0f}", off=0, vert=True)
-dim(ax, (GUARD_X0, GUARD_TOP), (GUARD_X0 + 400, GUARD_TOP), "guardrail 400", off=28)
-dim(ax, (SEAT_X0, SEAT_TOP + 8), (SEAT_X1, SEAT_TOP + 8), "seat 300", off=20)
-ax.set_xlim(-560, 1330); ax.set_ylim(-230, 620)
+dim(ax, (0, 0), (DRIVE_X, 0), f"wheelbase {DRIVE_X} (caster → driven axle)", off=-95)
+dim(ax, (-CASTER_D / 2, 0), (DECK_X1, 0), f"overall length ≈ {TOTAL_L:.0f}", off=-170)
+dim(ax, (DRIVE_X + 330, 0), (DRIVE_X + 330, DRIVE_D), "Ø254 (10″ driven)", off=0, vert=True)
+dim(ax, (-190, 0), (-190, CASTER_D), "Ø254 (10″ caster)", off=0, vert=True, fs=8)
+dim(ax, (620, 0), (620, CLEAR + RISER), f"clearance {CLEAR+RISER}", off=0, vert=True, fs=8)
+dim(ax, (DRIVE_X + 155, DRIVE_Z + 20), (DRIVE_X + 155, CLEAR + RISER), '4″ shim', off=0, vert=True, fs=8)
+dim(ax, (790, 0), (790, SEAT_TOP), f"seat ≈ {SEAT_TOP:.0f}", off=0, vert=True, fs=8)
+dim(ax, (240, FLOOR_TOP), (240, CASTER_PLATE), f"raised pad {CASTER_PLATE-FLOOR_TOP:.0f}", off=0, vert=True, fs=8)
+ax.set_xlim(-330, DECK_X1 + 430); ax.set_ylim(-260, 700)
 ax.set_aspect('equal'); ax.axis('off')
 
 # ═════════════════ TOP VIEW ═════════════════
 ax = ax2
-ax.set_title("Top view", fontsize=10)
-for sy in (-1, 1):
-    ax.add_patch(Rectangle((-WHEEL_D / 2, sy * TRACK / 2 - WHEEL_W / 2), WHEEL_D, WHEEL_W, fc=DARK, ec='k'))
-ax.add_patch(Rectangle((BODY0, -PLAT_W / 2), PLAT_L, PLAT_W, fc=PLYC, ec='k'))   # 30"x46" platform
-ax.add_patch(Rectangle((BODY1, -160), EXT, 320, fc='#d8c090', ec='k'))           # caster extension
-for sy in (-1, 1):   # the two inboard 2x3 rails the wheels bear against
-    ax.add_patch(Rectangle((BODY0, sy * PLAT_W / 2 - (LU_W if sy > 0 else 0)), PLAT_L, LU_W,
+ax.add_patch(Rectangle((DECK_X0, -PLAT_W / 2), PLAT_L, PLAT_W, fc=PLYC, ec='k'))     # deck
+ax.add_patch(Rectangle((-40, -180), EXT + 40, 360, fc='#d8c090', ec='k'))            # caster nose
+for sy in (-1, 1):   # the two inboard 2x3 rails the driven wheels bear against
+    ax.add_patch(Rectangle((DECK_X0, sy * PLAT_W / 2 - (LU_W if sy > 0 else 0)), PLAT_L, LU_W,
                            fc=WOOD, ec='k'))
+    ax.add_patch(Rectangle((DRIVE_X - DRIVE_D / 2, sy * TRACK / 2 - WHEEL_W / 2),
+                           DRIVE_D, WHEEL_W, fc=DARK, ec='k'))                       # driven wheels
 
-ax.add_patch(Rectangle((BAT_X0, -BAT_W / 2), BAT_L, BAT_W, fc='#222222', ec='k'))  # 12 V battery
-ax.add_patch(Rectangle((SEAT_X0, -SEAT_W / 2), 300, SEAT_W, fc=WOOD, ec='k'))    # bench (overhanging)
-for sy in (-1, 1):
-    ax.add_patch(Rectangle((GUARD_X0, sy * SEAT_W / 2 - (PLY if sy > 0 else 0)), 400, PLY, fc='#8a5a2b', ec='k'))  # guardrail
-ax.add_patch(Rectangle((BACK_X, -SEAT_W / 2), 12, SEAT_W, fc='#8a5a2b', ec='k'))  # seatback
-ax.plot(0, 0, marker='+', color='k'); ax.plot(PIVOT_X, 0, marker='+', color='k')
-ax.add_patch(Circle((PIVOT_X, 0), 32, fc='#999999', ec='k'))                     # pivot plate
-th = math.radians(38)                                                            # caster wheel steered (pivot visible)
-cwx, cwy = PIVOT_X + TRAIL * math.cos(th), TRAIL * math.sin(th)
-ax.add_patch(Rectangle((cwx - WHEEL_D / 2, cwy - WHEEL_W / 2), WHEEL_D, WHEEL_W, fc=DARK, ec='k',
-             transform=matplotlib.transforms.Affine2D().rotate_around(cwx, cwy, th) + ax.transData))
-ax.annotate("free caster wheel\n(pivots 360°)", xy=(cwx, cwy), xytext=(PIVOT_X + 180, 260),
-            fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
-ax.annotate("12 V motorcycle battery (nose)", xy=(BAT_X0 + BAT_L / 2, BAT_W / 2),
-            xytext=(BODY0 - 60, 300), fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
-ax.text((BODY0 + SWEEP_R) / 2, -570,
-        "spin in place: rotation around the axle midpoint (+) → sweep radius "
-        f"≈ {SWEEP_R:.0f} mm (long wheelbase: bigger sweep, but a much better tip threshold)",
-        fontsize=8, style='italic', ha='center')
+ax.add_patch(Rectangle((-CASTER_D / 2, -WHEEL_W / 2), CASTER_D, WHEEL_W, fc='#666666', ec='k'))  # caster
+ax.add_patch(Rectangle((SEAT_X0, -PLAT_W / 2), 300, PLAT_W, fc=WOOD, ec='k'))        # bench
+ax.add_patch(Rectangle((BAT_X0, -BAT_W / 2), BAT_L, BAT_W, fc='#222222', ec='k'))    # battery
+ax.plot([DRIVE_X], [0], marker='+', ms=12, color='k')
+ax.annotate("ONE free 10″ caster,\nfront centre (pivots 360°)", xy=(0, 0),
+            xytext=(-150, 560), fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
+ax.annotate("bench 762 (2 children)\n6″ ahead of the driven axle", xy=(SEAT_X0 + 150, 200),
+            xytext=(DECK_X1 - 120, 640), fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=0.8))
 
-dim(ax, (-370, -TRACK / 2), (-370, TRACK / 2), f"track {TRACK:.0f}", off=0, vert=True)
-dim(ax, (-460, -TRACK / 2 - WHEEL_W / 2), (-460, TRACK / 2 + WHEEL_W / 2), f"overall width {OVERALL_W}", off=0, vert=True)
-dim(ax, (SEAT_X0 + 50, -SEAT_W / 2), (SEAT_X0 + 50, SEAT_W / 2), f"bench {SEAT_W:.0f} (2 children)", off=0, vert=True)
-dim(ax, (BODY0, -PLAT_W / 2), (BODY1, -PLAT_W / 2), f'platform 46" = {PLAT_L:.0f}', off=-80)
-dim(ax, (BODY0 + 40, -PLAT_W / 2), (BODY0 + 40, PLAT_W / 2), f'platform 30" = {PLAT_W:.0f}', off=0, vert=True)
-dim(ax, (SEAT_X0, SEAT_W / 2), (SEAT_X1, SEAT_W / 2), "seat 300", off=95)
-dim(ax, (0, -TRACK / 2 - WHEEL_W / 2), (PIVOT_X, -TRACK / 2 - WHEEL_W / 2), f"wheelbase {PIVOT_X:.0f}", off=-70)
-ax.set_xlim(-620, 1300); ax.set_ylim(-660, 660)
+dim(ax, (DRIVE_X + 210, -TRACK / 2), (DRIVE_X + 210, TRACK / 2), f"track {TRACK:.0f}", off=0, vert=True)
+dim(ax, (DECK_X0 + 40, -PLAT_W / 2), (DECK_X0 + 40, PLAT_W / 2), f'deck 30" = {PLAT_W:.0f}', off=0, vert=True)
+dim(ax, (DECK_X0, -PLAT_W / 2), (DECK_X1, -PLAT_W / 2), f'deck 46" = {PLAT_L:.0f}', off=-80)
+dim(ax, (0, -TRACK / 2 - WHEEL_W / 2), (DRIVE_X, -TRACK / 2 - WHEEL_W / 2), f"wheelbase {DRIVE_X}", off=-150)
+ax.text((DECK_X1) / 2, -560,
+        "spin in place: rotation about the middle of the DRIVEN axle (+) — the front caster swings around it",
+        fontsize=9, style='italic', ha='center')
+ax.set_xlim(-330, DECK_X1 + 430); ax.set_ylim(-640, 700)
 ax.set_aspect('equal'); ax.axis('off')
 
-fig.tight_layout()
+fig.tight_layout(rect=[0, 0, 1, 0.97])
 fig.savefig('doc/schematics/kart_dimensions.png', dpi=150)
 print('render OK')

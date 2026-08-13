@@ -52,16 +52,18 @@ extern constexpr ParamDesc PARAMS[] =
     // 1/v allows it), then limit ∝ 1/v up to turn_hi at speed_limit_ms (MEASURED speed),
     // and it keeps tightening beyond (runaway).
     {"turn_limit_en",   "Rollover protection (0/1)", "Rollover protection",
-     "1 = the turn limit follows the measured speed (rollover protection ramp). 0 = disabled — for bench testing only, turn at 100% at all speeds.",
+     "1 = the turn limit follows the measured speed (rollover protection ramp). 0 = disabled - BENCH ONLY, WHEELS IN THE AIR. Since the bench moved 6\" forward and the axle 6\" back, the simulation LIFTS THE INNER WHEEL (-0.60 m/s2) on a full-speed turn with this off: the geometry no longer keeps the kart upright on its own, this parameter does. Never carry a child with it at 0.",
      PType::Bool,  {.i = 0}, {.i = 1}, {.i = 1}, {.i = &KartConfig::turn_limit_en}},
     {"turn_full_ms",    "Turn 100% below (m/s)",  "Rollover protection",
      "Below this vehicle speed (m/s), the turn is allowed at 100% (pivot in place permitted). Beyond it, the limit decreases linearly down to the Vmax limit.",
      PType::Float, {.f = 0.1f}, {.f = 0.5f}, {.f = 0.8f}, {.f = &KartConfig::turn_full_ms}},
     // Default 0.2 + 1/v curve (turn gain 1.0): the physical simulation shows that an
     // OFFSET LOAD (child alone on one side, adult+child) tips over with the old
-    // linear ramp as soon as gain=1 — the iso-a_lat at 0.2 restores healthy margins (≥ +0.8 m/s²).
+    // linear ramp as soon as gain=1 — the iso-a_lat at 0.2 restores healthy margins (≥ +0.9 m/s²).
+    // ⚠️ min == default == max is deliberate here, not a copy/paste slip: the 2026-08-10
+    // geometry left no headroom above the default (see the sweep in sim_main.cpp).
     {"turn_alat_vmax",  "Max turn at Vmax (0-1)", "Rollover protection",
-     "Turn limit at maximum speed; in between, the limit follows 1/v (same lateral acceleration at all speeds). 0.2 is BOTH the default and the maximum: with the bench pushed to the back of the deck, the simulation tips at 0.3 and full speed (margin -0.22 m/s2), while 0.2 clears by +0.99. The range only goes DOWN from here — lower it if you load the kart asymmetrically or add height.",
+     "Turn limit at maximum speed; in between, the limit follows 1/v (same lateral acceleration at all speeds). CAPPED AT ITS OWN DEFAULT (0.2) since the bench moved 6\" forward and the axle 6\" back: that took w_eff from 332 to 254 mm, and 0.3 now LIFTS A WHEEL with one child sitting off-centre (-0.27 m/s2) or with an adult aboard (-0.13). At 0.25 the margin is only +0.31. So this setting can only be made GENTLER than default, never sharper. Full-throttle-straight-then-turn stays forgiving (+1.6) - do not judge this parameter by that scenario alone.",
      PType::Float, {.f = 0.1f}, {.f = 0.2f}, {.f = 0.2f}, {.f = &KartConfig::turn_hi}},
     // (No vbat_div_ratio: the divider is fixed by the resistors on the board — hw::VBAT_DIV_RATIO.)
     {"vbat_check_en",   "Voltage check (0/1)",    "Battery",

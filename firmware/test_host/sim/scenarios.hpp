@@ -152,10 +152,34 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // COUNTER-TEST: same maneuver WITHOUT rollover protection → must tip (validates the measurement).
+    // COUNTER-TEST, and the RECORD OF WHY THE LAYOUT WAS REVERSED: the SAME three wheels with
+    // the mass at the wrong end (driven axle at the front, bench far from it — xcg 0.560 from
+    // the paired axle) tips as soon as the protection is off. Reversing the tricycle — single
+    // caster to the front, bench over the driven axle — moved the CG to 0.213 and the same
+    // manoeuvre now survives (see virage_sans_protection below). Same parts, 0.39 g → 0.69 g.
+    v.push_back({
+        "ancienne_disposition",
+        "Old tricycle (mass far from the driven axle), turn_limit_en=0: tips",
+        10.f,
+        [](KartConfig& c) { c.turn_limit_en = 0; },
+        [](Vehicle& veh) {
+            // The historical machine, faithfully: its own wheelbase too, not today's.
+            veh.params().wb_m  = 1.013f;
+            veh.params().xcg_m = 0.560f;
+        },
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = 1.f;
+            c.x = (t >= 5.f) ? 1.f : 0.f;
+            return c;
+        }});
+
+    // The BUILT layout, protection off: it survives — but on less than 1 m/s² of margin, which
+    // is exactly why the limiter stays on. Geometry now does most of the work, not all of it.
     v.push_back({
         "virage_sans_protection",
-        "Same maneuver with turn_limit_en=0: demonstrates the avoided rollover",
+        "Built layout (reversed tricycle), turn_limit_en=0: survives, but thin",
         10.f,
         [](KartConfig& c) { c.turn_limit_en = 0; },
         nullptr,
@@ -507,8 +531,12 @@ inline std::vector<Scenario> allScenarios()
             auto& p = veh.params();
             p.mass_pass_kg = 33.f;
             p.ycg_m = 0.10f;
-            p.xcg_m = 0.36f;
-            p.hcg_m = 0.36f;
+            // ⚠️ xcg is the distance to the PAIRED (driven) axle. Since the bench moved 6"
+            // forward it now sits AHEAD of that axle, which inverts the old reasoning: one
+            // child means less mass ahead, so the CG drifts BACK (mass model: 438 mm instead
+            // of 455). We do NOT credit that here — the default is kept, so this scenario
+            // stays as demanding as it was and the lateral offset is what it measures.
+            p.hcg_m = 0.46f;
         },
         [](float t) {
             PadCmd c;
@@ -529,7 +557,11 @@ inline std::vector<Scenario> allScenarios()
             auto& p = veh.params();
             p.mass_pass_kg = 103.f;
             p.ycg_m = 0.055f;
-            p.hcg_m = 0.44f;   // adult torso
+            p.hcg_m = 0.55f;   // adult torso: taller than the children's 0.482
+            // Extra passenger mass now sits AHEAD of the driven axle, so it pulls the CG the
+            // wrong way — the opposite of what the bench-over-the-axle layout did (mass model
+            // with the same component positions: 465 mm instead of the loaded default 455).
+            p.xcg_m = 0.465f;
             p.iz_kgm2 = 16.f;
         },
         [](float t) {

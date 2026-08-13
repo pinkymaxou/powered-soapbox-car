@@ -76,15 +76,49 @@ void testScenarios()
         CHECK(!r.wheel_lifted && !r.tipped);   // all 3 wheels stay on the ground
     }
 
-    // Counter-test: without the protection, the SAME maneuver tips → the measurement is sensitive.
+    // Counter-test on the OLD layout (same three wheels, mass at the wrong end): protection
+    // off → it tips. Recorded justification for reversing the tricycle, and it keeps the tip
+    // measurement honest (a model that never tips would prove nothing).
     {
-        const RunResult r = run(get("virage_sans_protection"));
-        std::printf("  virage_sans_protection : min margin=%.2f m/s² — %s\n",
+        const RunResult r = run(get("ancienne_disposition"));
+        std::printf("  ancienne_disposition : min margin=%.2f m/s² — %s\n",
                     r.min_tip_margin,
                     r.tipped ? "TIPPED (physics)" : (r.wheel_lifted ? "wheel lifted" : "?"));
         CHECK(r.min_tip_margin < 0.f);
         CHECK(r.wheel_lifted);              // the inner wheel physically leaves the ground
         CHECK(r.tipped);                    // …and the CG crosses the edge: real rollover
+    }
+    // ⚠️ THE SAME MANOEUVRE ON THE BUILT LAYOUT, PROTECTION OFF — and this is the assertion
+    // that changed on 2026-08-10. Until then the reversed geometry carried it alone (+0.92 of
+    // margin, wheels planted) and the limiter was redundancy. Moving the bench 6" forward and
+    // the axle 6" back took w_eff from 332 to 254 mm, and the same run now goes ALL THE WAY
+    // OVER at −0.60 — not a lifted wheel, a rollover, exactly like the abandoned layout above.
+    // The turn limiter is load-bearing safety on this chassis, not a comfort feature:
+    // turn_limit_en must never ship at 0. Pinned here so it cannot be forgotten.
+    {
+        const RunResult r = run(get("virage_sans_protection"));
+        std::printf("  virage_sans_protection (built, limiter OFF) : min margin=%.2f m/s² — %s\n",
+                    r.min_tip_margin,
+                    r.tipped ? "TIPPED (physics)" : (r.wheel_lifted ? "wheel lifted" : "planted"));
+        CHECK(r.min_tip_margin < 0.f);
+        CHECK(r.wheel_lifted);
+        CHECK(r.tipped);            // and the CG crosses the edge: a real rollover
+    }
+    // …and the same speed and stick WITH the shipped defaults: comfortably planted. The gap
+    // between these two numbers IS the safety the firmware is now providing.
+    {
+        const RunResult r = run(get("virage_pleine_vitesse"));
+        std::printf("  virage_pleine_vitesse  (limiter ON, defaults) : min margin=%.2f m/s² — %s\n",
+                    r.min_tip_margin, r.wheel_lifted ? "WHEEL LIFTED" : "planted");
+        CHECK(r.min_tip_margin > 1.f);
+        CHECK(!r.wheel_lifted && !r.tipped);
+    }
+    // What the un-built two-caster variant would have bought, measured on the same run.
+    {
+        Scenario sc = get("virage_sans_protection");
+        sc.veh = [](Vehicle& veh) { veh.params().wheels = 4; };
+        std::printf("  …the 4-wheel variant would give : %.2f m/s² (not built)\n",
+                    runScenario(sc).min_tip_margin);
     }
 
     // Pivot in place: legal and stable (near-zero speed → near-zero a_lat).
@@ -241,13 +275,16 @@ void testScenarios()
         CHECK(!r.wheel_lifted && !r.tipped);
     }
     {
+        // The offset load at the old aggressive turn_hi = 0.5: still the sharpest test of the
+        // limiter, and still the reason the default is 0.2 — one child on one side, hard turn
+        // toward the loaded edge, lifts a wheel even on the reversed layout.
         Scenario sc = get("enfant_seul_cote");   // copy (the original is used by the viewer)
         sc.cfg = [](KartConfig& c) { c.turn_hi = 0.5f; };
         const RunResult r = runScenario(sc);
         std::printf("  enfant_seul_cote (old 0.50) : min margin=%.2f m/s² — %s\n",
                     r.min_tip_margin, r.wheel_lifted ? "WHEEL LIFTED" : "?");
-        CHECK(r.min_tip_margin < 0.f);    // proof: the old default would tip
-        CHECK(r.wheel_lifted);            // …physically: the inner wheel lifts off
+        CHECK(r.min_tip_margin < 0.f);
+        CHECK(r.wheel_lifted);
     }
     {
         const RunResult r = run(get("adulte_enfant"));
@@ -256,10 +293,11 @@ void testScenarios()
         CHECK(!r.ever_fault);
     }
     {
+        // Heaviest, highest, most offset load the kart can see, at the old turn_hi: the
+        // margin must go negative — this is what pins the 0.2 default in place.
         Scenario sc = get("adulte_enfant");
         sc.cfg = [](KartConfig& c) { c.turn_hi = 0.5f; };
-        const RunResult r = runScenario(sc);
-        CHECK(r.min_tip_margin < 0.f);
+        CHECK(runScenario(sc).min_tip_margin < 0.f);
     }
 
     // Downhill 8%: active braking holds the kart (77 N of gravity < ~134 N of capacity).
@@ -320,37 +358,51 @@ void testScenarios()
 
 // Parameter sweep: the entire USEFUL range of web settings must remain tip-free.
 // (This is the original request: "test a set of parameters".)
+// ⚠️ It sweeps THREE load cases, not just the headline manoeuvre. Sweeping only
+// virage_pleine_vitesse used to pass turn_hi = 0.5 with +0.91 m/s² while the same setting
+// lifted a wheel under an off-centre child (−1.12): full throttle in a straight line is the
+// FORGIVING case, and a sweep that only runs it validates nothing about the hard ones.
 void testParamSweep()
 {
+    static const char* CASES[] = {"virage_pleine_vitesse", "enfant_seul_cote", "adulte_enfant"};
     int runs = 0;
     float worst = 1e9f;
     float worst_hi = 0, worst_full = 0, worst_lim = 0;
+    const char* worst_case = "";
     // The sweep validates the WHOLE web-settable range, so this list tracks the param's
-    // min..max. It has shrunk twice as the build settled: 0.4 left when the battery moved
-    // (2026-08-03), 0.3 left when the bench went to the back of the deck (2026-08-06) —
-    // at 0.3 and full speed that CG tips, measured at −0.22 m/s².
-    for (float turn_hi : {0.1f, 0.15f, 0.2f})
-        for (float turn_full : {0.3f, 0.5f, 0.8f})
-            for (float vlim : {2.0f, 3.3f})
-            {
-                Scenario sc = *findScenario(allScenarios(), "virage_pleine_vitesse");
-                sc.cfg = [=](KartConfig& c) {
-                    c.turn_hi = turn_hi;
-                    c.turn_full_ms = turn_full;
-                    c.speed_limit_ms = vlim;
-                };
-                const RunResult r = runScenario(sc);
-                ++runs;
-                if (r.min_tip_margin < worst)
+    // min..max. Its history is the history of the chassis: 0.4 went when the battery moved,
+    // 0.3 went when the bench went to the back of the deck, the whole range reopened on the
+    // reversed layout (bench over the driven axle) — and then 2026-08-10 the bench moved 6"
+    // forward and the axle 6" back, w_eff fell from 332 to 254 mm, and 0.3 started LIFTING a
+    // wheel: −0.27 with one child off-centre, −0.13 with an adult aboard. Measured here at
+    // 0.25 the margin is only +0.31, thinner than anything this project has shipped, so the
+    // ceiling is 0.2 — the default. The setting can now only be made GENTLER, never sharper.
+    for (const char* name : CASES)
+        for (float turn_hi : {0.1f, 0.15f, 0.2f})      // the param's min..max
+            for (float turn_full : {0.3f, 0.5f, 0.8f})
+                for (float vlim : {2.0f, 3.3f})
                 {
-                    worst = r.min_tip_margin;
-                    worst_hi = turn_hi; worst_full = turn_full; worst_lim = vlim;
+                    Scenario sc = *findScenario(allScenarios(), name);
+                    sc.cfg = [=](KartConfig& c) {
+                        c.turn_hi = turn_hi;
+                        c.turn_full_ms = turn_full;
+                        c.speed_limit_ms = vlim;
+                    };
+                    const RunResult r = runScenario(sc);
+                    ++runs;
+                    if (r.min_tip_margin < worst)
+                    {
+                        worst = r.min_tip_margin;
+                        worst_hi = turn_hi; worst_full = turn_full; worst_lim = vlim;
+                        worst_case = name;
+                    }
+                    CHECK(r.min_tip_margin > 0.f);
+                    CHECK(!r.wheel_lifted);
                 }
-                CHECK(r.min_tip_margin > 0.f);
-                CHECK(!r.ever_fault);
-            }
-    std::printf("  sweep : %d combinations, worst margin %.2f m/s² (turn_hi=%.1f "
-                "turn_full=%.1f vlim=%.1f)\n", runs, worst, worst_hi, worst_full, worst_lim);
+    std::printf("  sweep : %d combinations over %d load cases, worst margin %.2f m/s² "
+                "(%s, turn_hi=%.1f turn_full=%.1f vlim=%.1f)\n",
+                runs, static_cast<int>(sizeof(CASES) / sizeof(CASES[0])), worst, worst_case,
+                worst_hi, worst_full, worst_lim);
 }
 
 // ─────────────────────────── JSON stream (viewer) ───────────────────────────

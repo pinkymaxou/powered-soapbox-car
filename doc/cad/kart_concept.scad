@@ -1,65 +1,91 @@
-// kart_concept.scad — CONCEPT visuel du kart tricycle différentiel (proportions du README).
-// 2 roues avant 10" motorisées (boîte 1:12,5 + poulies) · roulette arrière 10" folle ·
-// banquette 2 enfants (~80 cm) · bois standard : 2×3 (38×64 mm) + contreplaqué 1/2" (12,7 mm).
-// Repère : x=0 essieu avant (+x vers l'arrière), z=0 sol.
+// kart_concept.scad — CONCEPT visuel du kart : TRICYCLE INVERSÉ (proportions du README).
+// 1 roulette 10" folle AVANT au centre · 2 roues 10" motorisées ARRIÈRE (boîte 1:12,5 +
+// chaîne #35 25T→32T) · banquette 2 enfants 6″ DEVANT l'essieu moteur · batterie dans le
+// museau, au-dessus de la roulette · bois standard : 2×3 (38×64) + contreplaqué 1/2" (12,7).
+//
+// ⚠️ C'est la disposition qui donne la stabilité : un tricycle bascule sur la ligne qui va
+// de sa roue SEULE à l'une des roues APPAIRÉES, donc la demi-voie utile vaut
+// (distance CG→roue seule)/empattement. La masse posée SUR l'essieu appairé en gardait 80 %
+// (a_tip 0,69 g) ; la première version faisait l'inverse et n'atteignait que 0,39 g.
+// ⚠️ 2026-08-10 : la banquette a avancé de 6″ et l'essieu a reculé de 6″ — 12″ d'écart
+// entre les passagers et l'essieu sur lequel ils étaient assis. w_eff 332 → 254 mm,
+// a_tip 0,69 → 0,53 g, charge sur les roues motrices 79 % → 61 %. À partir de là le
+// limiteur logiciel N'EST PLUS une redondance : sans lui la simulation renverse le kart.
+// Ne JAMAIS déplacer de masse vers la roulette, et ne pas éloigner davantage la banquette.
+//
+// Repère : x=0 = pivot de la roulette avant (+x vers l'arrière), z=0 sol.
 
 // ── Cotes principales (mm) ──
-WHEEL_D = 254;   WHEEL_W = 70;      // roues 10"
-TRACK   = 840;                       // voie avant (centres)
-SHIFT   = 325;                       // RECUL de l'essieu dans la caisse (réduit le rayon d'encombrement)
-WBASE   = 1090 - SHIFT;              // essieu avant → pivot roulette (765)
-CLEAR   = 80;                        // garde au sol
+WHEEL_D = 254;   WHEEL_W = 70;       // roues 10" (motrices ET roulette : un seul type)
+TRACK   = 832;                       // voie arrière = largeur plancher + largeur de roue
+PLAT_W  = 762;   PLAT_L = 1168;      // plateforme 30" × 46"
+DECK_X0 = 150;   DECK_X1 = DECK_X0 + PLAT_L;   // 150 → 1318 (la roulette est 150 mm devant)
+SHIFT_6IN = 6 * 25.4;                // le déplacement du 2026-08-10, 6″ de chaque côté
+DRIVE_X = 1013 + SHIFT_6IN;          // 1165 — essieu moteur RECULÉ de 6″ (le plancher n'a pas bougé)
+CLEAR   = 80;                        // garde au sol sous les cales
+RISER   = 102;                       // cales 4" : l'essieu descend de 4" sous la structure
 LU_W = 38; LU_H = 64;                // 2×3 sur chant
 PLY  = 12.7;                         // contreplaqué 1/2"
-SEAT_W = 800;                        // banquette 2 enfants
+SEAT_W = 762;                        // banquette 2 enfants = largeur du plancher
 
-FLOOR_Z = CLEAR + LU_H;              // dessus des longerons = dessous du plancher
-AXLE_Z  = WHEEL_D / 2;
+FLOOR_Z   = CLEAR + RISER + LU_H;    // 246 — dessus des longerons = dessous du plancher
+FLOOR_TOP = FLOOR_Z + PLY;           // ~259 — surface du plancher
+AXLE_Z    = WHEEL_D / 2;             // 127
+RAIL_Y    = PLAT_W / 2;              // 381 — face EXTERNE des 2×3 : les roues accotent dessus
+CASTER_PLATE = WHEEL_D + 78;         // 332 — sous-face de la platine de la roulette
 
 $fn = 48;
 
-module lumber(l) cube([l, LU_W, LU_H]);                       // 2×3 sur chant, le long de x
-module lumber_y(l) cube([LU_W, l, LU_H]);                     // le long de y
-module ply(x, y) cube([x, y, PLY]);
+module lumber(l)   cube([l, LU_W, LU_H]);      // 2×3 sur chant, le long de x
+module lumber_y(l) cube([LU_W, l, LU_H]);      // le long de y
+module ply(x, y)   cube([x, y, PLY]);
 
 module wheel() rotate([90, 0, 0]) cylinder(d = WHEEL_D, h = WHEEL_W, center = true);
 module rim()   rotate([90, 0, 0]) cylinder(d = WHEEL_D * 0.55, h = WHEEL_W + 2, center = true);
 
 // ───────────────────────────── Châssis bois ─────────────────────────────
+// Les deux 2×3 courent sur TOUTE la longueur et débordent de 150 mm vers l'avant pour
+// porter la roulette. Ils sont posés au ras des bords du plancher, côté INTÉRIEUR : les
+// roues motrices, glissées dans les encoches du plancher, viennent accoter dessus.
 module frame()
 {
     color("BurlyWood")
     {
-        // traverse avant LARGE (porte l'essieu, au plus près des roues) + fermeture de baie
-        translate([  20, -410, CLEAR]) lumber_y(820);
-        translate([ 300, -370, CLEAR]) lumber_y(740);   // raccourcie : dégage les roues (essieu reculé)
-        // longerons de l'habitacle (caisse plus étroite que la voie)
-        for (sy = [-1, 1]) translate([20, sy * 300 - LU_W / 2, CLEAR]) lumber(1010);
-        // traverses intermédiaire + arrière
-        translate([ 640, -300, CLEAR]) lumber_y(600);
-        translate([ 990, -300, CLEAR]) lumber_y(600);
+        for (sy = [-1, 1])
+            translate([0, sy * RAIL_Y - (sy > 0 ? LU_W : 0), FLOOR_Z - LU_H]) lumber(DECK_X1);
+        // traverses : nez (poutre de roulette), avant de baie, milieu, essieu, arrière
+        for (x = [0, DECK_X0, 560, DRIVE_X - LU_W / 2, DECK_X1 - LU_W])
+            translate([x, -RAIL_Y + LU_W, FLOOR_Z - LU_H]) lumber_y(2 * (RAIL_Y - LU_W));
     }
-    // plancher contreplaqué 1/2" (baie : passages de roues découpés)
+    // plancher 30"×46" — encoches latérales pour glisser les roues motrices en place
     color("Wheat") difference()
     {
-        translate([20, -410, FLOOR_Z]) ply(310, 820);                              // baie technique
-        for (sy = [-1, 1]) translate([SHIFT - 150, sy * 395 - 20, FLOOR_Z - 1]) cube([300, 40, PLY + 2]);
+        translate([DECK_X0, -PLAT_W / 2, FLOOR_Z]) ply(PLAT_L, PLAT_W);
+        for (sy = [-1, 1])
+            translate([DRIVE_X - 150, sy * (PLAT_W / 2 - 55) - 30, FLOOR_Z - 1])
+                cube([300, 60, PLY + 2]);
     }
-    color("Wheat") translate([330, -300, FLOOR_Z]) ply(700, 600);                  // habitacle
 }
 
-// Batterie moto 12 V (~150×87×105) — À L'ARRIÈRE, au-dessus de la roue folle, dans un
-// bac de contention (plateau + rebords). Choix 2026-08-03 : le CG recule (xcg 0,40→0,44)
-// et monte un peu — l'anti-renversement a été re-validé en simulation avec ce CG
-// (plage turn_alat_vmax plafonnée à 0,3 ; voir le sweep de sim_main.cpp).
+// ── Cales d'essieu (4") : l'essieu descend de RISER sous les longerons ──
+module axle_group()
+{
+    color("BurlyWood") for (sy = [-1, 1])
+        translate([DRIVE_X - 60, sy * (RAIL_Y - 20) - 20, CLEAR]) cube([120, 40, RISER]);
+    color("Silver") translate([DRIVE_X, 0, AXLE_Z]) rotate([90, 0, 0])
+        cylinder(d = 12.7, h = 940, center = true);
+}
+
+// Batterie moto 12 V (~150×87×105) — DANS LE MUSEAU, au-dessus de la roulette, dans un bac
+// de contention. C'est la seule masse qu'on veut à l'avant : elle plaque la roulette au sol
+// (~20 % de la charge) sans coûter de marge au renversement, puisqu'elle est à l'extrémité
+// opposée du triangle de basculement.
 module battery()
 {
-    // Bac de contention au-dessus de la roulette (plateau ~332 mm + rebords)
-    color("BurlyWood") translate([990, -105, FLOOR_Z + PLY + 175]) cube([210, 210, PLY]);
-    for (sy = [-1, 1])
-        color("BurlyWood") translate([990, sy * 105 - (sy > 0 ? 0 : 12), FLOOR_Z + PLY + 175])
-            cube([210, 12, 60]);
-    translate([1015, -44, FLOOR_Z + PLY + 175 + PLY])
+    bx = DECK_X0 + 25;
+    color("BurlyWood") for (sy = [-1, 1])
+        translate([bx - 15, sy * 60 - (sy > 0 ? 0 : 12), FLOOR_TOP]) cube([180, 12, 70]);
+    translate([bx, -44, FLOOR_TOP])
     {
         color("DimGray") cube([150, 88, 105]);
         color("Black")   translate([0, 0, 105]) cube([150, 88, 6]);
@@ -68,81 +94,82 @@ module battery()
     }
 }
 
-// Supports d'essieu + tige (positionnés SUR L'ESSIEU, hors du décalage de caisse)
-module axle_group()
-{
-    color("BurlyWood") for (sy = [-1, 1])
-        translate([-20, sy * 370 - 20, CLEAR]) cube([40, 40, AXLE_Z - CLEAR + 20]);
-    color("Silver") translate([0, 0, AXLE_Z]) rotate([90, 0, 0]) cylinder(d = 12.7, h = 940, center = true);
-}
-
 // ───────────────────────────── Banquette 2 places ─────────────────────────────
+// La banquette a AVANCÉ de 6″ : l'assise n'est plus par-dessus l'essieu moteur mais 6″
+// devant. Chaque centimètre supplémentaire vers l'avant est de la marge de renversement
+// perdue — c'est déjà 78 mm de w_eff pour ces 6″-là.
 module seat()
 {
-    // assise basse (CP 1/2" sur cales) + dossier incliné — banquette CONTINUE (pas de séparation)
+    back_x = DECK_X1 - 12 - SHIFT_6IN;
     color("Peru")
     {
-        translate([650, -SEAT_W / 2, FLOOR_Z + PLY + 30]) ply(300, SEAT_W);            // assise
-        translate([950, -SEAT_W / 2, FLOOR_Z + PLY]) rotate([0, -82, 0]) ply(340, SEAT_W);  // dossier
+        translate([DECK_X1 - 300 - SHIFT_6IN, -SEAT_W / 2, FLOOR_TOP + 30]) ply(300, SEAT_W);  // assise
+        translate([back_x, -SEAT_W / 2, FLOOR_TOP]) rotate([0, -82, 0]) ply(340, SEAT_W); // dossier
     }
-    color("BurlyWood") for (sy = [-1, 0, 1])                                            // cales d'assise
-        translate([660, sy * (SEAT_W / 2 - 40) - 20, FLOOR_Z + PLY]) cube([280, 40, 30]);
+    color("BurlyWood") for (sy = [-1, 0, 1])                                             // cales d'assise
+        translate([DECK_X1 - 290 - SHIFT_6IN, sy * (SEAT_W / 2 - 40) - 20, FLOOR_TOP]) cube([280, 40, 30]);
 
     // GARDE-CORPS latéraux (CP 1/2") : empêchent l'enfant de tomber sur les côtés
     color("Peru") for (sy = [-1, 1])
-        translate([580, sy * (SEAT_W / 2) - (sy > 0 ? PLY : 0), FLOOR_Z + PLY])
-            cube([400, PLY, 300]);
+        translate([DECK_X1 - 370 - SHIFT_6IN, sy * (SEAT_W / 2) - (sy > 0 ? PLY : 0), FLOOR_TOP])
+            cube([370, PLY, 300]);
 
     // Arrêt d'urgence : champignon AU SOMMET DU DOSSIER, centré (accessible aux 2 enfants
-    // et à un adulte derrière le kart)
-    top_x = 950 + 340 * cos(82); top_z = FLOOR_Z + PLY + 340 * sin(82);
+    // et à un adulte derrière le kart). Il ouvre la BOBINE du relais 40 A.
+    top_x = back_x + 340 * cos(82); top_z = FLOOR_TOP + 340 * sin(82);
     color("Peru")   translate([top_x - 45, -50, top_z - 6]) cube([90, 100, 14]);   // platine
     color("Yellow") translate([top_x, 0, top_z + 8]) cylinder(d = 60, h = 6);
     color("Red")    translate([top_x, 0, top_z + 12]) cylinder(d = 45, h = 26);
 }
 
-// ───────────────────────────── Propulsion (par côté) ─────────────────────────────
+// ────────────────── Propulsion arrière (par côté) : boîte 1:12,5 + chaîne #35 ──────────────────
+R32 = 48.6;   // rayon primitif du pignon de roue 32T (#35, pas 9,525)
+R25 = 38.0;   // rayon primitif du pignon de sortie de boîte 25T
+CDIST = 165;  // entraxe choisi (doc/reducteur.md) — la boîte est DEVANT l'essieu
 module drive_side(sy)
 {
-    // roue motrice 10"
-    color("DimGray")  translate([0, sy * TRACK / 2, AXLE_Z]) wheel();
-    color("Gainsboro") translate([0, sy * TRACK / 2, AXLE_Z]) rim();
-    // poulie de roue (côté intérieur) + boîte (carter imprimé) + moteur
-    color("Orange")   translate([0, sy * (TRACK / 2 - WHEEL_W / 2 - 12), AXLE_Z])
-        rotate([90, 0, 0]) cylinder(d = 86, h = 16, center = true);
-    color("SlateGray") translate([-60, sy * 330 - 20, CLEAR + 20]) cube([180, 40, 170]);   // boîte
-    color("DarkGray")  translate([115, sy * 330, CLEAR + 150]) rotate([0, 90, 0]) cylinder(d = 42, h = 80);  // moteur
-    color("DarkSlateGray") translate([-40, sy * (TRACK / 2 - WHEEL_W / 2 - 12), AXLE_Z - 4])   // courroie (stylisée)
-        cube([40, 6, 8]);
+    color("DimGray")   translate([DRIVE_X, sy * TRACK / 2, AXLE_Z]) wheel();
+    color("Gainsboro") translate([DRIVE_X, sy * TRACK / 2, AXLE_Z]) rim();
+    // pignon 32T côté intérieur de la roue
+    color("Orange") translate([DRIVE_X, sy * (TRACK / 2 - WHEEL_W / 2 - 12), AXLE_Z])
+        rotate([90, 0, 0]) cylinder(r = R32, h = 10, center = true);
+    // sortie de boîte 25T à CDIST devant, LÉGÈREMENT PLUS HAUT (le mou de la chaîne pend
+    // sur le brin, pas dans les dents — voir doc/schematics/chain_layout.png)
+    gx = DRIVE_X - CDIST * 0.94;  gz = AXLE_Z + CDIST * 0.34;
+    color("Orange") translate([gx, sy * (TRACK / 2 - WHEEL_W / 2 - 12), gz])
+        rotate([90, 0, 0]) cylinder(r = R25, h = 10, center = true);
+    // brins de chaîne (stylisés)
+    color("DarkSlateGray") for (dz = [R32 - 8, -R32 + 8])
+        translate([gx, sy * (TRACK / 2 - WHEEL_W / 2 - 12), AXLE_Z + dz])
+            rotate([0, 90 - atan2(gz - AXLE_Z, DRIVE_X - gx), 0]) cube([6, 6, CDIST], center = true);
+    // carter imprimé + moteur
+    color("SlateGray") translate([gx - 90, sy * (RAIL_Y - 60) - 20, gz - 85]) cube([180, 40, 170]);
+    color("DarkGray")  translate([gx + 90, sy * (RAIL_Y - 60), gz]) rotate([0, 90, 0])
+        cylinder(d = 42, h = 80);
 }
 
-// ───────────────────────────── Roulette arrière 10" (pivot BIEN VISIBLE) ─────────────────────────────
-CASTER_X = 1090;            // axe de pivot (vertical)
+// ───────────────────── Roulette 10" AVANT, au centre (pivot BIEN VISIBLE) ─────────────────────
 CASTER_YAW = 38;            // fourche dessinée ORIENTÉE pour montrer que ça tourne
 module caster()
 {
-    plat_z = FLOOR_Z + PLY + 175;                       // sous-face de la plateforme de pivot
-    // support OUVERT : 2 montants 2×3 + petite plateforme (roue dégagée, visible)
-    color("BurlyWood") for (sy = [-1, 1])
-        translate([CASTER_X - 60, sy * 85 - LU_W / 2, FLOOR_Z + PLY]) cube([38, LU_W, 175]);
-    color("Wheat") translate([CASTER_X - 80, -110, plat_z]) ply(160, 220);
-
-    // pivot vertical apparent + fourche ORIENTÉE (chasse vers l'arrière du pivot)
-    color("Silver") translate([CASTER_X, 0, plat_z - 10]) cylinder(d = 64, h = 10);   // platine
-    color("Silver") translate([CASTER_X, 0, plat_z - 26]) cylinder(d = 24, h = 18);   // axe de pivot
-    translate([CASTER_X, 0, 0]) rotate([0, 0, CASTER_YAW])
+    // la platine doit être à CASTER_PLATE : un petit socle sur la poutre de nez l'y amène
+    color("BurlyWood") translate([-60, -110, FLOOR_Z]) cube([170, 220, CASTER_PLATE - FLOOR_Z - 10]);
+    color("Silver") translate([0, 0, CASTER_PLATE - 10]) cylinder(d = 64, h = 10);   // platine
+    color("Silver") translate([0, 0, CASTER_PLATE - 26]) cylinder(d = 24, h = 18);   // axe de pivot
+    rotate([0, 0, CASTER_YAW])
     {
-        color("DimGray") for (sy = [-1, 1])                                           // bras de fourche
-            translate([-10, sy * 42 - 4, AXLE_Z - 20]) cube([85, 8, plat_z - 26 - AXLE_Z + 20]);
-        color("DimGray")  translate([55, 0, AXLE_Z]) wheel();                          // roue déportée (chasse)
+        color("DimGray") for (sy = [-1, 1])                                          // bras de fourche
+            translate([-10, sy * 42 - 4, AXLE_Z - 20]) cube([85, 8, CASTER_PLATE - 26 - AXLE_Z + 20]);
+        color("DimGray")  translate([55, 0, AXLE_Z]) wheel();                         // roue déportée (chasse)
         color("Gainsboro") translate([55, 0, AXLE_Z]) rim();
     }
 }
 
 // ───────────────────────────── Assemblage ─────────────────────────────
-// La caisse est décalée de -SHIFT : l'essieu recule dans le véhicule (museau devant),
-// le centre de pivot se rapproche du milieu → rayon d'ENCOMBREMENT réduit (~0,95 m vs ~1,27 m).
-translate([-SHIFT, 0, 0]) { frame(); seat(); caster(); battery(); }
+frame();
 axle_group();
+seat();
+battery();
+caster();
 drive_side(-1);
 drive_side(1);

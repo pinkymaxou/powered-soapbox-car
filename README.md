@@ -5,7 +5,7 @@
 
 Project to build a **two-seat electric kart** for kids (~10 years old, 1.38–1.45 m), designed to be buildable with **basic tools** (drill, saw, wrenches) plus a **3D printer** for the gearboxes. Every choice is explained so you can adapt it to the materials you have on hand.
 
-> **Note:** this kart is a **differential-drive tricycle**. The **2 FRONT wheels are powered and independent** (one **12 V DC motor + gearbox + #35 chain per wheel**); **steering is done by the speed difference** between the two wheels (*differential / skid steer*) — **no steering wheel, no column, no linkage**. The **rear wheel is free**: an **unpowered pivoting caster wheel** that orients itself → **3 wheels total**. The kart is a **two-seater** (two kids **side by side**) and **driven with a Bluetooth gamepad** ("arcade" mixing: one stick to go forward/back and to turn) — **no throttle pedal and no steering wheel**. Propulsion comes from the **2 front motors**; there is **no** pedal crank and no chain.
+> **Note:** this kart is a **REVERSED tricycle**. The **2 REAR wheels are powered and independent** (one **12 V DC motor + gearbox + #35 chain per wheel**), sitting **under the bench**; **steering is done by the speed difference** between them (*differential / skid steer*) — **no steering wheel, no column, no linkage**. At the **front centre**, **one free 10″ caster** orients itself, with the battery in the nose over it → **3 wheels total**. ⚠️ The first version had this backwards (driven wheels at the front, caster at the rear, bench far from the driven axle) and it was **too unstable — 0.39 g**, held upright by the software turn limiter alone. A tricycle tips about the line from the **single** wheel to one of the **paired** wheels, so the usable half-track is `(distance CG→single wheel)/wheelbase`: putting the mass near the **paired axle** takes that from 45 % to 80 %. ⚠️ On **2026-08-10** the bench moved **6″ forward** and the axle **6″ back** — 12″ of separation — which gave back 78 mm of that: **61 %, a_tip 0.53 g**. That is still 1.4× the original tricycle, but it is no longer enough on its own: **with the turn limiter off the simulation now rolls the kart over**, where the bench-over-the-axle version stayed planted. The limiter is safety, not comfort. The kart is a **two-seater** (two kids **side by side**) and **driven with a Bluetooth gamepad** ("arcade" mixing: one stick to go forward/back and to turn) — **no throttle pedal and no steering wheel**. Propulsion comes from the **2 rear motors**; there is **no** pedal crank and no chain.
 
 ## Table of contents
 
@@ -15,7 +15,7 @@ Project to build a **two-seat electric kart** for kids (~10 years old, 1.38–1.
 - [2. Seat / controls position](#2-seat--controls-position)
 - [3. Differential steering](#3-differential-steering-skid-steer)
 - [4. Hardware & electronics](#4-hardware--electronics)
-  - [Propulsion (2 front motors)](#propulsion--2-front-12-v-dc-motors) · [ESP32 control](#electronic-control--esp32) · [AS5600 sensors](#as5600-speed-sensors-2-on-ic) · [Battery measurement / ADS1115](#battery-measurement--external-ads1115-adc) · [Calibration](#gamepad-calibration)
+  - [Propulsion (2 rear motors)](#propulsion--2-rear-12-v-dc-motors) · [ESP32 control](#electronic-control--esp32) · [AS5600 sensors](#as5600-speed-sensors-2-on-ic) · [Battery measurement / ADS1115](#battery-measurement--external-ads1115-adc) · [Calibration](#gamepad-calibration)
   - [Electrical safety](#electrical-safety) · [Wiring & pinout](#wiring-diagram--esp32-pinout) · [System diagram](#full-system-diagram-all-connectors)
   - [Battery measurement / LVC](#battery-voltage-measurement--low-voltage-cutoff-lvc) · [2 batteries in parallel (dropped)](#wiring-2-batteries-in-parallel) · [Power switch (two rails, two relays)](#power-switch-two-rails-two-relays)
 - [5. Critical safety points](#5-critical-safety-points-child)
@@ -30,11 +30,11 @@ Project to build a **two-seat electric kart** for kids (~10 years old, 1.38–1.
 
 ```mermaid
 flowchart TB
-    subgraph AV["◄ FRONT ► — 2 DRIVE wheels + TECH BAY"]
+    subgraph AV["◄ FRONT ► — 1 FREE 10″ CASTER + battery over it"]
         direction LR
-        AVG["🛞 front wheel L<br/>motor + gearbox + #35 chain"]
-        BAY["🧠 TECH BAY (nose)<br/>ESP32 + 2-channel driver<br/>(short motor wiring)"]
-        AVD["🛞 front wheel R<br/>motor + gearbox + #35 chain"]
+        AVG["🔋 12 V battery"]
+        BAY["🛞 free caster 10″ (centred)"]
+        AVD["🧠 ESP32 + driver"]
         AVG ~~~ BAY ~~~ AVD
     end
     subgraph CAB["CABIN — single 2-seat bench (~80 cm)"]
@@ -44,9 +44,9 @@ flowchart TB
         PASS["🧒 PASSENGER (right)<br/>footrest"]
         COND ~~~ SEP ~~~ PASS
     end
-    subgraph AR["◄ REAR ► — FREE caster wheel"]
+    subgraph AR["◄ REAR ► — 2 DRIVE wheels (under the bench)"]
         direction LR
-        ARC["🛞 pivoting caster wheel<br/>(caster, unpowered)<br/>🔋 12 V battery on a tray above"]
+        ARC["🛞 driven L (10″) — motor + gearbox + #35 chain<br/>🛞 driven R (10″) — idem"]
     end
     AV --> CAB --> AR
 
@@ -77,35 +77,36 @@ flowchart TB
 > Regenerable dimensioned drawing (mm): `python doc/schematics/kart_dimensions.py` — side and top
 > views at the concept's dimensions.
 
-**Footprint:** length ~125 cm · width ~91 cm · **front track width ~84 cm** · **wheelbase ~76 cm** (axle **set back** into the body, nose ~30 cm) · **2 front drive wheels Ø25.4 cm (10″) + tech bay in the nose** + **1 free rear caster wheel 10″** · **side guardrails** + **emergency stop at the top of the seatback (centered)** · low seat (tip-resistant).
+**Footprint:** length ~145 cm · width ~90 cm · **track ~83 cm** · **wheelbase ~117 cm** · **2 rear drive wheels Ø25.4 cm (10″), 6″ behind the bench** + **1 free 10″ front caster (centred)** + battery and electronics in the nose · **side guardrails** + **emergency stop at the top of the seatback (centered)** · **a_tip ≈ 0.53 g**.
 
-> ⚠️ For **flat ground, under adult supervision** only. Estimated speed ~8–12 km/h (~3.3 m/s), runtime ~10–20 min. **A tricycle tips over more easily than a 4-wheeler** → software rollover protection (see §3).
+> ⚠️ For **flat ground, under adult supervision** only. Estimated speed ~8–12 km/h (~3.3 m/s), runtime ~10–20 min. **a_tip ≈ 0.53 g**. ⚠️ The software rollover protection (§3) is **load-bearing safety on this chassis, not a second layer**: with it disabled the simulation rolls the kart over in a full-speed turn. Never drive a child with `turn_limit_en` at 0.
 
 ## At a glance
 
 | Item | Choice |
 |---|---|
 | **Seats** | 2, single bench side by side; **driver on the left** (gamepad) |
-| **Steering** | **Differential (skid steer)**: speed difference between the 2 front wheels; **pivot in place** possible; **no mechanical steering parts** |
-| **Propulsion** | **2× 12 V DC motors (~172 W / 0.23 HP)** at the FRONT, **independent** (one per wheel) — **PWM/DIR per wheel** |
+| **Steering** | **Differential (skid steer)**: speed difference between the 2 REAR driven wheels; **pivot in place** possible; **no mechanical steering parts** |
+| **Propulsion** | **2× 12 V DC motors (~172 W / 0.23 HP)** at the REAR, **independent** (one per wheel) — **PWM/DIR per wheel** |
 | **Transmission** | **3D-printed gearboxes** (16→80 then 30→80 = 1:13.33, 16T/24 DP motor pinion — see [`doc/reducteur.md`](doc/reducteur.md)) + **1.28:1 sprockets (25T→32T) bolted to the front wheels + #35 chain** = **1:17 total** |
-| **Wheels** | **2× front drive Ø25.4 cm (10″)** (plastic rim, 1/2" bearing) + **1 free pivoting rear caster wheel** |
+| **Wheels** | **2× rear drive Ø25.4 cm (10″)** (plastic rim, 1/2" bearing) + **1 free 10″ caster at the front centre** |
 | **Driving** | **Bluetooth gamepad** (stick: Y = forward/reverse, X = turn); **calibration mandatory**; analog joystick reserved (future) |
 | **Electronics** | **ESP32** → **dual-channel driver 20 A / 6–30 V** (PWM + DIR / channel), **PWM capped at ≈ 12 V/Vbat** (12 V → ~100%, 24 V → ~50%); **tech bay in the nose** (near the 2 motors, short power wiring) |
-| **Power** | **One 12 V motorcycle battery**, **at the REAR in a retaining tray above the caster wheel** (owner's build choice). CG re-validated in simulation (turn range capped). Single pack, no paralleling |
+| **Power** | **One 12 V motorcycle battery**, **in the NOSE over the caster** — it keeps that single wheel planted (~20 % of the load). Single pack, no paralleling |
 | **Speed** | Measured by **2 AS5600 angle sensors** (one per wheel, 1 per I²C bus); control loop at **500 Hz** |
 | **Controls** | Driving with the **Bluetooth gamepad**; **arming** button (physical or gamepad START, ~1 s); **hardware emergency stop** at the **top of the seatback, centered** (opens the 40 A motor relay by breaking its COIL — thin wires, ~10-20 ms; the logic rail stays up so the kart reports WHY it stopped; reachable by both kids and by an adult behind) **+** software emergency stop = gamepad button **B**; **electric brake by default** |
 | **Frame** | Lightweight **wood**: **2×3** studs + **6 mm plywood** floor |
 | **Mass** | ~**32 kg** empty · ~**98 kg** loaded (2 kids) |
+| **Rollover** | **a_tip ≈ 0.53 g** — the bench sits 6″ ahead of the paired (driven) axle, which keeps 61 % of the half-track in the tip triangle (it was 80 % when the two were coincident). ⚠️ With the turn limiter off the simulation **rolls over** (−0.60 m/s²); with it on, the same run keeps +2.75 |
 
 ## Why these choices
 
 - **Differential steering = zero mechanics**: no more steering wheel, column, kingpins, steering knuckles, tie rod or drag link → fewer parts to make, adjust and wear out; you **turn in software** (PWM difference between the 2 wheels). **Pivot in place** when forward motion ≈ 0.
-- **Free rear caster wheel**: a single unpowered pivoting caster wheel orients itself → simple geometry, no rear axle.
-- **Controlled stability**: a tricycle tips over faster than a 4-wheeler → low seat (16 cm), **wide front track** + **firmware rollover protection** (clamping the turn amplitude by speed **and** a slew-rate limiter on the turn).
+- **One free caster at the front centre, mass toward the rear axle**: the caster orients itself → no steering geometry, and the layout puts the CG **61 % of the way back from the single wheel**, which is what keeps the tip triangle usable. ⚠️ This is the whole design: **never move mass toward the caster**. The first version had the bench far from the driven axle and reached only 0.39 g; putting it *on* the axle gave 0.69 g; the 6″/6″ split of 2026-08-10 gave back a quarter of that, to 0.53 g. There is no margin left to spend. A three-point frame also never rocks on uneven ground, which a four-wheel version would.
+- **Stability now depends on the firmware**: **a_tip ≈ 0.53 g** (a car is ~1.0 g). The **firmware rollover protection** (turn amplitude clamped by speed + a slew-rate limiter) is what keeps the kart upright: disabled, the simulation **rolls over** on the reference manoeuvre (−0.60 m/s²); enabled, the same run keeps +2.75. `turn_alat_vmax` is capped at **0.2 — its own default**, because 0.3 lifts a wheel with one child off-centre (−0.27) and 0.25 leaves only +0.31.
 - **Flexible battery voltage (6–30 V driver)**: the motors are 12 V; the firmware **caps PWM AUTOMATICALLY at 12 V / measured Vbat** (smoothed ~1 s): motorcycle battery **12 V → ~100%**, 20 V pack → ~60%, **24 V → ~50%**. Changing battery = adjust the Vbat measurement **voltage divider** (swap the two resistors and edit the `hw::VBAT_R_TOP`/`VBAT_R_BOTTOM` constants — deliberately NOT a web setting, a wrong ratio would silently drag the LVC along); the LVC thresholds are **hard-coded per battery type** (12/24 V, detected at startup). A **manual** cap (`duty_cap`) remains available; ⚠️ **without the Vbat sensor (ADS1115), the auto cap is inactive** → set `duty_cap` by hand if the battery exceeds 12 V.
 - **Free-rolling front wheels**: driven by **#35 chain** (sprocket bolted to the rim), they keep their original bearing — no through drive axle.
-- **Tech bay at the front, battery at the REAR**: the driver + ESP32 stay **near the 2 motors** (short motor wiring), while the **battery sits in a retaining tray above the caster wheel** — easier to secure and to swap. Longitudinal layout: **NOSE (electronics) → DRIVE AXLE → CABIN → REAR (caster + battery tray)**. **The axle is set back ~32 cm into the body**: pivot-in-place sweep ~0.95 m radius. The rear battery is an accepted trade: it **unloads the drive wheels a little** (traction/braking) and moves the CG rearward — the rollover protection range was **re-validated in simulation** for this CG (xcg 0.40→0.44: the old `turn_alat_vmax` max of 0.4 now tips, the range is capped at 0.3), and the battery leads run rear→front in 10 AWG (~0.3 V drop at 40 A).
+- **Battery and electronics in the nose, drive at the rear**: longitudinal layout **CASTER + BATTERY + ESP32 + driver (nose) → CABIN → BENCH → DRIVEN AXLE 6″ behind it**. The children sit just ahead of the driven wheels, which puts **~61 % of the load on them** — traction and electric braking both act there, and weight transfer on a slope works with you. It was 79 % before the 6″/6″ move; that 18 points is the same thing the rollover margin lost. The battery in the nose keeps the caster planted. Power runs nose→rear in 10 AWG (~0.3 V at 40 A).
 - **Safety**: **central hardware emergency stop**, at the **top of the seatback** (within reach of both kids and an adult behind), **e-stop in the 40 A relay's coil loop** (the mushroom breaks 150 mA, the relay contact breaks the 40 A; the logic rail survives and the firmware raises the MOTOR-POWER fault — which doubles as the per-session welded-contact test) **and** software gamepad emergency stop (button B); start via **momentary button** priming the two-relay latch (small opto module = logic rail, 40 A relay = motor power, the ESP holds via `POWER_HOLD`), one 40 A fuse, **electric brake by default** (gamepad disconnect → immediate braking), low-voltage cutoff (LVC), **2 s watchdog (PANIC)**, **disarmed** start by default, guards over chains/sprockets, seatbelt, helmet.
 
 ---
@@ -114,22 +115,22 @@ flowchart TB
 
 | Dimension | Value | Why |
 |---|---|---|
-| Total length | **~150 cm** | **30″ × 46″ platform** (762 × 1168 mm) + a **150 mm caster extension** past its rear edge |
+| Total length | **~145 cm** | **30″ × 46″ platform** (762 × 1168 mm) + a **150 mm caster beam** ahead of its front edge. Unchanged by the 6″/6″ move — the deck never moved, only the axle and the bench inside it |
 | Overall width | **~90 cm** (deck 30″ = 762 mm + the wheels) | The **30″ deck** sets everything: two kids side by side, and the track |
 | **Bench inner width** | **76 cm** (the deck's width) | 2 × ~38 cm/child — the 30″ cut's cost, still workable |
 | **Side guardrails** (1/2″ plywood, on each side of the bench) | height **~30 cm** above the floor, length ~40 cm | Keep the child from **falling out sideways**; rounded edges |
-| **Tech bay** (nose, **ahead of the axle**) | length ~**30 cm** | Houses the driver, ESP32, breakout near the 2 motors (short motor wiring). The **battery lives at the REAR** (tray above the caster) |
-| **Front track** (drive-wheel spacing, center to center) | **83.2 cm** = deck width + wheel width | The wheels sit in **notches cut in the deck** and bear laterally on the two **inboard 2×3 rails**, so the deck sets the track. Wide track = **tip resistance** AND **differential lever arm** |
-| **Wheelbase** (front axle ↔ caster pivot) | **101.3 cm** = (1168 − 305 nose) + 150 extension | The **long** wheelbase is what pays for the 4″ axle drop: `w_eff ∝ (1 − x_cg/wheelbase)`, so pushing the caster back moves the CG relatively closer to the drive axle. Cost: pivot-in-place envelope grows to **~1.20 m radius** |
-| Seat height (ground → seat bottom) | **~27 cm** | The deck rides **4″ above the axle on shims** (the tall rear caster needs the height). ⚠️ This is the single biggest rollover term — see §3 |
-| Ground clearance (under frame) | **18 cm** | Consequence of the 4″ axle drop — generous |
+| **Tech bay** (nose, **over the caster**) | length ~**30 cm** | Houses the **battery** (strapped, in a tray over the caster), the driver, the ESP32 and the breakout. Motor wiring runs nose→rear in 10 AWG |
+| **Track** (driven-wheel spacing, center to center) | **83.2 cm** = deck width + wheel width | The driven wheels sit in **notches cut in the deck** and bear laterally on the two **inboard 2×3 rails**, so the deck sets the track. This is the raw material of the rollover margin — the layout then decides how much of it survives |
+| **Wheelbase** (caster axle ↔ driven axle) | **116.5 cm** (the axle moved back 6″ on 2026-08-10; the deck did not move) | Enters the rollover criterion directly: `w_eff = (track/2)·(1 − x_cg/wheelbase)` with **x_cg measured from the driven axle**. Here x_cg ≈ 46 cm → **61 %** of the half-track survives (254 mm of 416). It also sets the pivot envelope and the load split (≈61 % on the driven wheels) |
+| Seat height (ground → seat bottom) | **~26 cm** | The deck rides **4″ above the driven axle on shims** and the 10″ wheels poke up through side notches beside it. Height is the other half of `a_tip ∝ 1/h_cg` — don't add cushions or a raised bench |
+| Ground clearance (under frame) | **18 cm** | Consequence of the 4″ axle drop (underside of the 2×3 rails) |
 | Seatback height (seat → top) | **34 cm** | Supports both kids' backs |
-| **Front drive wheels (×2 identical)** | **Ø25.4 cm (10″)**, plastic rim + hard PVC tire | Same wheels left/right → simpler plan |
-| **Rear caster wheel (×1)** | **10″ wheel (Ø25.4 cm) on a pivoting fork**, under a **raised tail** (plate at ~33 cm), load ≥ 50 kg | Unpowered, orients freely (360°); **same wheel as the front** (shared parts); the raised tail keeps the frame **level** |
+| **Rear drive wheels (×2 identical)** | **Ø25.4 cm (10″)**, plastic rim + hard PVC tire | Same wheels left/right, and the same 10″ as the caster → one wheel type for the whole kart |
+| **Front caster wheel (×1)** | **10″ (Ø25.4 cm) on a pivoting fork**, centred, mounting plate at ~33 cm, load ≥ 50 kg | Unpowered, orients freely (360°). Carries only ~20 % of the load — the battery sits over it to keep it planted. Its plate needs **332 mm**, i.e. a short **73 mm pad** over the deck |
 | **Axle length budget** | **85 mm of rod per wheel** (hub + washers + lock-nut), measured | One **1/2″ × 36″** rod (914 mm) covers both: 832 track leaves 41 mm of overhang per side for the 35 mm of hardware — ~6 mm of thread past the nylock |
 | Hub / front-wheel mounting | **Metal bearing, 1/2" bore**, wide hub ~3.8 cm | Turns **free** on a **through dead axle: 1/2″ × 36″ threaded rod** (grade **8.8/B7**, hardware-store), **locknuts + washers at each end**, spacers to fix the lateral position (chain alignment), frame supports as close as possible to the hubs (≤ 3–5 cm, flex) |
 
-**Guiding idea:** wide front track (83 cm) + a long wheelbase = a machine **that stays stable** despite the tricycle format and two kids side by side. The deck is no longer low (the 4″ axle drop costs 21 % of tip threshold), and the bench sits at the very back of it — both paid for by the wheelbase. Every combination of the settable rollover parameters is re-validated in simulation after each of these changes; `turn_alat_vmax` is now capped AT its 0.2 default because 0.3 tips with this CG.
+**Guiding idea:** the mass goes **toward the paired axle**, and the single wheel goes at the far end carrying as little as possible. That rule took the same three wheels from 0.39 g to 0.69 g — and the 6″/6″ move of 2026-08-10 spent a quarter of it back, down to 0.53 g. Everything else still follows from it: battery in the nose over the caster, deck as low as the wheels allow, nothing heavy forward of the bench. `turn_alat_vmax` is now capped at **0.2, its own default** — measured, the binding case being one child sitting off-centre.
 
 > **Track / body decoupling**: the cabin doesn't need to be as wide as the track —
 > a **T** frame: a **wide front crossmember** carrying the **axle bearings as close as possible to
@@ -141,19 +142,19 @@ flowchart TB
 
 ## 2. Seat / controls position
 
-Reference 0 = **front** axle (drive wheels); dimensions measured **toward the rear** (negative = nose). The **tech bay** (battery + electronics) occupies the **nose, ahead of the axle**.
+Reference 0 = **caster axle** (front centre); dimensions measured **toward the rear**. The **tech bay** (battery + electronics) occupies the **nose, over the caster** — the one place where mass costs nothing, since it is the far end of the tip triangle.
 
-| Item | Distance from front axle | Height / ground |
+| Item | Distance from the caster | Height / ground |
 |---|---|---|
-| **Tech bay** (electronics) | **~−30–0 cm (nose)** | on the floor, low |
-| Front axle (drive wheels, reference) | **0 cm** | center at 12.7 cm (Ø25.4 wheel) |
-| **Footrest** | **~5 cm** | footrest just behind the axle |
-| Front of the seat | **~32 cm** | ~20 cm |
-| **Back of the seatback** | **~62 cm** | seat at ~20 cm |
-| Rear caster pivot (free) | **~76 cm** | 10″ wheel (Ø25.4), plate at ~33 cm |
-| **Battery tray** (12 V battery, retained) | **~69–84 cm (above the caster)** | plate ~33 cm + battery |
+| Caster axle (reference) | **0 cm** | center at 12.7 cm (Ø25.4 caster) |
+| **Battery + tech bay** | **~2–33 cm** | on the deck, low, strapped down |
+| Deck front edge | **15 cm** | the caster hangs on a 15 cm beam ahead of it |
+| **Footrest** | **~30 cm** | on the deck |
+| Front of the seat | **~87 cm** | seat at ~29 cm |
+| **Back of the seatback** | **~115 cm** | 6″ ahead of the driven axle |
+| **Driven axle** | **116.5 cm** | 10″ wheels (Ø25.4), **4″ shims**; they sit in notches **behind** the bench, so the seatback clears them |
 
-➡️ With the **Bluetooth gamepad**, there's **no more pedal box or steering wheel** to position: only seating ergonomics matter. **Seatback → footrest ≈ 57 cm** (62 − 5) ✔ leg almost straight, slight knee bend. Provide a safe place to **rest/charge the gamepad**. **Adjustable** seat (§6) to fit the child's size.
+➡️ With the **Bluetooth gamepad**, there's **no more pedal box or steering wheel** to position: only seating ergonomics matter. **Seatback → footrest ≈ 57 cm** ✔ leg almost straight, slight knee bend. ⚠️ The bench sits **6″ ahead of the driven axle** and the deck has ~15 cm of free length behind it: that space is the wheels' and the drive stack's, and moving the bench any further forward costs rollover margin directly (`w_eff ∝ 1 − x_cg/wheelbase`). Provide a safe place to **rest/charge the gamepad**. **Adjustable** seat (§6) to fit the child's size.
 
 ➡️ **Emergency stop at the top of the seatback (centered)**: the **hardware mushroom button** (in series with the **40 A relay's coil**) is mounted **at the top of the seatback, in the center** — reachable by **both kids** and by an **adult following the kart**. It **opens the motor relay** (~10-20 ms, thin wires only); the logic rail stays up, so the firmware disarms, names the fault (`MOTOR POWER`) and requires a deliberate re-arm — complementing the **software** emergency stop on the gamepad (button **B**). **Side guardrails** on each side of the bench (no central divider: continuous bench). **Driving stays on the Bluetooth gamepad**.
 
@@ -173,10 +174,10 @@ Reference 0 = **front** axle (drive wheels); dimensions measured **toward the re
 ```mermaid
 flowchart LR
     BAY["🧠 Nose: tech bay<br/>(ESP32 + driver) — ~−30–0 cm"]
-    AV["🛞 Front drive axle<br/>Ø25.4 cm — 0 cm"]
+    AV["🛞 Free 10″ caster (front centre)<br/>0 cm"]
     ASS["Front of seat<br/>~32 cm"]
     DOS["Seatback<br/>~62 cm"]
-    AR["🛞 Free rear caster ~76 cm<br/>🔋 battery tray above (plate ~33 cm)"]
+    AR["🛞 Driven wheels ~117 cm<br/>Ø25.4 cm, 6″ behind the bench"]
 
     BAY --> AV --> ASS --> DOS --> AR
 
@@ -190,16 +191,16 @@ flowchart LR
     class BAY elec;
 ```
 
-> **Single 2-seat bench**: the two kids side by side (~80 cm inner), same seatback. The **driver (left)** holds the **gamepad**; the right side is passenger. The **tech bay** (electronics) is **in the nose, ahead of the drive axle**; the battery sits at the **rear**, in its tray above the caster.
+> **Single 2-seat bench**: the two kids side by side (~80 cm inner), same seatback. The **driver (left)** holds the **gamepad**; the right side is passenger. The **tech bay** (electronics) is **in the nose**; the battery sits there too, in its tray above the caster.
 
 ### Top view (2-seat layout)
 
 ```mermaid
 flowchart TB
     subgraph AV["FRONT — 2 DRIVE wheels + TECH BAY"]
-        RAVG["🛞 front left (drive)"]
+        RAVG["🛞 rear left (drive)"]
         BAY["🧠 tech bay<br/>driver + ESP32"]
-        RAVD["🛞 front right (drive)"]
+        RAVD["🛞 rear right (drive)"]
         RAVG --- BAY --- RAVD
     end
     subgraph HAB["CABIN — single bench ~80 cm"]
@@ -208,8 +209,8 @@ flowchart TB
         PASS["🧒 PASSENGER (right)<br/>footrest"]
         COND --- SEP --- PASS
     end
-    subgraph AR["REAR — FREE caster wheel"]
-        RARC["🛞 pivoting caster wheel<br/>🔋 battery tray above"]
+    subgraph AR["REAR — 2 DRIVE wheels"]
+        RARC["🛞 driven L + R (10″)<br/>under the bench"]
     end
     AV --- HAB --- AR
 
@@ -242,9 +243,9 @@ flowchart TD
     LIM["Rollover protection<br/>(clamped amplitude + slew-rate limiter)"]
     ML["⚙️ Front left motor"]
     MR["⚙️ Front right motor"]
-    RG["🛞 Front left wheel"]
-    RD["🛞 Front right wheel"]
-    CAS["🛞 Free rear caster<br/>(orients itself)"]
+    RG["🛞 Rear left wheel"]
+    RD["🛞 Rear right wheel"]
+    CAS["🛞 Free front caster (10″)<br/>(orients itself)"]
 
     PAD --> MIX --> LIM
     LIM -- "left command" --> ML --> RG
@@ -261,29 +262,29 @@ flowchart TD
 ```
 
 1. **"Arcade" mixing**: the firmware combines forward motion (stick Y) and turn (stick X) into two wheel commands: `left = forward + turn·gain` and `right = forward − turn·gain`. Push the stick right = left wheel faster → the kart turns right.
-2. **Pivot in place**: if forward motion ≈ 0 and you push the stick sideways, the two wheels turn **in opposite directions** → the kart **spins on itself** (the rear caster pivots to follow).
-3. **Rollover protection**: a tricycle tips easily, so the turn is protected on **two fronts**:
-   - **Speed→turn ISO-a_lat limit (MEASURED speed)**: below `turn_full_ms` (~0.5 m/s) — and anywhere the curve allows — turning is permitted at **±100%** (full-power pivot in place, `turn_gain` default 1.0); above that, the limit decreases as **1/v** (same lateral acceleration at any speed) down to `turn_alat_vmax` (**±20% by default**) at top speed, then keeps tightening in case of runaway. Calibrated by physics simulation: the old linear ramp tipped an **offset load** (a single child on one side, adult+child) as soon as the turn gain reached 100%; the iso-a_lat curve keeps healthy margins across the whole settable range (re-validated for the rear-battery CG — the sim sweep is the authority). The faster you go, the less you can steer. **Reverse** has **its own speed limit** (`rev_speed_ms`, default 1 m/s), served by the same PID limiter as `speed_limit_ms` (target chosen by the measured direction).
+2. **Pivot in place**: if forward motion ≈ 0 and you push the stick sideways, the two wheels turn **in opposite directions** → the kart **spins on itself** (the front caster swivels to follow).
+3. **Rollover protection** (a real second layer — the geometry does most, not all): the turn is shaped on **two fronts**:
+   - **Speed→turn ISO-a_lat limit (MEASURED speed)**: below `turn_full_ms` (~0.5 m/s) — and anywhere the curve allows — turning is permitted at **±100%** (full-power pivot in place, `turn_gain` default 1.0); above that, the limit decreases as **1/v** (same lateral acceleration at any speed) down to `turn_alat_vmax` (**±20%, which is now also its maximum**) at top speed, then keeps tightening in case of runaway. Calibrated by physics simulation: the old linear ramp tipped an **offset load** (a single child on one side, adult+child) as soon as the turn gain reached 100%; the iso-a_lat curve keeps ≥ +0.91 m/s² across the whole settable range (re-validated after the 6″/6″ move — the sim sweep is the authority). The faster you go, the less you can steer. **Reverse** has **its own speed limit** (`rev_speed_ms`, default 1 m/s), served by the same PID limiter as `speed_limit_ms` (target chosen by the measured direction).
    - **Slew-rate limiter**: the turn command cannot change by more than `turn_rate` per second → an abrupt stick move is **smoothed** instead of causing a violent differential. The forward command is deliberately **not** slewed: softening the throttle is the job of the **mixing curves** (`mix_type` — expo, or expo + speed-soft for a child driver) and of the speed limiter.
 
 Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_alat_vmax`** (rollover ramp), **`turn_rate`** (turn smoothness), and the **Drive feel** group (`mix_type`, `mix_expo_fwd`, `mix_expo_turn`, `mix_soft_hi` — stick-to-motor feel, from linear to child-gentle). Details in [`firmware/README.md`](firmware/README.md).
 
-> **Consequence of skid steer:** in a tight turn, the wheels **scrub** slightly on the ground (sliding friction) — that's inherent to this type of steering. At moderate speed on flat ground, the effect stays acceptable.
+> **Consequence of skid steer:** in a tight turn, the wheels **scrub** slightly on the ground (sliding friction) — that's inherent to this type of steering. At moderate speed on flat ground, the effect stays acceptable. The beyond-the-limit failure mode is now a sideways **slide**, not a rollover.
 
 ---
 
 ## 4. Hardware & electronics
 
-> **Mostly wooden, lightweight frame**: a grid of **2×3 studs** (SPF ~38×64 mm) + **6 mm plywood floor**. Reinforce at load points (front motor mounts, rear caster mounting, seatbelt anchor). ⚠️ The 6 mm plywood requires a **closely-spaced 2×3 grid** (crossmembers every ~25–30 cm); **12 mm under the bench**.
+> **Mostly wooden, lightweight frame**: a grid of **2×3 studs** (SPF ~38×64 mm) + **6 mm plywood floor**. Reinforce at load points (rear motor mounts, front caster pad, seatbelt anchor). ⚠️ The 6 mm plywood requires a **closely-spaced 2×3 grid** (crossmembers every ~25–30 cm); **12 mm under the bench**.
 
 | Category | Item | Size / spec |
 |---|---|---|
 | **Wood** | Frame (rails + crossmembers) | **2×3** studs (SPF ~38×64 mm), closely-spaced grid |
 | | Floor | **6 mm** plywood, ~140 × 90 cm, supported by the grid |
 | | Seat (loaded zone) | **12 mm** plywood under the bench |
-| | Front motor mounts / seatback | Hardwood block + plate; seatback in 6 mm plywood |
-| **Wheels** | **2× front drive wheels** identical | **Ø25.4 cm (10″)**, plastic rim + PVC tire, 1/2" bearing |
-| | **1× pivoting rear caster wheel (caster)** | **Free**, unpowered caster; **Ø ~12.5 cm (5")**, mounted height ~15 cm, **load ≥ 50 kg** |
+| | Rear motor mounts / seatback | Hardwood block + plate; seatback in 6 mm plywood |
+| **Wheels** | **2× rear drive wheels** identical | **Ø25.4 cm (10″)**, plastic rim + PVC tire, 1/2" bearing |
+| | **1× pivoting FRONT caster wheel** | **Free**, unpowered; **Ø 25.4 cm (10")**, plate at ~33 cm, **load ≥ 50 kg** |
 | | Shoulder bolts (front wheels) | **Supplied with the wheels** (1/2" shoulder, 3/8" thread) |
 | **Propulsion** | **2× 12 V DC motors** (one per **front** wheel) | ~172 W (0.23 HP), 19.6 A, 4615 rpm; **independent** |
 | | 2 3D gearboxes | **1:13.33** (16→80 then 30→80, [design](doc/reducteur.md)) + 1.28:1 sprockets = **1:17 total**, printed (PETG/ABS/nylon) |
@@ -309,9 +310,9 @@ Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_a
 | **Future reserves** (wired, unused) | **analog joystick** | joystick on A1/A2 of the ADS1115 |
 | **Fasteners / finish** | M8/M10 through-bolts, **nylock** nuts | brackets, wood screws, varnish; rounded edges |
 
-### Propulsion — 2 front 12 V DC motors
+### Propulsion — 2 rear 12 V DC motors
 
-Each **front wheel** is driven by its **own 12 V permanent-magnet DC motor** through a **3D-printed 1:13.33 gearbox** (16→80, 30→80) and a **25T→32T #35 chain (1.28:1)** — total reduction **1:17.07**. The **two motors are controlled independently** (PWM + DIR per channel): it's this **command difference** that provides steering. **Each wheel has its own AS5600 sensor** for the control loop.
+Each **rear wheel** is driven by its **own 12 V permanent-magnet DC motor** through a **3D-printed 1:13.33 gearbox** (16→80, 30→80) and a **25T→32T #35 chain (1.28:1)** — total reduction **1:17.07**. The **two motors are controlled independently** (PWM + DIR per channel): it's this **command difference** that provides steering. **Each wheel has its own AS5600 sensor** for the control loop.
 
 | Characteristic | Value |
 |---|---|
@@ -330,13 +331,13 @@ flowchart LR
     PAD["🎮 Bluetooth gamepad"]
     ESP["🧠 ESP32<br/>(arcade mixing, rollover protection, limits)"]
     DRV["Dual-channel driver<br/>20 A · 6–30 V · PWM+DIR"]
-    M1["Front L motor 12 V (~172 W)"]
-    M2["Front R motor 12 V (~172 W)"]
+    M1["Rear L motor 12 V (~172 W)"]
+    M2["Rear R motor 12 V (~172 W)"]
     G1["3D gearbox 1:13.33"]
     G2["3D gearbox 1:13.33"]
-    R1["🛞 Front left wheel"]
-    R2["🛞 Front right wheel"]
-    CAS["🛞 Free rear caster"]
+    R1["🛞 Rear left wheel"]
+    R2["🛞 Rear right wheel"]
+    CAS["🛞 Free front caster"]
 
     BATT -- "power supply" --> DRV
     PAD -. "Bluetooth (x,y)" .-> ESP
@@ -446,8 +447,8 @@ flowchart LR
     ESP["🧠 ESP32"]
     PAD["🎮 BT gamepad"]
     DRV["Dual-channel driver<br/>20 A / 6–30 V"]
-    M1["⚙️ Front L motor 12 V"]
-    M2["⚙️ Front R motor 12 V"]
+    M1["⚙️ Rear L motor 12 V"]
+    M2["⚙️ Rear R motor 12 V"]
     ADS["📈 ADS1115 (0x48)<br/>16-bit I²C ADC (3.3 V)"]
     EG["🧭 AS5600 wheel L (bus 0)"]
     ED["🧭 AS5600 wheel R (bus 1)"]
@@ -492,8 +493,8 @@ flowchart LR
 
 | GPIO | Function | Direction | Note |
 |---|---|---|---|
-| 25 / 26 | **PWM / DIR FRONT left motor** | output | LEDC, **duty ≤ 50%** |
-| 32 / 33 | **PWM / DIR FRONT right motor** | output | same |
+| 25 / 26 | **PWM / DIR REAR left motor** | output | LEDC, **duty ≤ 50%** |
+| 32 / 33 | **PWM / DIR REAR right motor** | output | same |
 | 18 / 19 | **I²C bus 0 SDA / SCL** | I/O | **AS5600 wheel L (0x36)** + **ADS1115 (0x48)**, 3.3 V, 4.7 kΩ pull-ups |
 | 27 / 14 | **I²C bus 1 SDA / SCL** | I/O | **AS5600 wheel R (0x36)**, 3.3 V, 4.7 kΩ pull-ups |
 | 13 | **POWER_HOLD** (power latch) | output | **active LOW**: holds the logic rail; HIGH = cuts |
@@ -517,7 +518,7 @@ flowchart LR
 
 ### Full system diagram (all connectors)
 
-Block-by-block overview showing **each connector** (gamepad via the internal radio, 2× AS5600 on 2 I²C buses, ADS1115, START button, front motors, WS2812), the **conditioning** (Vbat divider) and the **power supply**.
+Block-by-block overview showing **each connector** (gamepad via the internal radio, 2× AS5600 on 2 I²C buses, ADS1115, START button, rear motors, WS2812), the **conditioning** (Vbat divider) and the **power supply**.
 
 ```mermaid
 flowchart LR
@@ -748,16 +749,16 @@ flowchart LR
 
 ## 5. Critical safety points (child)
 
-- ⚠️ **Rollover protection**: a tricycle tips over more easily than a 4-wheeler. Keep the **wide front track (84 cm)** + low seat (16 cm); don't raise the seat; keep masses low — the rear battery tray is the one accepted exception, and the rollover range was re-validated in simulation for it. **Never disable the firmware rollover protection** (clamped turn amplitude + slew-rate limiter); start with low `turn_gain`/`speed_limit_ms`.
-- ⚠️ **Mounting of the 2 front drives**: motor mounts solidly bolted/reinforced; chains tensioned, lubricated and guards closed (never any slack — a slack chain climbs the sprocket and is thrown).
-- ⚠️ **Rear caster wheel**: axle and pivot well tightened (nylock / threadlocker); check that it pivots freely with no binding.
-- ⚠️ **Front wheel axles secured**: nylock + **cotter pin/retaining washer**.
+- ⚠️ **Rollover protection**: a_tip ≈ 0.53 g, and the firmware is now what keeps the kart upright — **with the protection off the simulation rolls it over**. Never move seating or ballast toward the caster, keep the **wide track (83 cm)**, don't raise the seat (height is the other big term), leave `turn_limit_en` at 1 and `turn_alat_vmax` at 0.2 or below. Start with low `turn_gain`/`speed_limit_ms`.
+- ⚠️ **Mounting of the 2 rear drives**: motor mounts solidly bolted/reinforced; chains tensioned, lubricated and guards closed (never any slack — a slack chain climbs the sprocket and is thrown).
+- ⚠️ **Front caster wheel**: axle and swivel well tightened (nylock / threadlocker); check it pivots freely with no binding, and that its 73 mm pad is solidly fixed — it carries the nose and the battery.
+- ⚠️ **Driven-wheel axle secured**: nylock + **cotter pin/retaining washer**.
 - ⚠️ **Chain/sprocket guard**: no fingers/laces/clothing caught.
 - ⚠️ **Rounded corners**, sanding against splinters, bolt heads countersunk/capped on the child side.
 - ⚠️ **Lap belt** anchored to the frame; **helmet mandatory**; **footrest**.
 - ⚠️ **Central hardware emergency stop**: at the **top of the seatback, centered**, **easily reachable by both kids** (and by an adult behind); it **opens the 40 A motor relay** (coil-loop break, ~10-20 ms) — the primary removal of drive power, complementing the **software** emergency stop on the gamepad (button **B**). A **welded relay contact** is covered in software: the coil-side sense still sees the e-stop and the firmware disarms + dynamic-brakes (VB+ being present is what makes that brake bite). The logic rail stays up so the kart reports the fault; whether the driver still *brakes* dynamically with its 40 A supply cut depends on the driver board keeping gate drive — **test it on the bench** (spin a wheel with the motor relay open). Check that the button is neither hidden nor blocked, and that the kids know how to use it.
 - ⚠️ **Gamepad**: calibrated before each session; check that **button B (software emergency stop)** brakes, and that a **disconnect** (gamepad off / out of range) triggers braking.
-- ⚠️ **Inspection before each use**: motor mounts, chain tension + lubrication + sprocket tightness, rear caster wheel, **central hardware e-stop** + gamepad e-stop, tech bay mounting (batteries at the front), electric brake test.
+- ⚠️ **Inspection before each use**: motor mounts, chain tension + lubrication + sprocket tightness, **front caster (swivels free, pad solid)**, **central hardware e-stop** + gamepad e-stop, tech bay mounting (battery secured in the nose), electric brake test.
 - ⚠️ **Flat ground, supervised**, away from traffic and slopes.
 - ⚠️ **Plastic tires = little grip** → moderate speed, gentle turns, and **skid-steer scrub** in tight turns (see §3).
 
@@ -784,16 +785,16 @@ To adjust the **seatback ↔ front-of-seat** distance to the child's size:
 | Item | Mass |
 |---|---:|
 | Wood (6 mm plywood floor, 2×3 frame, mounts, bench, reinforcements) | ~18 kg |
-| 2 front drive wheels Ø25.4 cm + 1 rear caster | ~2.2 kg |
+| 2 rear drive wheels Ø25.4 cm + 1 front caster (10″) | ~2.5 kg |
 | Fasteners / shoulder bolts | 1.6 kg |
-| Propulsion (2 front motors + 2 3D gearboxes + sprockets/#35 chains) | 3.8 kg |
+| Propulsion (2 rear motors + 2 3D gearboxes + sprockets/#35 chains) | 3.8 kg |
 | Electronics + battery (12 V motorcycle battery, driver, ESP32, ADS1115, relays, wiring) | 2.5 kg (⚠️ optimistic: a motorcycle battery alone is ~3–5 kg — re-weigh and update) |
 | Brake/misc (seatbelt, guards, paint, gamepad) | 2.0 kg |
 | **EMPTY TOTAL** | **≈ 32 kg** |
 | + 2 kids (~33 kg each) | +66 kg |
 | **LOADED TOTAL** | **≈ 98 kg** |
 
-**Consequences:** wood dominates (~56% empty) → the first lever for weight saving. Removing the steering parts (steering wheel, column, tie rod, steering knuckles) **saves weight** versus the 4-wheeler; the electronics stay at the **front** near the motors, while the **battery now loads the rear caster** (tray above it) — no more nose-lift worry, but it **removes a little load from the drive wheels** (traction/braking) and moves the CG rearward: the rollover range was **re-validated in simulation** for this CG (`turn_alat_vmax` capped at 0.3; the sim's `xcg_m` went 0.40→0.44). Rolling resistance at ~100 kg ≈ **25 N** on the flat; the combined drive force of the 2 front wheels is more than enough → **OK on the flat**, realistic grade **~3–6%**. Electric braking must be sized for ~100 kg.
+**Consequences:** wood dominates (~56 % empty) → the first lever for weight saving. Removing the steering parts (steering wheel, column, tie rod, steering knuckles) **saves weight** versus the 4-wheeler. **Where the mass sits matters more than how much of it there is:** the two kids (66 kg, two thirds of the loaded total) sit **6″ ahead of the driven axle**, which puts the CG 46 cm from it — it was 21 cm when they sat on it, and that difference is a quarter of the rollover margin. The battery (the one heavy item at the other end) is deliberately in the **nose over the caster** — it keeps that wheel planted while barely moving the CG. ⚠️ Anything heavy added later goes **at the rear**, never in the cabin's front half: the sim's `xcg_m` (distance CG→driven axle, **0.455 m**) is the number that would move, and the rollover range was validated at that value (`turn_alat_vmax` capped at 0.2, its own default). Rolling resistance at ~100 kg ≈ **25 N** on the flat; the combined drive force of the 2 rear wheels is still enough at 61 % of the load → **OK on the flat**, realistic grade **~3–6 %**. Electric braking must be sized for ~100 kg.
 
 ---
 
@@ -803,7 +804,7 @@ Order from simplest to riskiest. **Golden rule: test everything with the wheels 
 
 ```mermaid
 flowchart LR
-    P1["1. Wooden frame"] --> P2["2. Front wheels + rear caster"] --> P3["3. Front drives<br/>(2 motors + gearbox + #35 chains)"]
+    P1["1. Wooden frame"] --> P2["2. Rear wheels + front caster"] --> P3["3. Rear drives<br/>(2 motors + gearbox + #35 chains)"]
     P3 --> P5["4. Power<br/>(batteries, latch, driver)"]
     P5 --> P6["5. Control<br/>(ESP32, ADS1115, 2× AS5600)"] --> P7["6. Firmware<br/>+ gamepad pairing/calibration"]
     P7 --> P8["7. Progressive tests"] --> P9["8. Final safety"]
@@ -811,13 +812,13 @@ flowchart LR
 
 **Phase 0 — Preparation.** Gather hardware (§4) and tools (drill, saw, wrenches, soldering iron, multimeter, 3D printer). Print the 2 gearboxes (1:17) + drilling template. Work with **batteries disconnected**.
 
-**Phase 1 — Wooden frame.** 2×3 grid (crossmembers ~25–30 cm) + 6 mm plywood floor (12 mm under the bench) + **tech bay at the front** (~30 cm, between the drive axle and the bench) + **continuous** ~80 cm bench (no divider) + **side guardrails** (1/2″ plywood, ~30 cm) + seatback. ✅ *Two people can sit without excessive flex; the guardrails hold a child who slides sideways well.*
+**Phase 1 — Wooden frame.** **30″ × 46″ plywood deck** + the two **inboard 2×3 rails** running its full length, flush with its edges and **overhanging 150 mm at the nose** to carry the caster; crossmembers ~25–30 cm; **notches cut in the deck sides at the rear** so the drive wheels can be slid into place and then bear laterally on the rails; **tech bay in the nose** (~30 cm, over the caster); **continuous** 76 cm bench **6″ ahead of the driven axle**, leaving ~15 cm of deck behind it for the wheels and the drive stack (no divider) + **side guardrails** (1/2″ plywood, ~30 cm) + seatback. ✅ *Two people can sit without excessive flex; the guardrails hold a child who slides sideways well.* ⚠️ *Do not move the bench any further forward to "balance" the kart — the 6″ it has already moved cost a quarter of the rollover margin, and there is none left to spend.*
 
-**Phase 2 — Front wheels + rear caster.** 2 Ø30 wheels on **shoulder bolts** (3/8" drilling), turn **free**; **pivoting caster** mounted at the rear, pivot tight but free. ✅ *Front track 84 cm, nothing rubs; the caster orients itself when you push the frame.*
+**Phase 2 — Rear wheels + front caster.** 2 Ø25.4 cm wheels at the rear on the **1/2″ threaded rod** (85 mm of rod per wheel: hub + spacers + lock nut), dropped **4″ below the rails on shims**, turning **free**; **pivoting 10″ caster** bolted under the nose overhang, its plate raised on a ~73 mm pad so both axles sit at the same height, pivot tight but free. ✅ *Rear track 83 cm, nothing rubs, both wheels touch the ground evenly; the caster orients itself when you push the frame.*
 
-**Phase 3 — Front drives (replaces the old "steering").** On **each front wheel**: bolted sprocket (large washers / backing plate) + 3D gearbox + motor on a reinforced mount + #35 chain cut to length + tension adjustment + guard. **No linkage**: steering is differential, so nothing to adjust on the steering-wheel/tie-rod side. ✅ *With no power: each front wheel turns by hand, chain tensioned and lubricated.*
+**Phase 3 — Rear drives (replaces the old "steering").** On **each rear wheel**: bolted 32T sprocket (large washers / backing plate) + 3D gearbox with its 25T output **ahead of and above the axle** (165 mm centre distance, so chain slack hangs on the run instead of climbing the teeth) + motor on a reinforced mount + #35 chain cut to length + tension adjustment + guard. **No linkage**: steering is differential, so nothing to adjust on the steering-wheel/tie-rod side. ✅ *With no power: each rear wheel turns by hand, chain tensioned and lubricated.*
 
-**Phase 4 — Power electronics ⚠️ (at the front).** The **single 12 V pack at the REAR, strapped in its retaining tray above the caster** (build the tray first: plywood plate + rims on the caster platform); **fuse 40 A AT the battery → 10 AWG pair to the nose → 40 A DC relay → +12 V rail**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`); **NO hold capacitor** — a reboot drops the rail and powers the kart off cleanly (re-prime with START); a **hidden FORCE ON toggle inside the enclosure** forces the logic rail for bench/flash work; the **e-stop (NC mushroom) goes in the 40 A relay's COIL loop** (+12V_LOG → mushroom → 85; thin wires to the seatback, the relay contact breaks the 40 A); **1N4007 flyback across the 40 A coil** (cathode to 85/+). See [`doc/electronique.md`](doc/electronique.md) for the full wiring guide and [`doc/schematics/power_rails.png`](doc/schematics/power_rails.png) for the schematic; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 front motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes, and **the central e-stop kills the motor rail while the logic stays up** (the page must show the MOTOR POWER fault, GPIO22). Then check the reboot case: force a reset while powered — the relay MUST drop (clean power-off) and START must bring it back. Finally the 30-second brake test: logic up, motor relay open, spin a wheel by hand — if it resists, the e-stop brakes; if not, it freewheels (flat ground only).*
+**Phase 4 — Power electronics ⚠️ (in the nose).** The **single 12 V pack in the NOSE, strapped in its retaining tray over the caster** (build the tray first: plywood plate + rims on the deck); **fuse 40 A AT the battery → 40 A DC relay → +12 V rail → 10 AWG pair back to the rear motors**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`); **NO hold capacitor** — a reboot drops the rail and powers the kart off cleanly (re-prime with START); a **hidden FORCE ON toggle inside the enclosure** forces the logic rail for bench/flash work; the **e-stop (NC mushroom) goes in the 40 A relay's COIL loop** (+12V_LOG → mushroom → 85; thin wires to the seatback, the relay contact breaks the 40 A); **1N4007 flyback across the 40 A coil** (cathode to 85/+). See [`doc/electronique.md`](doc/electronique.md) for the full wiring guide and [`doc/schematics/power_rails.png`](doc/schematics/power_rails.png) for the schematic; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 rear motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes, and **the central e-stop kills the motor rail while the logic stays up** (the page must show the MOTOR POWER fault, GPIO22). Then check the reboot case: force a reset while powered — the relay MUST drop (clean power-off) and START must bring it back. Finally the 30-second brake test: logic up, motor relay open, spin a wheel by hand — if it resists, the e-stop brakes; if not, it freewheels (flat ground only).*
 
 **Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the 12 V LOGIC rail** (the ESP makes its own 3.3 V); **e-stop coil-sense opto → GPIO22**; **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
 
@@ -825,7 +826,7 @@ flowchart LR
 
 **Phase 7 — Progressive tests (wheels in the air).** Arm (physical or gamepad START), light forward → correct direction of **each wheel** (swap M1A/M1B if needed); push the stick right → turns right; test **default brake**, **pivot in place**, **disarm**, **gamepad emergency stop (B)** and **gamepad disconnect → braking**, **central hardware e-stop** (motor rail dies, the page shows the MOTOR POWER fault, re-arm required); trigger the faults (simulated **LVC**, **sensor failure** by unplugging an AS5600) → must refuse/cut. Then on the ground: flat terrain, minimum speed, rollover protection active, 1 light child first, **progressive** limit.
 
-**Phase 8 — Final safety.** Seatbelt anchored, helmets, guards, rounded corners, footrest, secured axles, tightened caster, **front tech bay secured**, **battery strapped in its rear tray**, **central emergency stop clear and tested** (motor feed broken, fault reported). **Inspection before each use**. Use **under adult supervision**.
+**Phase 8 — Final safety.** Seatbelt anchored, helmets, guards, rounded corners, footrest, secured axles, tightened caster, **nose tech bay secured**, **battery strapped in its nose tray**, **central emergency stop clear and tested** (motor feed broken, fault reported). **Inspection before each use**. Use **under adult supervision**.
 
 ---
 
@@ -864,7 +865,7 @@ Points to **address / validate before any real use**.
 
 **Mechanical**
 - **Skid steer = scrub in tight turns**: the tires slide sideways when you turn hard (friction, wear, energy loss). Pivot in place = maximum scrub; avoid on abrasive surfaces. There is indeed a **command differential** between the 2 wheels, but **no mechanical differential** on the axle side.
-- **Tricycle = lower stability** than a 4-wheeler: the firmware rollover protection is **essential**; don't raise the CG.
+- **Stability now comes from the firmware** (a_tip ≈ 0.53 g since the bench and axle moved 6″ apart): with the rollover protection off the simulation rolls the kart over. Keep nothing heavy toward the caster, don't raise the CG, and never disable `turn_limit_en` with a child aboard.
 - **Plastic under stress** (rim, 6 mm plywood floor) → risk of cracking; reinforce.
 - **Hard PVC tires** → low grip; moderate speed.
 
