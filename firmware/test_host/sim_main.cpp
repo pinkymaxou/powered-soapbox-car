@@ -205,15 +205,18 @@ void testScenarios()
         CHECK(Fault::Encoder == r.final_fault);
         CHECK(r.t_first_fault > 0.f);
     }
-    // Two-rail e-stop through the opto sense: the t=4 s single-tick glitch must NOT disarm
-    // (debounce), the sustained drop at t=6 s must fault as MOTOR_POWER, brake, and stay
-    // disarmed (re-arm required — releasing the mushroom never resumes drive on its own).
+    // The emergency stop as it now behaves: the mushroom opens the main relay's coil, so the
+    // ESP32 dies with the motors. No fault is reported (nobody is left to report it) and
+    // NOTHING brakes — the kart coasts. On the flat it still comes to a stop within a few
+    // metres on rolling resistance alone; that is the honest measurement, printed here.
     {
-        const RunResult r = run(get("estop_moteur"));
+        const RunResult r = run(get("arret_urgence_plat"));
         CHECK(r.ever_armed);
-        CHECK(Fault::MotorPower == r.final_fault);
-        CHECK(r.t_disarmed_after >= 6.f && r.t_disarmed_after < 6.15f);   // 50 ms debounce + margin
-        CHECK(std::fabs(r.final_v) < 0.3f);                               // braked, not coasting
+        CHECK(!r.ever_fault);                       // the firmware never sees the e-stop
+        CHECK(std::fabs(r.final_v) < 0.05f);        // it does stop — eventually, on rolling drag
+        CHECK(r.coast_dist > 10.f);                 // …after more than ten metres of coasting
+        std::printf("  arret_urgence_plat : e-stop at 3 m/s → coasts %.1f m before stopping "
+                    "(no braking left at all)\n", r.coast_dist);
     }
     {
         const RunResult r = run(get("encodeur_absent"));
@@ -229,39 +232,14 @@ void testScenarios()
         CHECK(Fault::Encoder == r.final_fault);
     }
 
-    // LVC: type detected 12 V then cutoff under load (not before debounce).
+    // A worn pack is no longer a fault of any kind — it is just less voltage at the motors.
+    // The kart drives, slower. This is the trade-off of dropping the LVC, measured.
     {
-        const RunResult r = run(get("lvc_batterie_faible"));
-        CHECK(12 == r.batt_type);
-        CHECK(Fault::Lvc == r.final_fault);
-        CHECK(r.t_first_fault > 5.4f);      // load at 5 s + 500 ms debounce
-    }
-
-    // A healthy half-charged pack must NOT be cut by its own acceleration sag.
-    {
-        const RunResult r = run(get("sag_acceleration"));
-        CHECK(12 == r.batt_type);
-        CHECK(Fault::Lvc != r.final_fault);
-        CHECK(!r.ever_fault);
-        CHECK(r.max_v > 1.0f);
-        printf("  sag_acceleration : healthy 12.0 V pack survives full throttle, max v=%.2f m/s\n", r.max_v);
-    }
-
-    // Same battery, voltage check DISABLED: nothing must trip, and it must still drive.
-    {
-        const RunResult r = run(get("lvc_desactive"));
+        const RunResult r = run(get("batterie_usee"));
         CHECK(!r.ever_fault);
         CHECK(Fault::None == r.final_fault);
-        CHECK(!r.powered_off);
-        CHECK(r.max_v > 1.0f);              // it really drove on the sagging battery
-        printf("  lvc_desactive : no fault, max v=%.2f m/s (LVC would have cut at ~5.5 s)\n", r.max_v);
-    }
-
-    // 24 V detection.
-    {
-        const RunResult r = run(get("detection_24v"));
-        CHECK(24 == r.batt_type);
-        CHECK(!r.ever_fault);
+        CHECK(r.max_v > 1.0f);              // it really drove on the sagging pack
+        std::printf("  batterie_usee : no fault (nothing measures it), max v=%.2f m/s\n", r.max_v);
     }
 
     // ASYMMETRIC LOAD — it is THIS result that lowered the turn_hi default
@@ -307,18 +285,20 @@ void testScenarios()
         CHECK(std::fabs(r.final_v) < 0.5f);   // held — within the motor capacity
     }
 
-    // KILL SWITCH ON A SLOPE (power cutoff → coasting): the quantified demonstration of
+    // POWER CUT ON A SLOPE (main relay open → coasting): the quantified demonstration of
     // the README warning — with no power there is NO electric braking left AT ALL, and
-    // the kart RUNS AWAY down the slope. Documented hardware fix: NC relay across the motors.
+    // the kart RUNS AWAY down the slope. Now that the E-STOP opens that same relay, this is
+    // also what pressing the mushroom on a hill costs. Hardware fix if wanted: NC relay
+    // shorting the motor phases when power goes away.
     {
         const RunResult r = run(get("coupure_pente8"));
-        std::printf("  coupure_pente8 : v(+8 s after kill switch)=%.1f m/s — RUNAWAY\n",
+        std::printf("  coupure_pente8 : v(+8 s after the power cut)=%.1f m/s — RUNAWAY\n",
                     std::fabs(r.final_v));
         CHECK(std::fabs(r.final_v) > 3.f);    // coasting: ~4 m/s after 8 s on 8%
     }
     {
         const RunResult r = run(get("coupure_pente16"));
-        std::printf("  coupure_pente16 : v(+8 s after kill switch)=%.1f m/s — RUNAWAY\n",
+        std::printf("  coupure_pente16 : v(+8 s after the power cut)=%.1f m/s — RUNAWAY\n",
                     std::fabs(r.final_v));
         CHECK(std::fabs(r.final_v) > 8.f);    // ~10 m/s (36 km/h) after 8 s on 16%
     }
@@ -418,7 +398,7 @@ void printFrame(const Vehicle& v, const SimController& c, const CtrlTelemetry& t
                 "\"p_w\":%.1f,\"e_wh\":%.3f,"
                 "\"stickx\":%.2f,\"sticky\":%.2f,"
                 "\"padx\":%.2f,\"pady\":%.2f,\"state\":%d,\"fault\":%d,\"faults\":%u,"
-                "\"brake\":%d,\"armed\":%s,\"power\":%s,\"vbat\":%.2f,\"backrooms\":%s}\n",
+                "\"brake\":%d,\"armed\":%s,\"power\":%s,\"backrooms\":%s}\n",
                 v.t(), v.x(), v.y(), v.z(), v.heading(), v.v(), v.yawRate(),
                 v.aLat(), v.tipMargin(), v.roll(), v.pitch(), v.liftSide(),
                 v.tipped() ? "true" : "false", v.airborne() ? "true" : "false",
@@ -429,7 +409,7 @@ void printFrame(const Vehicle& v, const SimController& c, const CtrlTelemetry& t
                 c.padX(), c.padY(),
                 t.turn, t.fwd, static_cast<int>(t.state), static_cast<int>(primaryFault(t.faults)),
                 t.faults, static_cast<int>(t.brake_mode), t.armed ? "true" : "false",
-                c.powered() ? "true" : "false", t.vbat, backrooms ? "true" : "false");
+                c.powered() ? "true" : "false", backrooms ? "true" : "false");
     std::fflush(stdout);
 }
 

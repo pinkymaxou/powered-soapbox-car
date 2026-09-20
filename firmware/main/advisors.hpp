@@ -1,8 +1,11 @@
 // advisors.hpp — HOST decisions derived from the core's telemetry (KartController).
 // DELIBERATELY outside the core: the base controller computes a MOTOR output based
-// on the inputs, nothing else. Vibrating the gamepad (presentation) and cutting
-// the power (system policy) belong to the host — these two PURE advisors
-// (host-compilable) are shared by the ESP (EspController) and the simulation (SimController).
+// on the inputs, nothing else. Vibrating the gamepad is presentation, so it belongs to the
+// host — this PURE advisor (host-compilable) is shared by the ESP (EspController) and the
+// simulation (SimController).
+// The two power-cutoff advisors (prolonged LVC, idle timeout) were REMOVED with the power
+// latch: the kart is switched on and off by its main switch and its e-stop, and the firmware
+// has no way — and no business — cutting its own supply. See doc/electronique.md.
 #pragma once
 
 #include <cmath>
@@ -33,7 +36,7 @@ public:
             cmd.weak = wk;
             cmd.duration_ms = ms;
         };
-        // "hard" fault: LVC or any encoder fault — all force the stop
+        // "hard" fault: any encoder fault — they all force the stop
         // and deserve an emphatic haptic feedback.
         const bool hard_fault = (0 != (t.faults & fb::HARD));
         if (t.armed && !m_armed_prev)                                        // just armed → soft
@@ -58,62 +61,4 @@ private:
     bool    m_estop_prev = false;
     bool    m_hard_prev = false;
     int64_t m_block_us = 0;
-};
-
-// Power cutoff: LVC active without interruption for hw::LVC_POWEROFF_MS →
-// true (the host cuts: board::powerOff on the ESP side). The core signals fb::LVC, that's all.
-class PowerOffAdvisor
-{
-public:
-    bool update(const CtrlTelemetry& t, int64_t now_us)
-    {
-        if (0 == (t.faults & fb::LVC))
-        {
-            m_since_us = 0;
-            return false;
-        }
-        if (0 == m_since_us) m_since_us = now_us;
-        return (now_us - m_since_us) > static_cast<int64_t>(hw::LVC_POWEROFF_MS) * 1000;
-    }
-
-private:
-    int64_t m_since_us = 0;   // start of the uninterrupted LVC period
-};
-
-// Idle cutoff: the kart left DISARMED for idle_off_min minutes powers itself down, so a
-// forgotten kart does not sit there flattening its battery. Armed → the countdown restarts.
-// FIRES ONCE: the host de-asserts POWER_HOLD and that is all we promise. If the power does
-// not actually go away (the hidden FORCE ON switch, or bench USB power), we simply stay alive
-// with the counter parked at 0 rather than retrying — no relay chatter, no surprise second
-// cut minutes later.
-// remainingS() is published in the telemetry so the page can show the countdown; a driver
-// who sees 30 s left knows to arm rather than be cut off mid-adjustment.
-class IdleOffAdvisor
-{
-public:
-    // Returns true on the single tick where the cutoff should be commanded.
-    bool update(bool armed, int minutes, int64_t now_us)
-    {
-        if (minutes <= 0 || armed)          // disabled, or in use → disarm restarts the clock
-        {
-            m_since_us = 0;
-            m_fired = false;
-            m_left_s = -1;
-            return false;
-        }
-        if (0 == m_since_us) m_since_us = now_us;
-        const int64_t limit_us = static_cast<int64_t>(minutes) * 60 * 1000000;
-        const int64_t left_us  = limit_us - (now_us - m_since_us);
-        m_left_s = (left_us > 0) ? static_cast<int>((left_us + 999999) / 1000000) : 0;
-        if (m_fired || left_us > 0) return false;
-        m_fired = true;                     // once only
-        return true;
-    }
-
-    int remainingS() const { return m_left_s; }   // -1 = not counting (armed or disabled)
-
-private:
-    int64_t m_since_us = 0;
-    int     m_left_s = -1;
-    bool    m_fired = false;
 };

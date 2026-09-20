@@ -101,8 +101,8 @@ The scale (center + half-amplitude per axis) is **persisted in NVS** (namespace 
 If the gamepad **disconnects** (out of range, dead battery, unpairing), `connected`
 goes to `false`, **every axis and button reads neutral** (a stick frozen mid-deflection or
 a latched e-stop bit must not outlive its gamepad), and the controller **immediately puts
-both motors into braking mode**. Same if not armed, not calibrated, emergency stop, or
-sensor/LVC fault. On top of the BT-level disconnect there is a **heartbeat**: a link still
+both motors into braking mode**. Same if not armed, not calibrated, gamepad emergency stop,
+or encoder fault. On top of the BT-level disconnect there is a **heartbeat**: a link still
 "connected" but silent for **750 ms** (Wi-Fi/BT coexistence can starve the HID stream for a
 few hundred ms — 250 ms false-tripped mid-run) disarms and brakes without waiting for the
 multi-second Bluetooth supervision timeout.
@@ -117,45 +117,40 @@ multi-second Bluetooth supervision timeout.
 - ⚠️ **Wiring required**: the internal pull-downs **do not survive a reset** (IO_MUX
   registers). During the bootloader (~700 ms), only **EXTERNAL pull-downs** (~10 kΩ) on
   the driver's PWM/DIR inputs guarantee braking — plan for them (or check that the
-  driver module includes them). The **power latch** (`POWER_HOLD`, active low) is
-  deliberately NOT held through a reboot: no capacitor — the logic rail drops, the kart
-  powers off cleanly and is re-primed with START (a hidden FORCE ON switch covers bench
-  work). A reset on a slope therefore means an unpowered driver = **coasting** — flat
-  ground use, as the `coupure_pente*` simulation scenarios quantify.
+  driver module includes them). There is no power latch any more: the kart is held on by a
+  physical main switch, so a reset simply reboots it (~1 s of unpowered driver = **coasting**)
+  instead of powering it off. The **emergency stop** costs the same coasting, and for the same
+  reason — it opens the main relay and drops the whole kart, ESP32 included (see
+  [`../doc/electronique.md`](../doc/electronique.md)). Flat ground use, as the
+  `coupure_pente*` and `arret_urgence_plat` simulation scenarios quantify (~15 m of coasting
+  from full speed on the flat).
 
-## Analog measurements (external ADS1115 ADC)
+## No analog measurements at all
 
-All analog inputs go through an **ADS1115** (16-bit, I²C, PGA) instead of
-the ESP32's internal ADC — **more accurate and linear**, and without the ADC2/Wi-Fi conflict.
-The breakout is wired **piggyback on I²C bus 0** (alongside the left AS5600: distinct
-addresses `0x36` / `0x48`). Dedicated driver: [`ads1115.hpp`](main/ads1115.hpp).
+There is **no ADC on this kart** — no ADS1115, no internal ADC, no voltage divider. The pack
+is always **12 V**, which is the motors' nominal voltage, so there is nothing to cap
+automatically and nothing worth measuring. What went away with it: the low-voltage cutoff
+(LVC), the 12/24 V detection at boot, the automatic `12 V / measured Vbat` PWM cap, the
+battery gauge and chart on the page, and the `LVC` / `NO_VBAT` faults.
 
-- ⚠️ **Power it at 3.3 V** (ESP32-compatible I²C levels) → `AIN_max = 3.3 V`.
-- **A0 = battery voltage** (via the 100k/15k voltage divider), sampled in **continuous
-  mode** (±4.096 V, 125 µV resolution). `board::vbatVolts()` reads the conversion register.
-- **A1 / A2 = reserved** for the future X/Y joystick (single-shot read); **A3 free**.
-- Address set by the ADDR pin (`0x48` GND … `0x4B` SCL) — see `pinout.hpp`.
-
-The driver **degrades gracefully**: if the ADS1115 is absent (not wired), `begin()` detects it
-(I²C probe) and `vbatVolts()` returns **−1 = voltage UNKNOWN** — the controller then skips the
-LVC and the automatic PWM cap (bench use). Never 0: a 0 V reading is a *valid* voltage to the
-caller, and an earlier version returning it made the LVC "see" a flat battery and cut the
-power. A chip that goes silent **mid-run** is tolerated for 10 consecutive failed reads
-(~0.5 s, holding the last good value) before the voltage is declared unknown, and recovers on
-the first good read; its I²C transactions are bounded by the same 2 ms timeout as the
-encoders, so a dead sensor can never stall the 500 Hz loop (`doc/audit-2026-07.md`).
+What remains as a power ceiling: the manual **`duty_cap`** setting. What remains as
+deep-discharge protection: the battery's own. A flat pack is now something the driver
+*feels* — the kart is simply slower, as the `batterie_usee` simulation scenario shows — not
+something the kart reports.
 
 ### Physical joystick (reserved, not implemented)
 
 The design provides for a **physical joystick** as an alternative to the gamepad. For now
-**only Bluetooth is implemented**, but the `input::` interface is neutral and **2 ADS1115
-channels (A1/A2) are reserved** ([`pinout.hpp`](main/pinout.hpp), `namespace pins::ads`).
+**only Bluetooth is implemented**; the `input::` interface stays neutral so one could be added
+behind it, but the two ADS1115 channels that used to be reserved for it went away with the
+converter — a physical joystick would now need an ADC of its own.
 
 ### Wheel encoders
 
 The **2× AS5600** are the whole story — quadrature encoders were once penciled in as a
-fallback, but the magnetic sensors do the job and the reservation is gone. GPIO 21/22/23 and
-the input-only 34/35/36/39 are free.
+fallback, but the magnetic sensors do the job and the reservation is gone. GPIO 13, 21, 22,
+23 and the input-only 34/35/36/39 are free — 13 and 22 were the power latch and the e-stop
+coil sense, both removed with the single-relay wiring.
 
 ## Wireless configuration (SoftAP + WebSocket)
 
@@ -199,8 +194,10 @@ config metadata ("get"), system info ("sysinfo"). After that: "vals" (values
 only) after save/reload, "sysdyn" (uptime/heap/worst-tick) when the tab is shown,
 charts ("hist") every 5 s, and the **persistent event log** ("evlog", System tab):
 every arm, disarm (with the fault mask of that very tick — the answer to "why did it
-stop"), fault raised mid-run, boot and power-off, journaled to the dedicated flash
-partition, surviving reboots and power cuts. Live state at 20 Hz (status badge, bars,
+stop"), fault raised mid-run and boot, journaled to the dedicated flash partition,
+surviving reboots and power cuts. (The two power-off codes are retired with the power latch:
+the firmware cannot cut its own supply any more, so a power loss now leaves no record —
+the next Boot entry is what marks it.) Live state at 20 Hz (status badge, bars,
 I/O dots) + **graduated Chart.js charts** fed by an **in-RAM history**
 on the ESP32 side. ⚠️ **While the kart is armed, everything that writes flash is
 refused** — Save (config), Save & reboot (Wi-Fi), pairing/unpairing, calibration — a
@@ -223,14 +220,13 @@ identify the specific buttons of a gamepad).
 | `control_types.hpp` | **PURE types shared host/target**: `KartConfig`, state/fault enums, `hw::` constants, `ParamDesc` |
 | `config_params.cpp` | **`PARAMS[]` table** (defaults/bounds/help) — PURE, also compiled by the simulation |
 | `config.hpp` / `.cpp` | **NVS** persistence (write-if-changed; every save verb is **refused while armed**) + `KartStatus` telemetry + mutex |
-| `hardware.hpp` / `.cpp` | Low-level hardware (`board::` — Vbat via ADS1115, **2× PWM/DIR**, **2× AS5600** on 2 I²C buses, buttons, LED, latch, e-stop coil sense, boot-time I²C scan) |
-| `ads1115.hpp` / `.cpp` | **ADS1115 driver** (external 16-bit I²C ADC, PGA) — continuous / single-shot modes, 2 ms transaction timeout |
+| `hardware.hpp` / `.cpp` | Low-level hardware (`board::` — **2× PWM/DIR**, **2× AS5600** on 2 I²C buses, LED, boot-time I²C scan). No inputs: nothing is wired to a GPIO but the two sensors, the motors and the strip |
 | `input.hpp` / `.cpp` | **Gamepad input** (neutral interface) + **mandatory calibration** (NVS); calibration/pairing refused while armed, collection forces a disarm |
 | `input_bp32.c` | **Bluepad32/BTstack backend** (custom platform + BT loop task) |
 | `controller_core.hpp` / `.cpp` | **Control CORE (`KartController`, PURE, host-compilable)**: mixing, rollover protection, arming, faults — I/O through injected callbacks (`setCallbacks`), identical on ESP and in the simulator |
 | `controller.hpp` / `.cpp` | `EspController`: wires the callbacks onto `board::`/`input::`, host advisors (rumble, power-off), event-log edges, loop-timing telemetry, 500 Hz task |
 | `mixer.hpp` | **Pluggable stick→motor mixing** (abstract `Mixer`): linear / expo / expo+speed-soft — safety limits stay outside the mixers |
-| `advisors.hpp` | **Host decisions** from telemetry (PURE, shared with the sim): rumble, LVC power-off, idle power-off |
+| `advisors.hpp` | **Host decision** from telemetry (PURE, shared with the sim): gamepad rumble |
 | `evlog.hpp` / `.cpp` | **Persistent event log**: RAM ring pushed by the control task, drained to the `evlog` partition by the LED task **only while disarmed** |
 | `pid.hpp` | Reusable **PID** controller with **anti-windup** |
 | `ringbuffer.hpp` | Header-only ring buffer (history series) |
@@ -248,7 +244,7 @@ with internal resistance, simulated sensors, slope, **rollover criterion for 3 O
 (`VehicleParams::wheels` — the abandoned tricycle is kept so the scenarios can still show why)
 through **extreme and realistic scenarios** (`test_host/sim/scenarios.hpp`): full turn
 at full speed (with AND without rollover protection — the counter-test tips over), slalom, erratic
-driving, stick braking, gamepad loss (heartbeat), encoder failures, LVC, descent…
+driving, stick braking, gamepad loss (heartbeat), encoder failures, e-stop coasting, descent…
 plus a **parameter sweep** (`turn_hi × turn_full_ms × speed_limit_ms`).
 
 - **Automated tests**: `test_host/run_tests.sh` (run by CI). CSV trace:
@@ -279,34 +275,34 @@ Priorities / cores / stacks: [`main/rtos.hpp`](main/rtos.hpp) · [`../doc/firmwa
 4. Per wheel: **braking PID** (brings back to 0 when the command is zero, can be disabled:
    `brk_pid_enable` → dynamic-braking fallback) + **speed-limiter
    PID** (caps the vehicle speed at `speed_limit_ms`, in m/s; can be disabled:
-   `vlim_enable`), output **capped**: **automatic 12 V/measured-Vbat**
-   cap (12 V motors, 6–30 V driver: 12 V battery → ~100%, 24 V → ~50%)
-   AND **manual** cap `duty_cap` — the more restrictive one wins. Without an ADS1115 (Vbat unknown): manual only.
+   `vlim_enable`), output **capped** by the manual `duty_cap` — the single power ceiling now
+   that nothing measures the battery (the pack is always 12 V, the motors' own nominal).
 5. **Independent PWM + DIR** to the driver's 2 channels.
 
 `can_drive` requires: gamepad **connected**, **calibrated**, **armed**, no emergency stop,
 no fault. Otherwise → **braking of both wheels** (the **default** state, from boot). The
 web page shows a **banner clearly listing every blocking reason** (disconnected, not
-armed, not calibrated, e-stop, LVC, sensor fault).
+armed, not calibrated, gamepad e-stop, sensor fault).
 
-Safety features: **arming** by a ~1 s press on START — **physical button OR the gamepad's
-START/Options button** (centered + connected gamepad required; starts **disarmed**),
+Safety features: **arming** by a ~1 s press on the gamepad's **START/Options button** — the
+only arming input there is, now that the board has no GPIO inputs left (centered stick +
+connected, calibrated gamepad required; starts **disarmed**),
 **any fault forces disarming** (you must rearm once it is resolved), **auto disarm**
-after inactivity, **emergency stop** (B button → immediate braking), **low-voltage cutoff
-(LVC)** with hysteresis (+ latch cutoff), **thresholds hard-coded for the 12 V or
-24 V battery detected at startup** (voltage stable 3 s, type frozen until restart) — **disabled if the voltage sensor is
-absent** (Vbat < 0 ⇒ we rely on the BMS, useful on the bench without an ADS1115), **encoder
+after inactivity, **gamepad emergency stop** (B button → immediate braking), **encoder
 sanity** — **stalled** wheel (PWM without rotation), **reversed** direction (wheel measured
 opposite to a clear command — OPTIONAL via `enc_rev_chk`, default on: it can false-trip when
 plugging-braking on a downhill, and an owner who verifies the rpm signs at commissioning may
 prefer to disable it; the stuck and aberrant nets remain) and **aberrant** measurement
 (physically impossible speed) ⇒ **total stop latched until restart** (a lying sensor
 would make active (PID) braking and the limiter dangerous), **gamepad heartbeat 750 ms**,
-**2 s watchdog with PANIC**, **e-stop coil sense** (GPIO22, always on —
-no software bypass; the mushroom becomes a blocking fault with immediate disarm and braking, even against a welded relay contact; bench without the opto: tie GPIO22 to GND), **idle
-power-off** (`idle_off_min`: a kart left disarmed powers itself down, countdown on the
-Dashboard), **automatically capped PWM** (12 V/measured Vbat), and the **persistent event
-log** so a disarm that nobody saw still has its cause on record.
+**2 s watchdog with PANIC**, and the **persistent event log** so a disarm that nobody saw
+still has its cause on record.
+
+The **hardware emergency stop is not in that list, by construction**: the mushroom sits in
+the main relay's coil loop and cuts the ESP32 along with the motors, so the firmware never
+sees it, reports nothing and brakes nothing — the kart coasts (~15 m from full speed on the
+flat, measured in simulation). Power returns on the main switch and the kart boots
+**disarmed**, which is what the old "re-arm after an e-stop" rule enforced in software.
 
 The web page's **Dashboard** tab lists **all active conditions** simultaneously
 (the `faults` mask, bits named `fb::` in `control_types.hpp`), with explanation and remedy —
@@ -366,10 +362,8 @@ Web parameters: **`turn_gain`**, **`turn_full_ms`**, **`turn_alat_vmax`**, **`tu
   needs it). Redo this check after ANY motor/sensor rework; it is what lets you disable the
   runtime reversed-encoder watchdog (`enc_rev_chk`) if its downhill-plugging false trip
   bothers you.
-- **Battery divider**: the ratio is **fixed by the soldered resistors** — constants
-  `hw::VBAT_R_TOP` / `VBAT_R_BOTTOM` in `control_types.hpp` (100k/15k for a 12 V pack).
-  Swap the resistors ⇒ edit the two constants and reflash; there is **no web parameter**
-  for it, a wrong value would silently drag the LVC thresholds along.
+- **Battery**: nothing to set up — always 12 V, never measured. Charge it on a schedule;
+  the kart will not warn you.
 - **Gamepad**: pair (Gamepad tab) then **calibrate** — mandatory to drive.
 - **Web settings**: `speed_limit_ms` (m/s), `duty_cap` (manual PWM cap), `turn_gain` /
   `turn_alat_vmax` (rollover protection), `mix_type` (1 or 2 for a child driver). Start

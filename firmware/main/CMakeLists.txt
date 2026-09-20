@@ -3,7 +3,6 @@ idf_component_register(
         "main.cpp"
         "controller.cpp"
         "controller_core.cpp"
-        "ads1115.cpp"
         "evlog.cpp"
         "hardware.cpp"
         "input.cpp"

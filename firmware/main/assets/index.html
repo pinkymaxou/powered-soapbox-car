@@ -25,8 +25,6 @@
   <canvas id="spdchart" width="520" height="90"></canvas>
   <div class="chart-title">⏱️ Worst control tick (ms) — 10 min · budget 2 ms</div>
   <canvas id="loopchart" width="520" height="90"></canvas>
-  <div class="chart-title" id="batttitle">🔋 Battery — 30 min</div>
-  <canvas id="battchart" width="520" height="90"></canvas>
   <div id="bars"></div>
   <div class="status" id="status">Connecting…</div>
   <div class="row">
@@ -42,7 +40,6 @@
  </section>
 
  <section id="faults" class="panel">
-  <div class="idleoff" id="idleoff" hidden></div>
   <div class="chart-title">🚨 Currently active faults</div>
   <div class="hudcard">
   <svg id="faultdiag" viewBox="0 0 300 392" role="img" aria-label="Fault location on the vehicle (top view)">
@@ -52,13 +49,10 @@
    <line class="fork" x1="150" y1="38" x2="150" y2="54"/>
    <!-- chassis deck: nose tapers to the caster, square at the rear -->
    <path class="body" d="M124 62 Q150 46 176 62 Q214 90 214 126 V300 Q214 344 188 344 H112 Q86 344 86 300 V126 Q86 90 124 62 Z"/>
-   <!-- 12 V battery in the nose, over the caster (counterweight) -->
-   <g class="fz" id="fz-batt">
-    <title>Measured pack voltage — 15 s sliding median</title>
-    <rect class="zsh" x="118" y="68" width="64" height="32" rx="6"/>
-    <text class="zlab" id="fd-vbat" x="150" y="85" text-anchor="middle">— V</text>
-    <text class="zsub" id="fd-batttype" x="150" y="96" text-anchor="middle">detecting…</text>
-   </g>
+   <!-- 12 V battery in the nose, over the caster (counterweight) — not measured:
+        nothing to report here, so it is drawn as plain structure, not as a fault zone -->
+   <rect class="zsh" x="118" y="68" width="64" height="32" rx="6"/>
+   <text class="zsub" x="150" y="88" text-anchor="middle">12 V pack</text>
    <!-- live readouts (from status): per-wheel encoder rpm + final vehicle speed -->
    <text class="ctxlab" x="150" y="126" text-anchor="middle">vehicle speed</text>
    <g><title>Final vehicle speed — gear ratio applied (m/s)</title><text class="fdms"  id="fd-ms"   x="150" y="145" text-anchor="middle">— m/s</text></g>
@@ -168,7 +162,6 @@
   <p class="note">
    <b>Moving rainbow</b> = armed &amp; ready (driving allowed) ·
    <b>yellow</b> = healthy but disarmed (pulses while the START hold is in progress) ·
-   <b>orange</b> = low battery (below the warn threshold of the detected pack) ·
    <b>blinking red</b> = fault stop (2 s rapid burst, then 1 Hz until cleared — never solid) ·
    <b>blue</b> = gamepad calibration in progress.
   </p>
@@ -301,98 +294,96 @@
    <tr><td>Wheel hub</td><td>direct drive → 1</td><td>1.00</td></tr>
   </table>
 
-  <div class="dochead">🔋 Battery measurement <span class="docsub">— the divider bridge into the ADS1115</span></div>
-  <p class="note">The pack sits far above anything an ADC can swallow, so a <b>resistor divider</b>
-   scales it down onto <b>A0</b> of the external ADS1115. That converter is used instead of the
-   ESP32's own ADC because it is 16-bit, linear, and — decisively — because ADC2 is unusable while
-   Wi-Fi is running.</p>
+  <div class="dochead">⚡ Power <span class="docsub">— one relay, the e-stop, and a diode that earns its keep</span></div>
+  <p class="note">The whole kart hangs off <b>one relay</b>. Its coil is fed through the
+   <b>main switch</b> and then through the <b>emergency-stop mushroom (NC)</b>; the contact
+   carries everything — the 5 V buck that feeds the ESP32 and the LED strip, and the motor
+   driver's VB+. Open either one and the coil drops: motors, brain, lights, all of it, in the
+   relay's own 10–20 ms.</p>
 
-  <svg class="gears" viewBox="0 0 340 190" role="img"
-       aria-label="Voltage divider: 100 kilohm from battery positive to the A0 node, 15 kilohm from that node to switched ground, decoupling capacitor on the node, feeding ADS1115 input A0">
-   <text x="70" y="14" text-anchor="middle">Vbat +</text>
-   <circle class="node" cx="70" cy="22" r="3"/>
-   <path class="wire" d="M70 22 V44 M70 80 V126 M70 162 V172 M70 110 H215 M140 110 V132 M140 138 V152"/>
-   <rect class="body" x="58" y="44" width="24" height="36" rx="2"/>
-   <rect class="body" x="58" y="126" width="24" height="36" rx="2"/>
-   <circle class="node" cx="70" cy="110" r="3.5"/>
-   <path class="wire" d="M131 132 H149 M131 138 H149"/>
-   <path class="wire" d="M60 172 H80 M64 176 H76 M67.5 180 H72.5"/>
-   <path class="wire" d="M130 152 H150 M134 156 H146 M137.5 160 H142.5"/>
-   <rect class="chip" x="215" y="82" width="119" height="56" rx="6"/>
-   <text x="90" y="66" text-anchor="start">R1 100 kΩ</text>
-   <text x="90" y="148" text-anchor="start">R2 15 kΩ</text>
-   <text class="dim" x="152" y="140" text-anchor="start">100 nF</text>
-   <text class="dim" x="100" y="104" text-anchor="middle">V_adc</text>
-   <text class="dim" x="86" y="178" text-anchor="start">GND — cut by the latch</text>
-   <!-- Live readings, fed by showStatus() at 20 Hz. -->
-   <text class="live" id="dvVbat" x="110" y="26" text-anchor="start">—</text>
-   <text class="live" id="dvVadc" x="172" y="104" text-anchor="middle">—</text>
-   <text x="274" y="100" text-anchor="middle">ADS1115</text>
-   <text class="dim" x="274" y="116" text-anchor="middle">A0 · ±4.096 V · 16 bit</text>
-   <text class="dim" x="274" y="130" text-anchor="middle">I²C bus 0 · 0x48</text>
+  <svg class="gears" viewBox="0 0 360 200" role="img"
+       aria-label="Power chain: the battery positive goes through a 40 amp fuse to a junction; one branch runs through the main switch and the normally-closed emergency-stop mushroom to the relay coil, which carries a flyback diode across it; the other branch is the relay contact, which feeds the whole kart">
+   <text x="14" y="26" text-anchor="start">12 V +</text>
+   <circle class="node" cx="20" cy="34" r="3"/>
+   <path class="wire" d="M20 34 H52"/>
+   <rect class="body" x="52" y="24" width="34" height="20" rx="2"/>
+   <text class="dim" x="69" y="18" text-anchor="middle">40 A</text>
+   <path class="wire" d="M86 34 H120"/>
+   <circle class="node" cx="120" cy="34" r="3.5"/>
+   <!-- coil branch: main switch → e-stop (NC) → coil -->
+   <path class="wire" d="M120 34 H144 M172 34 H206 M236 34 H255"/>
+   <path class="wire" d="M144 34 L168 22"/>
+   <circle class="node" cx="144" cy="34" r="2.5"/><circle class="node" cx="172" cy="34" r="2.5"/>
+   <text class="dim" x="158" y="50" text-anchor="middle">main switch</text>
+   <circle class="node" cx="206" cy="34" r="2.5"/><circle class="node" cx="236" cy="34" r="2.5"/>
+   <path class="wire" d="M206 34 V28 M236 34 V28 M204 28 H238 M221 28 V16"/>
+   <rect class="body" x="211" y="8" width="20" height="7" rx="3.5"/>
+   <text class="dim" x="221" y="50" text-anchor="middle">e-stop (NC)</text>
+   <rect class="body" x="255" y="20" width="60" height="28" rx="3"/>
+   <text x="285" y="38" text-anchor="middle">COIL</text>
+   <path class="wire" d="M315 34 H330 V72 M245 34 V60 H330"/>
+   <circle class="node" cx="245" cy="34" r="2.5"/>
+   <path class="wire" d="M296 54 L296 66 L282 60 Z M280 53 V67"/>
+   <text class="dim" x="248" y="76" text-anchor="start">1N4007 — cathode to +</text>
+   <path class="wire" d="M322 72 H338 M325 77 H335 M328 82 H332"/>
+   <!-- contact branch: the 40 A the coil switches -->
+   <path class="wire" d="M120 34 V130 M158 130 H196"/>
+   <circle class="node" cx="120" cy="130" r="2.5"/><circle class="node" cx="158" cy="130" r="2.5"/>
+   <path class="wire" d="M120 130 L152 118"/>
+   <path class="wire" stroke-dasharray="4 4" d="M258 48 L150 112"/>
+   <text class="dim" x="134" y="152" text-anchor="middle">contact 30→87</text>
+   <rect class="chip" x="196" y="108" width="152" height="46" rx="6"/>
+   <text x="272" y="126" text-anchor="middle">THE WHOLE KART</text>
+   <text class="dim" x="272" y="140" text-anchor="middle">buck 5 V → ESP32 · WS2812</text>
+   <text class="dim" x="272" y="152" text-anchor="middle">motor driver VB+</text>
   </svg>
 
-  <p class="note">The green figures are <b>live</b>, from what the converter is actually reading (15 s sliding
-   median, same value as the Dashboard diagram) — <b>V_adc</b> at the node and the pack voltage rebuilt from it. They read
-   <b>—</b> when the ADS1115 is not detected.</p>
+  <p class="note"><b>The diode is there for the coil, and it protects the whole kart by accident.</b>
+   Its job is flyback: when the coil is de-energized it would otherwise kick a few hundred volts
+   across whatever just opened, and that arc eats switch contacts. Cathode to <b>+</b>, it does
+   nothing at all in normal operation. Connect the battery <b>backwards</b>, though, and that same
+   diode is suddenly forward-biased across the coil: it shorts it, so <b>the relay never pulls
+   in</b> — and because <i>everything</i> hangs off that one contact, <b>no current reaches the
+   system at all</b>. Not the motor driver (no reverse protection of its own, destroyed instantly
+   by reversed VB+), not the buck, not the ESP32, not the sensors. Afterwards: fix the polarity,
+   <b>replace the diode and check the 40 A fuse</b> — the two race each other during the event, and
+   a relay that no longer clicks is a dead diode, not a dead relay.</p>
 
-  <p class="note">The divider gives <b>V_adc = Vbat × 15 / (100 + 15) = Vbat / 7.667</b>, and the
-   firmware goes the other way: <b>Vbat = V_adc × 7.667</b>. That ratio is <b>not</b> a settable
-   parameter — it is <code>hw::VBAT_DIV_RATIO</code>, computed from the two resistor values in
-   <code>control_types.hpp</code>, because it is decided by what is soldered on the board and not
-   by taste. Change the resistors, change those two constants, reflash.</p>
+  <p class="note"><b>The firmware has no say in any of this.</b> There is no power latch and no
+   coil sense: the ESP32 cannot hold its own supply and cannot cut it. Press the mushroom and the
+   brain dies with the motors — which is why there is no "emergency stop engaged" fault on this
+   page any more, and no self power-off after an idle period. The kart is switched off the way a
+   lawnmower is: by hand.</p>
 
-  <table class="doctbl">
-   <tr><th>Property</th><th>Value</th><th>Where it comes from</th></tr>
-   <tr><td>Divider</td><td>100 kΩ / 15 kΩ</td><td><code>hw::VBAT_R_TOP</code> / <code>hw::VBAT_R_BOTTOM</code></td></tr>
-   <tr><td>Ratio</td><td>7.667</td><td>(100 + 15) ÷ 15, computed at compile time</td></tr>
-   <tr><td>ADC range</td><td>±4.096 V, 128 SPS continuous</td><td>PGA setting in <code>hardware.cpp</code></td></tr>
-   <tr><td>Resolution</td><td>0.96 mV of battery</td><td>4.096 V ÷ 32768 = 125 µV, × 7.667</td></tr>
-   <tr><td>Ceiling</td><td>≈ 25.3 V</td><td>A0 must stay under the 3.3 V rail</td></tr>
-   <tr><td>Leakage</td><td>≈ 0.11 mA at 12.6 V</td><td>and <b>zero when off</b> — the divider returns through the latch</td></tr>
-  </table>
+  <p class="note"><b>No buttons either.</b> The arming button on GPIO16 is gone with the rest of
+   the GPIO inputs: arming is a ~1 s hold on the <b>gamepad's START/Options</b> button, stick
+   centred — which is what the driver had in hand anyway, and which nobody standing beside the
+   kart can press. The ESP32 now uses <b>no input pin at all</b>: two I²C buses in, four motor
+   pins and one LED data line out.</p>
 
-  <p class="note"><b>Change the pack, change the resistors.</b> 100 k/15 k suits a 12 V pack
-   (1.93 V at A0 when charging at 14.8 V). A 24 V pack would drive A0 to 3.8 V — past the
-   converter's absolute maximum — so it needs 100 k/12 k (ratio 9.33); a 12 V pack can also use
-   100 k/27 k (ratio 4.70) to use more of the ADC range.</p>
-
-  <p class="note"><b>Why it is only read at 20 Hz.</b> The ADS1115 shares I²C bus 0 with the
-   <b>left</b> wheel's AS5600. Polling it on every 500 Hz control tick stretched the interval
-   between two encoder reads just enough to alias the left wheel's speed — measured stdev fell
-   from 1313 to 117 once the battery moved to its own slow cadence. Vbat changes over seconds;
-   the encoder does not.</p>
-
-  <p class="note"><b>What the firmware does with it.</b> The pack type is detected at boot — the
-   voltage must hold steady within 0.5 V for 3 s, then it is classed 12 V or 24 V on an 18 V
-   threshold and <b>frozen until reboot</b>. Thresholds are hardcoded per type rather than left as
-   parameters, so they cannot be set inconsistently: <b>12 V</b> → warn 11.5 / cut 10.5 / rearm
-   12.0 V; <b>24 V</b> → 23.0 / 21.0 / 24.0 V. The cut is debounced (~0.5 s) so a momentary sag
-   under load does not stop the kart, and coming back up requires a deliberate rearm on START.</p>
+  <p class="note"><b>Always 12 V, never measured.</b> One 12 V motorcycle battery, which is also
+   the motors' nominal voltage — so there is nothing to scale down and nothing to cap. The ADS1115
+   converter, the 100 k/15 k divider, the low-voltage cutoff and the 12/24 V detection are all
+   gone; the remaining power ceiling is the single <code>duty_cap</code> setting. Watch the charge
+   on the battery's own indicator, off the kart.</p>
 
   <div class="chart-title">📌 ESP32 pinout</div>
   <table class="pins">
    <tr><th>GPIO</th><th>Function</th><th>Direction</th></tr>
    <tr><td>25 / 26</td><td>PWM / DIR rear-left motor</td><td>output</td></tr>
    <tr><td>32 / 33</td><td>PWM / DIR rear-right motor</td><td>output</td></tr>
-   <tr><td>18 / 19</td><td>I²C bus 0 (SDA/SCL) — AS5600 left wheel (0x36) + ADS1115 (0x48)</td><td>I/O</td></tr>
+   <tr><td>18 / 19</td><td>I²C bus 0 (SDA/SCL) — AS5600 left wheel (0x36)</td><td>I/O</td></tr>
    <tr><td>27 / 14</td><td>I²C bus 1 (SDA/SCL) — AS5600 right wheel (0x36)</td><td>I/O</td></tr>
-   <tr><td>16</td><td>Arming button (START)</td><td>input (pull-up)</td></tr>
-   <tr><td>13</td><td>POWER_HOLD (power latch, active low)</td><td>output</td></tr>
-   <tr><td>22</td><td>E-stop sense (opto on the 40 A relay COIL, after the mushroom; active LOW = coil energized; 50 ms debounce; ALWAYS active — bench without the opto: tie to GND)</td><td>input (pull-up)</td></tr>
    <tr><td>4</td><td>WS2812B LED strip (data)</td><td>output</td></tr>
    <tr><td>2</td><td>Status LED (onboard)</td><td>output</td></tr>
-   <tr><th colspan="3">External ADS1115 ADC (I²C bus 0, 3.3 V)</th></tr>
-   <tr><td>A0</td><td>Battery voltage (100k/15k divider) — continuous</td><td>ADC input</td></tr>
-   <tr><td>A1 / A2</td><td>Joystick X / Y — FUTURE (not wired)</td><td>ADC inputs</td></tr>
    <tr><th colspan="3">Free</th></tr>
-   <tr><td>21 / 23</td><td>unused</td><td>—</td></tr>
+   <tr><td>13 / 16 / 21 / 22 / 23</td><td>unused <small>(13 = power latch, 22 = e-stop sense, 16 = arming button — all three gone)</small></td><td>—</td></tr>
    <tr><td>34 / 35 / 36 / 39</td><td>unused</td><td>input-only, no internal pulls</td></tr>
   </table>
   <p class="note">Control = <b>Bluetooth gamepad</b> (Gamepad tab). Reversed tricycle: 2 driven wheels at the REAR (6″ behind the bench) + 1 free 10″ caster at the front centre. a_tip ≈ 0.53 g — the turn limiter is what keeps it upright, never disable it with a child aboard.<br>
   Disconnected or uncalibrated gamepad → <b>braking / refuses to drive</b>. Emergency stop = mushroom
-  opening the 40 A motor relay (its coil runs through the button); the logic stays alive, reports the
-  fault, and a deliberate re-arm on START is required.</p>
+  in the main relay's coil loop: it cuts the whole kart, brain included, so the firmware never sees it.
+  Power comes back on the main switch, and the kart always wakes up <b>disarmed</b>.</p>
  </section>
 
  <section id="sys" class="panel" hidden>
@@ -415,9 +406,11 @@
 <script>
 // Mirror the C++ State / Fault enums (config.hpp) — index = value.
 const STATE={LOCKOUT:0,CALIBRATE:1,RUN:2,FAULT:3};
-const FAULT={NONE:0,ESTOP:1,LVC:2,NOT_CALIBRATED:3,ENCODER:4,ENCODER_DIR:5,ENCODER_MAD:6,ENCODER_ABSENT:7};
+const FAULT={NONE:0,ESTOP:1,NOT_CALIBRATED:3,ENCODER:4,ENCODER_DIR:5,ENCODER_MAD:6,ENCODER_ABSENT:7};
 const ST=["IDLE","CALIBRATION","ARMED","FAULT"];                       // labels per STATE
-const FA=["—","E-STOP","LOW BATTERY","NOT CALIBRATED","ENCODER STUCK","ENCODER REVERSED","ENCODER ERRATIC","ENCODER ABSENT","MAGNET OUT OF RANGE","E-STOP (MOTOR RELAY)"];  // labels per FAULT — keep index 9 in step with Fault::MotorPower
+// Labels per FAULT. Index 2 (was LOW BATTERY) is retired with the voltage sensor: the slot
+// stays so every other label keeps its number, matching Fault:: on the firmware side.
+const FA=["—","E-STOP","—","NOT CALIBRATED","ENCODER STUCK","ENCODER REVERSED","ENCODER ERRATIC","ENCODER ABSENT","MAGNET OUT OF RANGE"];
 // ── BINARY protocol (Protocol Buffers) ──
 // Descriptor = exact mirror of firmware/main/proto/kart.proto (same names, same numbers).
 // Decoded by the protobuf.js runtime (/pb.js, embedded). The frames are ~3× smaller
@@ -428,8 +421,7 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
  Req:{fields:{type:{type:"string",id:1},ssid:{type:"string",id:2},pass:{type:"string",id:3},
       enabled:{type:"bool",id:4},set:{rule:"repeated",type:"ParamVal",id:5}}},
  Status:{fields:{state:{type:"int32",id:1},fault:{type:"int32",id:2},faults:{type:"uint32",id:3},
-  vbat:{type:"float",id:4},batt_type:{type:"int32",id:5},batt_lo:{type:"float",id:6},
-  batt_hi:{type:"float",id:7},speed_ms:{type:"float",id:8},rpm_l:{type:"float",id:9},
+  speed_ms:{type:"float",id:8},rpm_l:{type:"float",id:9},
   rpm_r:{type:"float",id:10},fwd:{type:"float",id:11},turn:{type:"float",id:12},
   out_l:{type:"float",id:13},out_r:{type:"float",id:14},brake_mode:{type:"int32",id:15},
   arming:{type:"bool",id:16},btn_start:{type:"bool",id:17},pad_conn:{type:"bool",id:18},
@@ -437,7 +429,7 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
   pad_cx:{type:"float",id:22},pad_cy:{type:"float",id:23},pad_zl:{type:"float",id:24},
   pad_zr:{type:"float",id:25},pad_rx2:{type:"float",id:26},pad_ry2:{type:"float",id:27},
   pad_btns:{type:"uint32",id:28},pad_age_ms:{type:"int32",id:29},
-  idle_off_s:{type:"int32",id:30}}},
+  }},
  ParamMeta:{oneofs:{value:{oneof:["bval","ival","fval"]},minv:{oneof:["bmin","imin","fmin"]},
    maxv:{oneof:["bmax","imax","fmax"]},defv:{oneof:["bdef","idef","fdef"]}},
   fields:{name:{type:"string",id:1},desc:{type:"string",id:2},cat:{type:"string",id:3},help:{type:"string",id:4},
@@ -447,9 +439,9 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
    bdef:{type:"bool",id:17},idef:{type:"int32",id:18},fdef:{type:"float",id:19}}},
  Config:{fields:{params:{rule:"repeated",type:"ParamMeta",id:1}}},
  Vals:{fields:{params:{rule:"repeated",type:"ParamVal",id:1}}},
- Hist:{fields:{dt_fast:{type:"uint32",id:1},dt_spd:{type:"uint32",id:2},dt_batt:{type:"uint32",id:3},
+ Hist:{fields:{dt_fast:{type:"uint32",id:1},dt_spd:{type:"uint32",id:2},
   accel:{type:"bytes",id:4},pwml:{type:"bytes",id:5},pwmr:{type:"bytes",id:6},
-  rpml:{type:"bytes",id:7},rpmr:{type:"bytes",id:8},spd:{type:"bytes",id:9},batt:{type:"bytes",id:10},
+  rpml:{type:"bytes",id:7},rpmr:{type:"bytes",id:8},spd:{type:"bytes",id:9},
   loop:{type:"bytes",id:11}}},
  Pad:{fields:{conn:{type:"bool",id:1},name:{type:"string",id:2},batt:{type:"int32",id:3},
   calibrated:{type:"bool",id:4},calstate:{type:"int32",id:5},pairing:{type:"bool",id:6}}},
@@ -487,7 +479,7 @@ function pbDecode(buf){
  const which=env.body; if(!which)return null;
  const m=PB_MSG.toObject(env,{defaults:true,longs:Number})[which];
  m.type=which;
- if(which==='hist')for(const k of['accel','pwml','pwmr','rpml','rpmr','spd','batt'])
+ if(which==='hist')for(const k of['accel','pwml','pwmr','rpml','rpmr','spd'])
    m[k]=m[k]?Array.from(m[k]):[];
  if(which==='config'||which==='vals')m.params=m.params||[];
  if(which==='evlog')m.ev=m.ev||[];
@@ -501,8 +493,8 @@ let useEnc=1;   // use_encoders (from config): when 0, encoder-sensor faults are
 // DIPS under load — outliers, which a mean would smear across the whole window while the
 // median simply ignores them. Windows are in seconds of wall clock, not in samples, so a
 // throttled background tab widens nothing.
-const MED_RPM_S=5, MED_VBAT_S=15;
-let med={l:[],r:[],vbat:[]};
+const MED_RPM_S=5;
+let med={l:[],r:[]};
 function medianWindow(buf,v,now,win_s){
  buf.push({t:now,v:v});
  const cut=now-win_s*1000;
@@ -511,22 +503,21 @@ function medianWindow(buf,v,now,win_s){
  if(!n)return null;
  return (n&1)?a[(n-1)>>1]:(a[n/2-1]+a[n/2])/2;
 }
-let battLow=0, battFull=1, battType=-1;   // scale received from the FIRMWARE (batt_lo/batt_hi of the status)
 
 // Tabs
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
  t.classList.add('active');
  document.querySelectorAll('.panel').forEach(p=>p.hidden=(p.id!==t.dataset.tab));
- if(t.dataset.tab==='dash'){[chMain,chSpd,chBatt].forEach(c=>{if(c){c.resize();c.update('none');}});}  // was hidden → size now
+ if(t.dataset.tab==='dash'){[chMain,chSpd].forEach(c=>{if(c){c.resize();c.update('none');}});}  // was hidden → size now
  if(t.dataset.tab==='wifi') loadWifi();
  if(t.dataset.tab==='sys') loadSys();
  if(t.dataset.tab==='pad') loadPad();
 });
 
 // ── Charts (Chart.js, embedded/served by the ESP32; data kept in RAM) ──
-// Main: accel + PWM in % over 10 min. Vehicle speed: m/s (0–5) over 1 min. Battery: V over 30 min.
-let chMain, chSpd, chBatt, chLoop;
+// Main: accel + PWM in % over 10 min. Vehicle speed: m/s (0–5) over 1 min.
+let chMain, chSpd, chLoop;
 const dset=(label,color,yID)=>({label,borderColor:color,backgroundColor:color,data:[],borderWidth:1.5,fill:false,tension:.15,yAxisID:yID||'y'});
 function mkChart(id,datasets,ymin,ymax,unit,dec,aspect,legend,y2){
  const scales={
@@ -548,7 +539,6 @@ function initCharts(){
  chMain=mkChart('chart',[dset('Forward %','#3cf'),dset('PWM L','#ff5252'),dset('PWM R','#3ddc84'),
    dset('RPM L','#ff9a9a','y2'),dset('RPM R','#9ff0be','y2')],0,100,'%',0,2.9,true,{max:1100,unit:' rpm'});
  chSpd =mkChart('spdchart',[dset('Speed','#f6f')],0,5,' m/s',1,5.8,false);
- chBatt=mkChart('battchart',[dset('Battery','#3d9')],battLow,battFull,' V',1,5.8,false);
  // Worst tick per 5 s slot. The 2 ms budget is the reference: above it the 500 Hz loop
  // really did run slower, which is how a sensor that stops answering shows itself.
  chLoop=mkChart('loopchart',[dset('Worst tick','#f5a')],0,6,' ms',1,5.8,false);
@@ -566,14 +556,12 @@ function applyHist(m){
  if(Array.isArray(m.rpmr)) setSeries(chMain,4,m.rpmr.map(v=>v*5));   // ÷5 encoded → rpm (right axis)
  chMain.update('none');
  if(Array.isArray(m.spd)){ setSeries(chSpd,0,m.spd.map(v=>v/10)); chSpd.update('none'); }   // ×10 → m/s
- if(Array.isArray(m.batt)){ setSeries(chBatt,0,m.batt.map(v=>v/10)); chBatt.update('none'); } // ×10 → V
  if(Array.isArray(m.loop)){ setSeries(chLoop,0,m.loop.map(v=>v*50/1000)); chLoop.update('none'); } // 50 µs → ms
 }
 
 const OUI=v=>v?'YES':'no';
 const clamp01=v=>Math.max(0,Math.min(100,v));
 const dirTxt=v=>v>0.001?'▲ forward':(v<-0.001?'▼ reverse':'– stop');
-const battPct=v=>clamp01((v-battLow)/(battFull-battLow)*100);   // depending on the number of cells
 
 // Bars: id, label, color, value 0–100, displayed text
 // bip = bipolar bar (center = 0, right = +, left = −); sv = signed value -100..100.
@@ -585,7 +573,6 @@ const BARS=[
  {id:'spdv', label:'Vehicle speed', color:'#f6f', bip:1, sv:s=>s.speed_ms/5*100, t:s=>s.speed_ms.toFixed(2)+' m/s '+dirTxt(s.speed_ms)},
  {id:'spdl', label:'Left encoder (rpm)', tip:'Raw encoder-shaft speed — no gear ratio applied', color:'#ff9a9a', bip:1, sv:s=>s.rpm_l/1100*100, t:s=>s.rpm_l.toFixed(0)+' rpm '+dirTxt(s.rpm_l)},
  {id:'spdr', label:'Right encoder (rpm)', tip:'Raw encoder-shaft speed — no gear ratio applied', color:'#9ff0be', bip:1, sv:s=>s.rpm_r/1100*100, t:s=>s.rpm_r.toFixed(0)+' rpm '+dirTxt(s.rpm_r)},
- {id:'batt', label:'Battery',       color:'#3d9',        v:s=>battPct(s.vbat),    t:s=>s.vbat.toFixed(2)+' V'},
 ];
 function buildBars(){
  document.getElementById('bars').innerHTML=BARS.map(b=>
@@ -685,20 +672,6 @@ function drawDpad(s){
  seg(dp&4,cx+off,cy);      // right
  seg(dp&8,cx-off,cy);      // left
 }
-// Divider-bridge schematic (Documentation tab), fed live from the status stream.
-// MIRROR of hw::VBAT_R_TOP / hw::VBAT_R_BOTTOM in control_types.hpp — the kart sends the
-// rebuilt battery voltage, so V_adc has to be divided back out here. Keep the two in step.
-const VBAT_R_TOP=100000, VBAT_R_BOTTOM=15000;
-const VBAT_DIV_RATIO=(VBAT_R_TOP+VBAT_R_BOTTOM)/VBAT_R_BOTTOM;
-const FB_NO_VBAT=1<<5;   // fb::NO_VBAT — ADS1115 not detected
-// v = the 15 s median pack voltage, or null when the ADS1115 is not answering.
-function updateDivider(v){
- const vb=document.getElementById('dvVbat'); if(!vb)return;
- const va=document.getElementById('dvVadc');
- if(null===v){vb.textContent='—';va.textContent='—';return;}
- vb.textContent=v.toFixed(1)+' V';
- va.textContent=(v/VBAT_DIV_RATIO).toFixed(3)+' V';
-}
 function showStatus(s){
  const st=ST[s.state]||s.state;
  const hs=document.getElementById('hdrstate'); hs.textContent=st; hs.className='hdr-state s'+s.state;
@@ -713,7 +686,6 @@ function showStatus(s){
  const pr=document.getElementById('padraw'); if(pr) pr.textContent='btns 0x'+((s.pad_btns||0)>>>0).toString(16).padStart(5,'0');
  const nowArmed=!!s.arming;
  if(nowArmed!==armedLock){armedLock=nowArmed;updateLocks();}
- setBattType(s.batt_type||0,s.batt_lo||0,s.batt_hi||0);
  showFaults(s.faults>>>0);
  const _rl=document.getElementById('fd-rpml'); if(_rl)_rl.textContent=s.rpm_l.toFixed(0)+' rpm';
  const _rr=document.getElementById('fd-rpmr'); if(_rr)_rr.textContent=s.rpm_r.toFixed(0)+' rpm';
@@ -723,31 +695,6 @@ function showStatus(s){
  const _mr=medianWindow(med.r,s.rpm_r,_now,MED_RPM_S);
  const _l5=document.getElementById('fd-rpml5'); if(_l5)_l5.textContent='5 s: '+_ml.toFixed(0);
  const _r5=document.getElementById('fd-rpmr5'); if(_r5)_r5.textContent='5 s: '+_mr.toFixed(0);
- // Pack voltage: 15 s median, shown to one decimal (12.6 V, not 12.63 V — the extra digit
- // only ever displayed the sag jitter). Feeds BOTH diagrams so they cannot disagree.
- const _hasV=!((s.faults>>>0)&FB_NO_VBAT) && s.vbat>0;
- if(!_hasV) med.vbat.length=0;
- const _mv=_hasV?medianWindow(med.vbat,s.vbat,_now,MED_VBAT_S):null;
- const _fv=document.getElementById('fd-vbat');
- if(_fv)_fv.textContent=(null===_mv)?'— V':_mv.toFixed(1)+' V';
- const _ft=document.getElementById('fd-batttype');
- if(_ft)_ft.textContent=!_hasV?'no sensor':(s.batt_type?s.batt_type+' V pack':'detecting…');
- updateDivider(_mv);
- // Idle power-off countdown. Only shown while it is actually counting (disarmed and the
- // feature enabled); arming makes it disappear because the firmware resets it to -1.
- const _io=document.getElementById('idleoff');
- if(_io){
-  const left=s.idle_off_s;
-  if(left===undefined||left<0){_io.hidden=true;}
-  else{
-   _io.hidden=false;
-   const m=Math.floor(left/60), ss=left%60;
-   _io.className='idleoff'+(left<=60?' soon':'');
-   _io.textContent=(left===0)
-    ? '⏻ Idle power-off already commanded — still running, so the power did not actually drop.'
-    : `⏻ Idle power-off in ${m}:${String(ss).padStart(2,'0')} — arm the kart to reset it.`;
-  }
- }
  // Mix outputs on the schematic: drive (fwd/rev/stop) + turn, and per-motor PWM.
  const _sv=(id,t)=>{const e=document.getElementById(id); if(e)e.textContent=t;};
  const _pct=v=>(Math.abs(v)*100).toFixed(0), _arw=v=>v>0.02?'▲':(v<-0.02?'▼':'■');
@@ -773,8 +720,7 @@ function showStatus(s){
  _sv('fd-pwmr','PWM '+_arw(s.out_r)+_pct(s.out_r)+'%');
  document.getElementById('status').textContent=
   `State: ${st}${s.fault?('  ·  fault: '+(FA[s.fault]||s.fault)):''}\n`+
-  `Gamepad: ${s.pad_conn?'connected':'disconnected'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}\n`+
-  `Battery: ${s.batt_type?s.batt_type+' V (detected)':'detecting type…'}`;
+  `Gamepad: ${s.pad_conn?'connected':'disconnected'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}`;
 }
 
 // ── Configuration form (auto-generated from the schema) ──
@@ -790,42 +736,29 @@ function deriveFromCfg(p){
  if(p.name==='thr_deadzone') dzVal=v;
  if(p.name==='use_encoders'){const u=(v!=0); if(u!==useEnc){useEnc=u; lastFaults=-1;}}  // re-render fault severity
 }
-// Battery gauge scale: ENTIRELY decided by the firmware (detected type, thresholds
-// hard-coded on the micro side) — the client only applies batt_lo/batt_hi received from the status.
-function setBattType(bt,lo,hi){
- if(bt===battType)return; battType=bt;
- if(hi>lo){battLow=lo;battFull=hi;}
- const t=document.getElementById('batttitle');
- t.textContent=bt?`🔋 Battery ${bt} V (${battLow}–${battFull} V) — 30 min`
-               :'🔋 Battery (detecting type…) — 30 min';
- if(chBatt&&hi>lo){const y=chBatt.options.scales.y;y.min=battLow;y.max=battFull;y.ticks.stepSize=(battFull-battLow)/4;chBatt.update('none');}
-}
 // Bits of the "faults" mask (see controller.cpp): all conditions ACTIVE at the same time.
 // z = area(s) highlighted on the vehicle diagram (see updateFaultDiag).
 const FAULTS_DESC=[
  {b:0, t:'Gamepad emergency stop (button B)', d:'Button B is/was pressed. Release it, then rearm with START.', grave:true, z:['pad']},
- {b:1, t:'Low battery (LVC)',                     d:'Voltage below the cutoff threshold of the detected battery type (12/24 V). Recharge the battery; automatic power cutoff if the condition persists.', grave:true, z:['batt']},
  {b:2, t:'Gamepad not calibrated',               d:'Start the stick calibration (Gamepad tab).', grave:true, z:['pad']},
  {b:3, t:'Encoder: wheel stuck',                 d:'PWM applied but no rotation measured. Jammed wheel, thrown/broken chain or AS5600 sensor unplugged. Locked until reboot.', grave:true, z:['wl','wr']},
  {b:4, t:'Gamepad disconnected',                 d:'No Bluetooth gamepad connected. Turn on/pair the gamepad.', grave:true, z:['pad']},
- {b:5, t:'Voltage sensor absent (info)',         d:'ADS1115 not detected: no LVC and no automatic PWM cap. OK on the bench; to be wired before driving.', grave:false, z:['batt']},
  {b:6, t:'Encoder: direction reversed',          d:'The wheel turns clearly opposite to the command: sensor or motor wired backwards. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
  {b:8, t:'LEFT encoder absent (AS5600)',         d:'No response from the left sensor on the I2C bus (chip unplugged/miswired). Shown regardless of use_encoders; blocks driving only when use_encoders=1.', grave:true, z:['wl'], cond:true},
  {b:9, t:'RIGHT encoder absent (AS5600)',        d:'No response from the right sensor on the I2C bus (chip unplugged/miswired). Shown regardless of use_encoders; blocks driving only when use_encoders=1.', grave:true, z:['wr'], cond:true},
  {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 750 ms: communication lost. Immediate disarm and braking.', grave:true, z:['pad']},
  {b:7, t:'Encoder: erratic reading',             d:'Measured speed physically impossible for the kart. Faulty sensor or magnet. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
  {b:11,t:'LEFT encoder: magnet out of range',    d:'The left AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wl'], cond:true},
- {b:13,t:'Emergency stop engaged (coil sense)',  d:'The 40 A relay COIL is not energized — the e-stop mushroom is pressed (or the sense wiring is open). Works even with a welded relay contact: the kart disarms and brakes on the command itself. Release the e-stop, then rearm with START. Bench without the opto wired: tie GPIO22 to GND.', grave:true, z:['batt']},
  {b:12,t:'RIGHT encoder: magnet out of range',   d:'The right AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wr'], cond:true},
 ];
 // cond:true faults (encoder sensor) are only GRAVE when the encoders are actually used;
 // with use_encoders=0 they are informational WARNINGS (amber), not blocking errors.
 const isGrave=f=>f.grave&&(useEnc||!f.cond);
 // Light up the vehicle-diagram zones concerned by the active faults (left/right wheel,
-// battery, gamepad). Side-specific encoder faults (bits 8/9) hit one wheel; the
+// gamepad). Side-specific encoder faults (bits 8/9) hit one wheel; the
 // non-sided ones (stuck/reversed/erratic) light up both.
 function updateFaultDiag(mask){
- const lvl={wl:0,wr:0,batt:0,pad:0};   // 0 none · 1 warning (amber) · 2 grave (red)
+ const lvl={wl:0,wr:0,pad:0};   // 0 none · 1 warning (amber) · 2 grave (red)
  FAULTS_DESC.forEach(f=>{ if(mask>>>f.b&1){const l=isGrave(f)?2:1; (f.z||[]).forEach(z=>{if(l>lvl[z])lvl[z]=l;});} });
  for(const z in lvl){const g=document.getElementById('fz-'+z); if(g){g.classList.toggle('on',lvl[z]===2);g.classList.toggle('warn',lvl[z]===1);}}
 }
@@ -957,7 +890,9 @@ let sysBuilt=false,evLoaded=false;
 function loadSys(){sendReq({type:sysBuilt?'sysdyn':'sysinfo'});
  if(!evLoaded){evLoaded=true;loadEvlog();}}   // event log: once on first open, then manual
 // ── Event log ("why did it disarm") — codes mirror evlog::Ev (evlog.hpp) ──
-const EV_DESC={1:'BOOT',2:'ARM',3:'DISARM',4:'FAULT RAISED',5:'IDLE POWER-OFF',6:'LVC POWER-OFF'};
+// 5 and 6 are retired codes (idle / LVC power-off) — kept so records written by an older
+// firmware still read as something other than a number.
+const EV_DESC={1:'BOOT',2:'ARM',3:'DISARM',4:'FAULT RAISED',5:'IDLE POWER-OFF (retired)',6:'LVC POWER-OFF (retired)'};
 // esp_reset_reason_t values (esp_system.h)
 const RESET_DESC={0:'unknown',1:'power-on',2:'external',3:'software',4:'panic',5:'interrupt watchdog',
  6:'task watchdog',7:'other watchdog',8:'deep-sleep',9:'brownout',10:'SDIO'};

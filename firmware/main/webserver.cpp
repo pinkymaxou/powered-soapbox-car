@@ -202,27 +202,24 @@ size_t buildWifiPb(const char* error = "")
 constexpr int HIST_FAST_N   = 120;  // 10 min @ 5 s
 constexpr int HIST_FAST_DT  = 5;
 constexpr int HIST_SPEED_N  = 60;   // 1 min @ 1 s (dedicated speed chart, small)
-constexpr int HIST_BATT_N   = 120;  // 30 min @ 15 s
 // Hist is callback-encoded too, but its size is fully known: 3 varints + 8 byte arrays of
 // fixed length. Bound it so growing a window cannot quietly overflow its buffer — and bound
 // it against the RIGHT buffer: Hist encodes into m_hist_bin (its own 1 s cache, sent as-is),
 // NOT into the m_reply arena. The first version of this guard checked hw::PB_REPLY_CAP
 // (10240) while the actual buffer was 1024 bytes — a guard that could never fire, in front
 // of an encode that fails silently (no frame, charts just stop updating).
-constexpr size_t HIST_PB_MAX = 3 * 6                       // dt_fast / dt_spd / dt_batt
-                             + 8 * 3                       // one tag + length varint each
+constexpr size_t HIST_PB_MAX = 2 * 6                       // dt_fast / dt_spd
+                             + 7 * 3                       // one tag + length varint each
                              + 6 * HIST_FAST_N             // accel, pwml, pwmr, rpml, rpmr, loop
-                             + HIST_SPEED_N + HIST_BATT_N; // spd, batt
+                             + HIST_SPEED_N;               // spd
 constexpr size_t HIST_BIN_CAP = 1024;   // measured full ≈ 900 bytes (780 of samples + headers)
 static_assert(HIST_PB_MAX + 8 <= HIST_BIN_CAP,   // +8: Msg envelope tag + length
               "The history series no longer fit m_hist_bin: grow HIST_BIN_CAP");
-constexpr int HIST_BATT_DT  = 15;
 struct
 {
     Ring<uint8_t, HIST_FAST_N>  accel, pwml, pwmr, rpml, rpmr;   // rpml/rpmr: wheel rpm (0..250)
     Ring<uint8_t, HIST_FAST_N>  loop;   // worst 500 Hz tick, in units of 50 µs (0..250 = 12.5 ms)
     Ring<uint8_t, HIST_SPEED_N> spd;
-    Ring<uint8_t, HIST_BATT_N>  batt;
     int tick = 0;
 } m_hist;
 SemaphoreHandle_t  m_hist_mtx = nullptr;
@@ -235,7 +232,7 @@ uint8_t pctU8(float v)   // percentage 0..100 (throttle, PWM)
     return static_cast<uint8_t>(v + 0.5f);
 }
 
-uint8_t u8x10(float v)   // physical value ×10 (resolution 0.1; clamped 0..25.5 → m/s, V)
+uint8_t u8x10(float v)   // physical value ×10 (resolution 0.1; clamped 0..25.5 → m/s)
 {
     float s = v * 10.f;
     if (s < 0.f) s = 0.f;
@@ -277,10 +274,6 @@ void histSample(void*)
         const uint32_t lm = Controller::loopMaxUs(EspController::PeakHist);
         m_hist.loop.push(static_cast<uint8_t>(lm / 50 > 250 ? 250 : lm / 50));
     }
-    if (0 == (m_hist.tick % HIST_BATT_DT))
-    {
-        m_hist.batt.push(u8x10(st.m_vbat));                              // V ×10
-    }
     ++m_hist.tick;
     xSemaphoreGive(m_hist_mtx);
 }
@@ -302,8 +295,7 @@ const pb_byte_t* buildHistPb(size_t& len)
     }
     static uint8_t lin_fast[6][HIST_FAST_N];
     static uint8_t lin_spd[HIST_SPEED_N];
-    static uint8_t lin_batt[HIST_BATT_N];
-    BytesArg args[8];
+    BytesArg args[7];
     xSemaphoreTake(m_hist_mtx, portMAX_DELAY);
     const Ring<uint8_t, HIST_FAST_N>* fast[6] = {&m_hist.accel, &m_hist.pwml, &m_hist.pwmr,
                                         &m_hist.rpml, &m_hist.rpmr, &m_hist.loop};
@@ -312,7 +304,6 @@ const pb_byte_t* buildHistPb(size_t& len)
         args[k] = {lin_fast[k], static_cast<size_t>(fast[k]->copyTo(lin_fast[k], HIST_FAST_N))};
     }
     args[6] = {lin_spd, static_cast<size_t>(m_hist.spd.copyTo(lin_spd, HIST_SPEED_N))};
-    args[7] = {lin_batt, static_cast<size_t>(m_hist.batt.copyTo(lin_batt, HIST_BATT_N))};
     xSemaphoreGive(m_hist_mtx);
 
     Msg msg = Msg_init_zero;
@@ -320,10 +311,8 @@ const pb_byte_t* buildHistPb(size_t& len)
     Hist& h = msg.body.hist;
     h.dt_fast = HIST_FAST_DT;
     h.dt_spd = 1;
-    h.dt_batt = HIST_BATT_DT;
-    pb_callback_t* fields[8] = {&h.accel, &h.pwml, &h.pwmr, &h.rpml, &h.rpmr, &h.loop,
-                                &h.spd, &h.batt};
-    for (int k = 0; k < 8; ++k)
+    pb_callback_t* fields[7] = {&h.accel, &h.pwml, &h.pwmr, &h.rpml, &h.rpmr, &h.loop, &h.spd};
+    for (int k = 0; k < 7; ++k)
     {
         fields[k]->funcs.encode = encBytes;
         fields[k]->arg = &args[k];
@@ -421,17 +410,6 @@ size_t buildValsPb()
     return encodeMsg(msg);
 }
 
-// Battery gauge display scale — decided HERE (the client knows no threshold):
-// low = LVC cutoff threshold of the detected type, high = full-charge voltage at rest.
-float battDispLo(int bt)
-{
-    return (24 == bt) ? hw::VBAT24_CUT_V : (12 == bt) ? hw::VBAT12_CUT_V : 0.f;
-}
-float battDispHi(int bt)
-{
-    return (24 == bt) ? hw::VBAT24_FULL_V : (12 == bt) ? hw::VBAT12_FULL_V : 0.f;
-}
-
 size_t buildStatusPb()
 {
     Msg msg = Msg_init_zero;
@@ -441,11 +419,6 @@ size_t buildStatusPb()
     st.state      = static_cast<Status_State>(s.m_state);
     st.fault      = static_cast<Status_Fault>(s.m_fault);
     st.faults     = s.m_faults;
-    st.vbat       = s.m_vbat;
-    st.idle_off_s = s.m_idle_off_s;
-    st.batt_type  = s.m_batt_type;
-    st.batt_lo    = battDispLo(s.m_batt_type);
-    st.batt_hi    = battDispHi(s.m_batt_type);
     st.speed_ms   = s.m_speed_ms;
     // Wheels in RPM (signed), vehicle in m/s — the conversion happens HERE, on the micro side.
     st.rpm_l      = s.m_rpm_l;   // already in rpm: enc_rpm_per_cps ratio from the controller

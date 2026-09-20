@@ -1,7 +1,7 @@
 // sim_controller.hpp — SIMULATED host for the controller: same wiring as EspController, but the
 // KartController callbacks read the physics model (vehicle.hpp) and apply the motor
-// command to it; the gamepad is SCRIPTED (function of time). Host decisions
-// (rumble, cutoff) go through the SAME advisors as the ESP (advisors.hpp). Virtual
+// command to it; the gamepad is SCRIPTED (function of time). The host decision left
+// (rumble) goes through the SAME advisor as the ESP (advisors.hpp). Virtual
 // clock: one tick = hw::CTRL_DT_S exactly. This is the "mockup" for the tests and the
 // viewer.
 #pragma once
@@ -25,10 +25,11 @@ struct PadCmd
     bool  estop = false;      // B button
     bool  connected = true;
     bool  reports = true;     // false = link "connected" but NO more reports at all (heartbeat)
-    bool  sys_power = true;   // false = KILL SWITCH: power cut off (ESP32 off,
-                              // MOSFETs open → coasting) — the controller no longer runs
-    bool  motor_pwr = true;   // false = the opto reports the MOTOR rail dead (e-stop in the
-                              // 40 A path, two-rail wiring) — the LOGIC keeps running
+    bool  sys_power = true;   // false = the MAIN RELAY is open: main switch off, or the
+                              // e-stop mushroom pressed. It cuts EVERYTHING — the ESP32 dies
+                              // with the motors, so the controller no longer runs and the
+                              // bridges float (coasting). This is now the only way the kart
+                              // loses power; there is no separate motor rail to report on.
 };
 using PadScript = std::function<PadCmd(float t)>;
 
@@ -52,8 +53,8 @@ public:
         m_cmd = m_script(m_veh.t());
         if (!m_cmd.sys_power)
         {
-            // Power cut off: the controller NO LONGER RUNS (no tick), the bridges
-            // are open — the vehicle continues on its own, coasting.
+            // Main relay open (main switch or e-stop): the controller NO LONGER RUNS (no
+            // tick), the bridges are open — the vehicle continues on its own, coasting.
             m_veh.step(DriveMode::Float, 0.f, 0.f, 0, hw::CTRL_DT_S);
             return;
         }
@@ -74,10 +75,9 @@ public:
         m_ctrl.setConfig(cfg);         // scenarios / driving mode change cfg on the fly
         m_ctrl.tick(m_now_us);
 
-        // HOST decisions — same advisors as the ESP: rumble counted, cutoff remembered.
+        // HOST decision — same advisor as the ESP: rumbles counted.
         const CtrlTelemetry t = m_ctrl.telemetry();
         if (m_rumble.update(t, pad, m_now_us).active) ++rumbles;
-        powered_off |= m_poweroff.update(t, m_now_us);
 
         m_veh.step(m_brake_out ? DriveMode::Brake : DriveMode::Drive,
                    m_out_l, m_out_r, m_cap, hw::CTRL_DT_S);
@@ -89,7 +89,6 @@ public:
 
     bool calibrated = true;    // calibration is a prerequisite, not the subject of the physics
     int  rumbles = 0;          // number of vibrations emitted (RumbleAdvisor)
-    bool powered_off = false;  // cutoff requested (PowerOffAdvisor: prolonged LVC)
 
     // RAW gamepad input from the script (before deadzone/ramps/rollover protection)
     float padX() const { return m_cmd.x; }
@@ -110,10 +109,6 @@ private:
         s.enc_delta_r = m_veh.encDelta(false);
         s.enc_ok_l = m_veh.encPresent(true);
         s.enc_ok_r = m_veh.encPresent(false);
-        const float pin_v = m_veh.vbatPinVolts();
-        s.vbat_ok = (pin_v >= 0.f);
-        s.vbat_v = s.vbat_ok ? pin_v * hw::VBAT_DIV_RATIO : -1.f;   // same constant as the ESP host
-        s.motor_pwr = m_cmd.motor_pwr;   // opto sense (scenario-scripted, like sys_power)
         return s;
     }
 
@@ -131,7 +126,6 @@ private:
     PadScript       m_script;
     PadCmd          m_cmd;
     RumbleAdvisor   m_rumble;
-    PowerOffAdvisor m_poweroff;
     int64_t   m_now_us = 0;
     int64_t   m_last_report_us = 0;
     float     m_out_l = 0.f, m_out_r = 0.f;

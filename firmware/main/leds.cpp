@@ -1,7 +1,7 @@
 // leds.cpp — Task dedicated to the WS2812B strip: reflects the kart's state.
 //   ARMED = moving rainbow (scrolling hue wheel) · yellow = healthy but disarmed ·
 //   pulsing yellow = arming · fault stop = 2 s rapid red blink then a steady 1 Hz red
-//   blink until the fault clears · orange = low battery · blue = calibration.
+//   blink until the fault clears · blue = calibration.
 #include "leds.hpp"
 
 #include "config.hpp"
@@ -91,21 +91,9 @@ void render(const KartConfig& cfg)
             break;
         case State::Run:
         {
-            // Warning threshold according to the detected battery (12/24 V); unknown type → no
-            // alert. Silent too when the voltage check is off (vbat_check_en=0): a bench with
-            // nothing on the divider bridge would otherwise sit permanently orange.
-            const int   bt     = st.m_batt_type;
-            const float warn_v = (24 == bt) ? hw::VBAT24_WARN_V : hw::VBAT12_WARN_V;
-            // m_vbat > 0 guard: when the ADS1115 dies mid-drive the telemetry voltage drops
-            // to 0 ("unknown"), which is below every warn threshold — without the guard the
-            // strip went orange claiming "low battery" when the truth was "no reading".
-            if ((0 != bt) && (0 != cfg.vbat_check_en) && st.m_vbat > 0.05f && st.m_vbat < warn_v)
-            {
-                r = 255;
-                g = 120;       // low battery: orange (the warning outranks the party)
-                break;
-            }
             // Armed & healthy: MOVING RAINBOW — per-pixel, so it bypasses the setAll path.
+            // (There is no low-battery orange any more — nothing measures the pack. The
+            // driver reads the charge on the battery's own indicator, off the kart.)
             m_strip.setBrightness(static_cast<uint8_t>(cfg.led_brightness));
             renderRainbow(cfg.led_count);
             m_strip.show();

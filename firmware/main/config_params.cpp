@@ -10,8 +10,8 @@
 // type, min/default/max, target field. The array order = the display order: keep the
 // entries of a same category CONSECUTIVE (the web page groups identical cats that follow each other).
 // Each value/field is TYPED: {.f=…} for Float params, {.i=…} for Int/Bool (see CfgVal/CfgField).
-// NB: the LVC thresholds are NOT here — 12 V or 24 V battery detected at startup,
-// thresholds hard-coded per type (hw::VBAT12_*/VBAT24_*).
+// NB: nothing about the battery lives here any more — the pack is always 12 V, it is not
+// measured, and the firmware cannot cut its own power (single main relay, see doc/electronique.md).
 extern constexpr ParamDesc PARAMS[] =
 {
     {"speed_limit_ms",  "Speed limit (m/s)",   "Speed & power",
@@ -20,10 +20,10 @@ extern constexpr ParamDesc PARAMS[] =
     {"rev_speed_ms",    "Reverse limit (m/s)",     "Speed & power",
      "Maximum speed in REVERSE (m/s) — same PID limiter, target chosen according to the MEASURED direction. The caster wheel does not steer in reverse: stay slow.",
      PType::Float, {.f = 0.3f}, {.f = 1.0f}, {.f = 3.f}, {.f = &KartConfig::rev_speed_ms}},
-    // MANUAL PWM cap (the most restrictive wins) — the AUTOMATIC 12 V/Vbat
-    // measured cap (ctl::dutyCapVolts) applies IN ADDITION. Default 1.0 = let the auto handle it.
-    {"duty_cap",        "Manual PWM cap (0-1)", "Speed & power",
-     "Fixed PWM cap, in addition to the automatic cap 12 V / measured battery voltage (the most restrictive wins). Leave at 1.0 in normal use; lower it by hand if driving without a voltage sensor above 12 V.",
+    // PWM cap — the ONLY power ceiling now: the pack is a 12 V one, which is also the motors'
+    // nominal voltage, so there is nothing to cap automatically (and nothing measuring it).
+    {"duty_cap",        "PWM cap (0-1)", "Speed & power",
+     "Fixed PWM ceiling applied to both motors. The pack is always 12 V - the motors' nominal voltage - so this is the only power limit besides the speed limiter. Lower it to make the whole kart gentler (a good first move for a small child); 1.0 = full duty allowed.",
      PType::Float, {.f = 0.05f}, {.f = 1.0f}, {.f = 1.f}, {.f = &KartConfig::duty_cap_frac}},
     {"thr_deadzone",    "Stick deadzone",       "Gamepad",
      "Radius around the stick center where the position is ignored (0-0.3). Compensates for a stick that does not return exactly to center.",
@@ -65,10 +65,6 @@ extern constexpr ParamDesc PARAMS[] =
     {"turn_alat_vmax",  "Max turn at Vmax (0-1)", "Rollover protection",
      "Turn limit at maximum speed; in between, the limit follows 1/v (same lateral acceleration at all speeds). CAPPED AT ITS OWN DEFAULT (0.2) since the bench moved 6\" forward and the axle 6\" back: that took w_eff from 332 to 254 mm, and 0.3 now LIFTS A WHEEL with one child sitting off-centre (-0.27 m/s2) or with an adult aboard (-0.13). At 0.25 the margin is only +0.31. So this setting can only be made GENTLER than default, never sharper. Full-throttle-straight-then-turn stays forgiving (+1.6) - do not judge this parameter by that scenario alone.",
      PType::Float, {.f = 0.1f}, {.f = 0.2f}, {.f = 0.2f}, {.f = &KartConfig::turn_hi}},
-    // (No vbat_div_ratio: the divider is fixed by the resistors on the board — hw::VBAT_DIV_RATIO.)
-    {"vbat_check_en",   "Voltage check (0/1)",    "Battery",
-     "1 = the low-voltage cutoff (LVC) is a driving condition: below the threshold of the detected battery the kart disarms, refuses to move, and cuts the power after 30 s. 0 = the voltage is still measured, displayed and graphed, but NEVER blocks anything — for bench work with no pack on the divider bridge. WARNING: with 0 the battery's own BMS is the only remaining protection against deep discharge.",
-     PType::Bool,  {.i = 0}, {.i = 1}, {.i = 1}, {.i = &KartConfig::vbat_check_en}},
     // PID gains operate on an error in m/s.
     {"brk_kp",          "PID brake Kp (m/s)",      "Control loops (PID)",
      "Proportional gain of the active electric brake (speed command 0). Encoders required.",
@@ -118,13 +114,10 @@ extern constexpr ParamDesc PARAMS[] =
     {"enc_rev_chk",     "Reversed-enc watchdog",  "Behavior",
      "1 = watch for a wheel measured firmly OPPOSITE to a firm command (encoder or motor wired backwards) and latch a full stop. Can false-trip when plugging-braking on a downhill (reverse stick, speed held by the slope). 0 = trust the commissioning check instead: verify the rpm signs once on the Dashboard after any wiring change. Backstops that remain with 0: erratic-speed fault at 8 m/s, wheel-stuck fault, and the driver.",
      PType::Bool,  {.i = 0}, {.i = 1}, {.i = 1}, {.i = &KartConfig::enc_rev_chk}},
-    {"idle_off_min",    "Auto power-off (min)",   "Behavior",
-     "Minutes DISARMED before the kart powers itself down, so a forgotten kart does not flatten its battery. Arming restarts the countdown, which the Dashboard shows. 0 = never. Note: adjusting settings from this page does NOT restart it — only arming does.",
-     PType::Int,   {.i = 0}, {.i = 10}, {.i = 120}, {.i = &KartConfig::idle_off_min}},
     // (No allow_reverse: reverse is ALWAYS permitted, held by its own limit rev_speed_ms.)
     // (No motor-output inversion: swapping the two motor leads does that in hardware.)
     {"arm_hold_ms",     "Arming hold (ms)",     "Behavior",
-     "Held press duration on START (physical or gamepad) to arm, centered stick required.",
+     "Held press duration on the gamepad's START/Options button to arm, centered stick required. It is the only way to arm the kart.",
      PType::Int,   {.i = 200}, {.i = 1000}, {.i = 5000}, {.i = &KartConfig::arm_hold_ms}},
     {"disarm_s",        "Auto disarm (s)",    "Behavior",
      "Automatic disarm after this delay without touching the stick.",
@@ -174,8 +167,6 @@ void KartConfig::clampAll()
     // enc_mps_per_cps depends on enc_per_wheel — recompute after any change so the wheel
     // speed (limiter / rollover / sanity) matches the encoder mount.
     enc_mps_per_cps = 3.14159265f * hw::WHEEL_DIAM_M / (hw::AS5600_CPR * enc_per_wheel);
-    // (The LVC thresholds are no longer parameters: hard-coded according to the battery
-    // 12/24 V detected at startup — hw::VBAT12_*/VBAT24_*, consistency guaranteed.)
 }
 
 // ───────────── Compile-time guard on the protobuf reply buffer ─────────────

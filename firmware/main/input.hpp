@@ -24,7 +24,7 @@ struct State
     uint32_t buttons = 0;   // mask: buttons | (misc<<16) | (dpad<<24) — display
     bool  connected = false; // gamepad paired AND connected
     bool  estop = false;     // gamepad stop button (e.g. B) — immediate brake
-    bool  start = false;     // gamepad START/Options button — arming (like the physical button)
+    bool  start = false;     // gamepad START/Options button — the ONLY way to arm the kart
 };
 
 // Haptic feedback: makes the gamepad rumble (magnitudes 0..255, duration in ms).

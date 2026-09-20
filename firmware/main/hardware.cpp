@@ -1,5 +1,6 @@
 // hardware.cpp — Hardware access (differential variant: 2 front motors + 2 AS5600).
-// The driver handles (ADC, LEDC, 2× I2C) live here as statics; the rest of the firmware
+// No inputs of any kind: arming is a gamepad button and power is a physical switch.
+// The driver handles (LEDC, 2× I2C) live here as statics; the rest of the firmware
 // goes through the free functions of the `board` namespace.
 #include "hardware.hpp"
 
@@ -8,7 +9,6 @@
 
 #include <cmath>
 
-#include "ads1115.hpp"
 #include "config.hpp"
 #include "pinout.hpp"
 
@@ -36,16 +36,6 @@ constexpr ledc_timer_bit_t PWM_RES = LEDC_TIMER_12_BIT;
 i2c_master_bus_handle_t   m_bus[2] = {nullptr, nullptr};   // bus 0 = L wheel, bus 1 = R wheel
 i2c_master_dev_handle_t   m_as[2]  = {nullptr, nullptr};   // AS5600 per bus
 int                       m_angle_last[2] = {-1, -1};      // last raw angle per sensor
-Ads1115                   m_ads;                           // external ADC (bus 0), Vbat on A0
-// Vbat read tolerance: consecutive FAILED windows before the voltage is declared unknown.
-// 10 windows at 20 Hz ≈ 0.5 s of silence — long enough to ride out a bus glitch, short
-// enough that a genuinely unplugged sensor is reported before it matters. Recovery is
-// immediate: one good read resets the count.
-constexpr int VBAT_FAIL_LIMIT = 10;
-int                       m_vbat_fails = 0;
-long                      m_vbat_acc = 0;
-int                       m_vbat_n = 0;
-float                     m_vbat_last = -1.f;   // last good reading, held during the tolerance
 
 // LEDC clock SENTINEL — diagnostic + auto-repair of the suspected race:
 // recurring "Interrupt WDT" crash with the PC frozen on a LEDC register WRITE, under
@@ -99,18 +89,6 @@ void initLED()
     gpio_config(&io);
 }
 
-// External ADS1115 ADC (on bus 0). Vbat tracked continuously on A0 at ±4.096 V
-// (125 µV resolution): the pin voltage (≤ 3.3 V via the divider) fits with plenty of margin.
-void initExtAdc()
-{
-    if (!m_ads.begin(m_bus[0], hw::ADS1115_ADDR, hw::I2C_FREQ_HZ))
-    {
-        ESP_LOGW(TAG, "ADS1115 unavailable: Vbat reading at 0");
-        return;
-    }
-    m_ads.startContinuous(pins::ads::VBAT, Ads1115::Gain::FS_4V096, Ads1115::Rate::SPS_128);
-}
-
 void initMotors()
 {
     ledc_timer_config_t timer{};
@@ -148,7 +126,8 @@ void initMotors()
     board::motorsBrake();   // default state: dynamic braking (never coasting)
 }
 
-// Two independent I2C buses, one AS5600 sensor (0x36) per bus.
+// Two independent I2C buses, one AS5600 sensor (0x36) per bus (the address is fixed on
+// that chip, so two sensors cannot share a bus). Bus 0 now carries the left sensor alone.
 void initEncoders()
 {
     struct { i2c_port_t port; gpio_num_t sda; gpio_num_t scl; } cfg[2] = {
@@ -181,9 +160,9 @@ void initEncoders()
     }
 }
 
-// Scans both buses and logs every device that answers. Without this, "ADS1115 absent" is
-// indistinguishable from "ADS1115 answering at the wrong address" — the ADDR pin picks
-// 0x48..0x4B, and a floating one lands anywhere. Known: 0x36 = AS5600, 0x48..0x4B = ADS1115.
+// Scans both buses and logs every device that answers: "sensor absent" and "sensor wired to
+// the other bus" look identical from the control loop, and this tells them apart at boot.
+// Known: 0x36 = AS5600.
 void i2cScan()
 {
     for (int b = 0; b < 2; ++b)
@@ -194,8 +173,7 @@ void i2cScan()
         for (uint8_t addr = 0x08; addr < 0x78; ++addr)
         {
             if (ESP_OK != i2c_master_probe(m_bus[b], addr, 5)) continue;
-            const char* what = (0x36 == addr) ? " AS5600"
-                             : (addr >= 0x48 && addr <= 0x4B) ? " ADS1115" : "";
+            const char* what = (0x36 == addr) ? " AS5600" : "";
             n += snprintf(found + n, sizeof(found) - n, " 0x%02X%s", addr, what);
             if (n >= sizeof(found) - 16) break;
         }
@@ -228,10 +206,9 @@ int readAngleRaw(int i)
     if (!m_as[i]) return -1;
     if (!m_enc_present[i].load())
     {
-        // Absent: only spend a timeout on the retry tick (phase 0 for the left, 50 for the
-        // right), and skip the bus entirely the rest of the time.
-        // Phases 7 and 57: 50 ticks apart so the two never collide with each other, and
-        // neither is a multiple of VBAT_READ_TICKS (25) so neither lands on a battery read.
+        // Absent: only spend a timeout on the retry tick, and skip the bus entirely the rest
+        // of the time. Phases 7 and 57 are 50 ticks apart, so two dead sensors never time out
+        // on the same tick.
         const unsigned phase = m_enc_retry[i]++ % ENC_RETRY_TICKS;
         if (phase != (i ? 57u : 7u)) return -1;
     }
@@ -264,43 +241,6 @@ int angleDelta(int i)
     return d;
 }
 
-void initButton()
-{
-    // Both inputs idle on the INTERNAL pull-up. That is real on these pins — the sense
-    // line once sat on GPIO34, where the pull-up request was silently ignored (GPIO 34-39
-    // have no pull hardware) and an unwired pin floated; it lives on GPIO22 now precisely
-    // so this line does what it says.
-    gpio_config_t in{};
-    in.mode = GPIO_MODE_INPUT;
-    in.pin_bit_mask = (1ULL << pins::START_BTN) | (1ULL << pins::MOTOR_PWR_SENSE);
-    in.pull_up_en = GPIO_PULLUP_ENABLE;
-    gpio_config(&in);
-}
-
-
-// Debounce: a state only changes after BTN_DEBOUNCE_TICKS stable readings.
-struct Debounce
-{
-    bool state = false;
-    int  count = 0;
-};
-Debounce m_db_start;
-
-bool debounce(Debounce& d, bool raw)
-{
-    if (raw == d.state)
-    {
-        d.count = 0;
-    }
-    else if (++d.count >= hw::BTN_DEBOUNCE_TICKS)
-    {
-        d.state = raw;
-        d.count = 0;
-    }
-    return d.state;
-}
-
-
 void motorApply(ledc_channel_t ch, gpio_num_t dir, float v, uint32_t cap)
 {
     dirPin(dir, (v >= 0) ? Dir::Forward : Dir::Reverse);
@@ -315,87 +255,12 @@ void board::init()
     initMotors();
     initEncoders();   // 2 I2C buses + 2 AS5600 sensors
     i2cScan();        // log what ACTUALLY answers, before anything is declared absent
-    initExtAdc();     // ADS1115 on bus 0 (after the buses are created)
-    initButton();
     board::led(false);
 }
 
 void board::led(bool on)
 {
     gpio_set_level(pins::LED, on ? 1 : 0);
-}
-
-// ONE sample per call, averaged over ADC_OVERSAMPLE calls. Called every tick: the 8 reads
-// that used to be done back-to-back cost ~3 ms on that single tick — measured, with every
-// read SUCCEEDING, so it was never about failures. Spread out, the peak drops to one
-// transaction while the averaging and the ~20 Hz output cadence are unchanged.
-float board::vbatSample()
-{
-    if (!m_ads.ok()) return -1.0f;
-    int16_t raw = 0;
-    if (m_ads.readRaw(raw))
-    {
-        m_vbat_fails = 0;
-        m_vbat_acc += raw;
-        if (++m_vbat_n >= hw::ADC_OVERSAMPLE)
-        {
-            m_vbat_last = m_ads.toVolts(static_cast<int16_t>(m_vbat_acc / m_vbat_n));
-            m_vbat_acc = 0;
-            m_vbat_n = 0;
-        }
-        return m_vbat_last;
-    }
-    // Failed read: hold the last good value, and only admit "unknown" past the threshold.
-    if (++m_vbat_fails < VBAT_FAIL_LIMIT) return m_vbat_last;
-    if (VBAT_FAIL_LIMIT == m_vbat_fails)
-    {
-        ESP_LOGW(TAG, "ADS1115 silent for %d reads → Vbat unknown (auto-recovers)", VBAT_FAIL_LIMIT);
-    }
-    m_vbat_acc = 0;
-    m_vbat_n = 0;
-    return -1.0f;
-}
-
-float board::vbatVolts(int n)
-{
-    if (!m_ads.ok())
-    {
-        return -1.0f;   // sensor absent → voltage unknown (the controller skips the LVC)
-    }
-    // Average of n readings of the conversion register (continuous mode) → voltage at pin A0.
-    // BAIL OUT on the first failure instead of hammering the remaining n-1 times: if the chip
-    // has gone quiet, each attempt costs a full I2C timeout, and this runs inside the 500 Hz
-    // control loop. One failed read is enough to know this window is a write-off.
-    long acc = 0;
-    int  got = 0;
-    for (int k = 0; k < n; ++k)
-    {
-        int16_t raw = 0;
-        if (!m_ads.readRaw(raw)) break;
-        acc += raw;
-        ++got;
-    }
-    if (got > 0)
-    {
-        m_vbat_fails = 0;                     // any good read clears the count immediately
-        m_vbat_last = m_ads.toVolts(static_cast<int16_t>(acc / got));
-        return m_vbat_last;
-    }
-    // The window failed. Do NOT cry wolf on one glitch — a single dropped transaction on a
-    // shared bus is normal. Hold the last good value and keep counting; only past the
-    // threshold (~0.5 s at 20 Hz) do we admit the voltage is unknown.
-    // Returning 0.0 here used to be a real bug: 0 is a perfectly valid voltage to the caller,
-    // so vbat_ok stayed true, NO_VBAT was never raised, and the LVC read "0 V" — below every
-    // cutoff — disarmed the kart and cut the power 30 s later, blaming a flat battery.
-    if (++m_vbat_fails < VBAT_FAIL_LIMIT)
-    {
-        return m_vbat_last;
-    }
-    if (VBAT_FAIL_LIMIT == m_vbat_fails)
-    {
-        ESP_LOGW(TAG, "ADS1115 silent for %d reads → Vbat unknown (auto-recovers)", VBAT_FAIL_LIMIT);
-    }
-    return -1.0f;
 }
 
 void board::motorsSet(float l, float r, uint32_t cap)
@@ -425,16 +290,13 @@ bool board::encRightMagOk() { return m_mag_ok[1].load(); }
 
 // Poll the AS5600 STATUS register (0x0B) for both buses at ~10 Hz (MAG_READ_TICKS). Magnet OK
 // = MD set AND not too weak (ML) AND not too strong (MH). On read failure, keep the last value.
-// STAGGERED, one bus per poll, and deliberately off the ticks where Vbat is read. Every I2C
-// call here can block for a full timeout if its sensor has gone quiet, so what matters is not
-// the average cost but how many of them can pile onto the SAME tick. Reading both buses
-// together, on a tick that was also a Vbat tick, put 5 potentially-timing-out transactions on
-// one tick; one bus at a time, phase-shifted, caps it at 3.
+// STAGGERED, one bus per poll. Every I2C call here can block for a full timeout if its sensor
+// has gone quiet, so what matters is not the average cost but how many of them can pile onto
+// the SAME tick; one bus at a time, phase-shifted, keeps that number down.
 void board::refreshMagStatus()
 {
     const unsigned tick = m_mag_tick++;
-    // Phase 13 and 38: never a multiple of VBAT_READ_TICKS (25), so a magnet poll and a
-    // battery read can never land on the same tick.
+    // Phases 13 and 38: 25 ticks apart, so the two STATUS polls never share a tick.
     const unsigned phase = tick % hw::MAG_READ_TICKS;
     int i;
     if (13 == phase)      i = 0;
@@ -447,43 +309,6 @@ void board::refreshMagStatus()
     uint8_t s = 0;
     if (ESP_OK == i2c_master_transmit_receive(m_as[i], &reg, 1, &s, 1, hw::I2C_XFER_TIMEOUT_MS))
         m_mag_ok[i].store((s & hw::AS5600_MD) && !(s & hw::AS5600_ML) && !(s & hw::AS5600_MH));
-}
-
-void board::pollButtons()
-{
-    debounce(m_db_start, pins::BTN_ACTIVE == gpio_get_level(pins::START_BTN));
-}
-
-bool board::btnStart()
-{
-    return m_db_start.state;
-}
-
-// 40 A relay COIL energized (= e-stop released) = opto conducting = pin pulled LOW. An
-// unwired or broken input rises to the internal pull-up and reads "engaged", the safe way
-// round. RAW level: the debounce lives in the controller core (hw::PWR_SENSE_DEBOUNCE_TICKS),
-// where the sim can test it. ALWAYS consulted (no software bypass): bench without the
-// opto = GPIO22 tied to GND.
-bool board::motorPowerLive()
-{
-    return 0 == gpio_get_level(pins::MOTOR_PWR_SENSE);
-}
-
-void board::powerLatch()
-{
-    // Active LOW: pull the opto's LED to ground → the opto sends +20 V to the gate.
-    gpio_set_level(pins::POWER_HOLD, 0);
-    gpio_config_t io{};
-    io.pin_bit_mask = (1ULL << pins::POWER_HOLD);
-    io.mode = GPIO_MODE_OUTPUT;
-    io.pull_down_en = GPIO_PULLDOWN_ENABLE;   // active LOW: even in high impedance, stay "held"
-    gpio_config(&io);
-    gpio_set_level(pins::POWER_HOLD, 0);
-}
-
-void board::powerOff()
-{
-    gpio_set_level(pins::POWER_HOLD, 1);
 }
 
 void board::motorsIdleEarly()

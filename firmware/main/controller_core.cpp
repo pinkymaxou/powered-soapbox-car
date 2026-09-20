@@ -1,7 +1,9 @@
 // controller_core.cpp — Kart control logic (see controller_core.hpp).
 // PURE: transplanted 1:1 from the old controller.cpp; all I/O goes through the io*.
 // Arcade mixing: y = forward, x = turn → left = forward + turn, right = forward − turn.
-// Safeties: gamepad disconnected/silent, e-stop, LVC, encoder faults → BRAKING.
+// Safeties: gamepad disconnected/silent, gamepad e-stop, encoder faults → BRAKING.
+// (The HARDWARE emergency stop is not seen here: the mushroom opens the main relay's
+// coil and the ESP dies with the rest — see doc/electronique.md.)
 // Rollover protection: the allowed turn decreases with the measured speed.
 #include "controller_core.hpp"
 
@@ -22,43 +24,6 @@ using ctl::turnLimit;
 // was delayed and the shaft moved > half a turn between reads) without averaging lag.
 float median5(const float w[5]) { float a[5]; std::copy(w, w + 5, a); std::sort(a, a + 5); return a[2]; }
 } // namespace
-
-void KartController::updateLVC(float vbat, int64_t now)
-{
-    // Thresholds hard-coded according to the battery DETECTED at startup (12 V or 24 V, lead-acid).
-    // As long as the voltage has not been stable 3 s (unknown type): no LVC — the kart
-    // starts disarmed anyway, and one never changes battery with the system powered on.
-    const int bt = m_batt_det.volts;
-    if (0 == bt)
-    {
-        m_lvc_tripped = false;
-        m_sag_start_us = 0;
-        return;
-    }
-    const float cut_v     = (24 == bt) ? hw::VBAT24_CUT_V     : hw::VBAT12_CUT_V;
-    const float recover_v = (24 == bt) ? hw::VBAT24_RECOVER_V : hw::VBAT12_RECOVER_V;
-
-    if (!m_lvc_tripped)
-    {
-        if (vbat < cut_v)
-        {
-            if (0 == m_sag_start_us) m_sag_start_us = now;
-            if ((now - m_sag_start_us) > static_cast<int64_t>(hw::VBAT_SAG_DEBOUNCE_MS) * 1000)
-            {
-                m_lvc_tripped = true;
-            }
-        }
-        else
-        {
-            m_sag_start_us = 0;
-        }
-    }
-    else if (vbat > recover_v)
-    {
-        m_lvc_tripped = false;
-        m_sag_start_us = 0;
-    }
-}
 
 // Brakes one wheel: speed PID → 0 (signed output, can reverse). Speed in m/s.
 float KartController::brakeWheel(Pid& pid, float speed_ms, const KartConfig& cfg, float dt)
@@ -137,14 +102,6 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     // DISCONNECTED (immediate disarm + braking, without waiting for the Bluetooth timeout).
     const bool pad_stale = in.pad.connected &&
                            ((now - in.pad.last_report_us) > hw::PAD_HB_TIMEOUT_US);
-    // Voltage read at 20 Hz only (hw::VBAT_READ_TICKS): the ADS1115 at 128 SPS produces
-    // nothing new any faster, and it avoids ~4000 I2C transactions/s in the 500 Hz loop.
-    if (0 == (m_vbat_tick++ % hw::VBAT_READ_TICKS))
-    {
-        m_vraw = in.sensors.vbat_ok ? in.sensors.vbat_v : -1.f;
-    }
-    const bool  vbat_valid = (m_vraw > 0.05f);
-    const float vbat = vbat_valid ? m_vraw : 0.f;   // already in battery volts (host)
     // Count rate (counts/s), smoothed by EMA (attenuates the quantization of the Δangle per
     // tick at low speed) then converted by the CONFIG RATIOS (enc_mps_per_cps /
     // enc_rpm_per_cps) — the core knows neither the CPR, nor the reduction, nor the wheel.
@@ -188,47 +145,10 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         m_mad_us = 0;
     }
 
-    // Voltage sensor absent → unknown voltage: we do NOT trigger the LVC (the pack's BMS
-    // ensures protection). Also allows bench testing without the ADS1115 wired.
-    if (vbat_valid)
-    {
-        // Type detection stays on the RAW value: it only runs at rest, before any load, and
-        // deliberately demands a voltage that does not move.
-        m_batt_det.update(vbat, now, hw::VBAT_DETECT_STABLE_US,
-                          hw::VBAT_DETECT_TOL_V, hw::VBAT_DETECT_24V_MIN);
-        // The LVC judges a SLOWLY SMOOTHED voltage, so an acceleration sag cannot trip it —
-        // see hw::VBAT_LVC_EMA_* for why the raw value was the wrong thing to threshold.
-        if (m_vbat_lvc <= 0.f) m_vbat_lvc = vbat;
-        else m_vbat_lvc += hw::VBAT_LVC_EMA_ALPHA * (vbat - m_vbat_lvc);
-        // vbat_check_en = 0: the voltage stays MEASURED (display, graphs, automatic PWM cap
-        // below) but stops being a driving condition — no fb::LVC, so nothing blocks and the
-        // 30 s power cutoff (which watches that very bit) never arms either.
-        if (m_cfg.vbat_check_en != 0)
-        {
-            updateLVC(m_vbat_lvc, now);
-        }
-        else
-        {
-            m_lvc_tripped = false;
-            m_sag_start_us = 0;
-        }
-        // SLOW smoothing for the auto PWM cap: the sag under load must not
-        // make the duty oscillate (sag → Vbat drops → duty rises → more sag…).
-        if (m_vbat_ema <= 0.f) m_vbat_ema = vbat;
-        else m_vbat_ema += hw::VBAT_CAP_EMA_ALPHA * (vbat - m_vbat_ema);
-    }
-    else
-    {
-        m_lvc_tripped = false;
-        m_sag_start_us = 0;
-        m_vbat_ema = 0.f;   // unknown voltage → no automatic cap
-        m_vbat_lvc = 0.f;   // and the LVC filter restarts from the next real reading
-    }
-
-    // PWM cap: AUTOMATIC (12 V nominal / measured Vbat: 12 V → ~100%, 24 V → ~50%)
-    // AND manual (duty_cap, web page) — the most restrictive wins. Without ADS1115: manual only.
-    const float duty_max = std::min(m_cfg.duty_cap_frac, ctl::dutyCapVolts(m_vbat_ema, hw::MOTOR_V_NOM));
-    const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(duty_max, 0.f, 1.f));
+    // PWM cap: MANUAL only (duty_cap, web page). The pack is always 12 V — the motors' own
+    // nominal voltage — so there is no over-voltage to cap against and nothing measures the
+    // battery any more. duty_cap stays as the single, explicit power ceiling.
+    const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(m_cfg.duty_cap_frac, 0.f, 1.f));
 
     // ── Faults / non-driving conditions ──
     // ABSENT encoders (I2C silent): with use_encoders=1 it is blocking — PID braking and
@@ -245,38 +165,17 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     // display is derived with primaryFault(). Bits: see FAULTS_DESC (index.html).
     unsigned fmask = 0;
     if (in.pad.estop)                                fmask |= fb::ESTOP;
-    if (m_lvc_tripped)                           fmask |= fb::LVC;
     if (in.pad.connected && !in.pad.calibrated)          fmask |= fb::NOCAL;
     if (m_enc_fault)                             fmask |= fb::ENC_STUCK;
     if (!in.pad.connected)                           fmask |= fb::PAD_LOST;
     if (pad_stale)                               fmask |= fb::PAD_STALE;
-    if (!vbat_valid)                             fmask |= fb::NO_VBAT;
     if (m_enc_rev_fault)                         fmask |= fb::ENC_REV;
     if (m_enc_mad_fault)                         fmask |= fb::ENC_MAD;
     if (enc_l_abs)                               fmask |= fb::ENC_L_ABS;
     if (enc_r_abs)                               fmask |= fb::ENC_R_ABS;
     if (mag_l_out)                               fmask |= fb::MAG_L;
     if (mag_r_out)                               fmask |= fb::MAG_R;
-    // 40 A relay coil de-energized = the emergency stop is engaged (coil sense). ALWAYS
-    // consulted — no software bypass, by decision: the e-stop detection is a link in the
-    // relay-protection chain (forced disarm ⇒ the contact only ever closes at no load), and
-    // a config flag that can silently disable a safety input is a liability. Bench without
-    // the opto: tie GPIO22 to GND. Blocking: forces a DISARM, so releasing the mushroom
-    // never resumes drive on its own — the driver has to hold START again. DEBOUNCED: the sense line idles on a weak
-    // pull-up next to the 40 A cabling, and one coupled spike must not fake an e-stop —
-    // 50 ms of consecutive "dead" reads to raise, first "live" read to clear.
-    if (!in.sensors.motor_pwr)
-    {
-        if (m_pwr_dead_ticks < hw::PWR_SENSE_DEBOUNCE_TICKS) ++m_pwr_dead_ticks;
-    }
-    else
-    {
-        m_pwr_dead_ticks = 0;
-    }
-    const bool no_motor_pwr = (m_pwr_dead_ticks >= hw::PWR_SENSE_DEBOUNCE_TICKS);
-    if (no_motor_pwr)                            fmask |= fb::NO_MOTOR_PWR;
-
-    const bool blocking = (0 != (fmask & fb::BLOCKING)) || no_motor_pwr ||
+    const bool blocking = (0 != (fmask & fb::BLOCKING)) ||
                           (use_enc && (enc_l_abs || enc_r_abs || mag_l_out || mag_r_out));
 
     // Gamepad absent / gamepad e-stop / BLOCKING FAULT → we disarm and brake (absolute
@@ -286,8 +185,10 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     const bool can_drive = m_armed && in.pad.connected && !pad_stale && !in.pad.estop && !blocking;
 
     // ── Arming by held press on START (anti-startup: stick centered + gamepad connected) ──
-    // START = physical button OR the gamepad's START/Options button (same function).
-    const bool start_held = in.btn_start_hw || in.pad.start;
+    // START = the gamepad's START/Options button. It is the ONLY arming input: the physical
+    // button went away with the last GPIO input on the board — no button can be pressed by a
+    // bystander, and arming already required a connected, calibrated gamepad anyway.
+    const bool start_held = in.pad.start;
     const bool centered = (std::fabs(in.pad.x) < hw::ARM_CENTER_MAX) && (std::fabs(in.pad.y) < hw::ARM_CENTER_MAX);
     if (start_held)
     {
@@ -346,7 +247,7 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
             // turn smoothing, NO rollover limit, NO speed-limiter PID, NO active (PID) braking,
             // and always the plain LINEAR mix (a diagnostic mode must not depend on the
             // feel curve selected in mix_type).
-            // The output PWM cap (battery-voltage / manual duty) still bounds the drive, and
+            // The output PWM cap (manual duty) still bounds the drive, and
             // every safety gate (arming, heartbeat, e-stop, blocking faults) is unchanged
             // upstream. Releasing the stick engages DYNAMIC braking (motor short-circuit) — a
             // passive resting state, not a control loop — so it stops like every other mode
@@ -457,8 +358,6 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     // ── Tick telemetry ──
     m_tel.state      = state;
     m_tel.faults     = fmask;
-    m_tel.vbat       = vbat;
-    m_tel.batt_type  = m_batt_det.volts;
     // Don't publish a speed/rpm for a wheel whose encoder is IN ERROR — absent, magnet out of
     // field, or a latched encoder fault (stuck/reversed/erratic): the reading is meaningless →
     // 0 as fallback. (Control above still uses the RAW sl/sr so its sanity checks can fault.)
@@ -478,7 +377,7 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     m_tel.out_r      = out_r;
     m_tel.brake_mode = dyn_brake ? BrakeMode::Dynamic : (braking ? BrakeMode::Active : BrakeMode::None);
     m_tel.armed      = m_armed;
-    m_tel.btn_start  = in.btn_start_hw || in.pad.start;
+    m_tel.btn_start  = in.pad.start;
 
     return out;
 }
@@ -512,12 +411,6 @@ void KartController::setPad(const PadInputs& pad)
     m_pad = pad;
 }
 
-void KartController::setStartButton(bool held)
-{
-    std::lock_guard<std::mutex> lk(m_mtx);
-    m_btn_start_hw = held;
-}
-
 CtrlTelemetry KartController::telemetry() const
 {
     std::lock_guard<std::mutex> lk(m_mtx);
@@ -540,7 +433,6 @@ CtrlOutputs KartController::tick(int64_t now_us)
     {
         std::lock_guard<std::mutex> lk(m_mtx);
         in.pad = m_pad;
-        in.btn_start_hw = m_btn_start_hw;
         out = step(in);
     }
     if (apply) apply(out);

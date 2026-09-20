@@ -54,46 +54,6 @@ inline float turnLimit(float v_abs, float v_full, float v_max, float hi_limit)
     return clampf(hi_limit * v_max / std::max(v_abs, 0.05f), 0.f, 1.f);
 }
 
-// Automatic PWM cap based on the MEASURED battery voltage: the motors (v_nom, e.g. 12 V)
-// must not see more than their nominal voltage on average → max duty = v_nom / vbat.
-// 12 V battery → ~100%, 20 V → ~60%, 24 V → ~50%. Unknown voltage (sensor absent,
-// vbat ≤ 0) or lower than v_nom → 1 (no automatic limiting).
-inline float dutyCapVolts(float vbat, float v_nom)
-{
-    if (vbat <= v_nom) return 1.f;
-    return v_nom / vbat;
-}
-
-// Detection of the battery TYPE at startup (12 V or 24 V, lead-acid): the voltage must
-// stay STABLE (min-max spread ≤ tol) for stable_us, then classification by threshold —
-// a 12 V even at full charge stays ≤ ~14.8 V, a 24 V even discharged stays ≥ ~21 V,
-// so v24_min between the two decides unambiguously. We NEVER change battery with the
-// system powered on: the result is FINAL until restart (0 = not yet classified).
-struct BattDetect
-{
-    int64_t m_start_us = -1;   // start of the stability window (-1 = not started)
-    float   m_min = 0.f, m_max = 0.f;
-    int     volts = 0;         // 0 = unknown, then 12 or 24 (frozen)
-
-    void update(float v, int64_t now_us, int64_t stable_us, float tol, float v24_min)
-    {
-        if (0 != volts) return;                                  // already classified: final
-        if (v <= 0.f) { m_start_us = -1; return; }               // invalid reading → restart
-        if (m_start_us < 0 || (v - m_min > tol) || (m_max - v > tol))
-        {
-            m_start_us = now_us;                                 // unstable → window restarted
-            m_min = m_max = v;
-            return;
-        }
-        m_min = (v < m_min) ? v : m_min;
-        m_max = (v > m_max) ? v : m_max;
-        if (now_us - m_start_us >= stable_us)
-        {
-            volts = (0.5f * (m_min + m_max) >= v24_min) ? 24 : 12;
-        }
-    }
-};
-
 // "Sensor/motor wired backwards" detection: firm command on one side, wheel measured
 // FIRMLY on the other for win_us WITHOUT its speed decreasing. The key point:
 // a commanded DECELERATION (braking at the stick, kart already moving) also has a speed opposed

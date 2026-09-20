@@ -14,7 +14,6 @@
 extern "C" void app_main()
 {
     board::motorsIdleEarly();  // FIRST: motor pins at rest (avoids any jolt at boot)
-    board::powerLatch();       // hold the power (the external button is momentary)
 
     const esp_err_t nv = nvs_flash_init();
     if (ESP_ERR_NVS_NO_FREE_PAGES == nv || ESP_ERR_NVS_NEW_VERSION_FOUND == nv)
@@ -28,7 +27,7 @@ extern "C" void app_main()
     wifiSoftAPInit();    // "Kart-Config" access point
     webServerStart();    // HTTP/WebSocket server
     mdnsStart();         // advertises http://kart.local (after the server: the port is open)
-    Controller::init();  // hardware (ADC, PWM, I2C sensor, buttons)
+    Controller::init();  // hardware (PWM, I2C sensors, button)
     ledsStart();         // WS2812B strip display task
     Controller::start(); // 500 Hz control loop (system disarmed at startup)
 

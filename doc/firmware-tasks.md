@@ -7,7 +7,7 @@ FreeRTOS at **1000 Hz**; priorities **0 (idle) → 24 (max)**, a **higher number
 
 | Task | Priority | Core | Stack (B) | Period | Role | Source |
 |---|:--:|:--:|:--:|---|---|---|
-| **`control`** | **18** | **1** (APP) | 6144 | **500 Hz** | Control loop: pluggable **stick→motor mixing** (`mixer.hpp`), **rollover protection**, active (PID) braking + speed limiter, LVC, arming/fault state machine, event-log pushes (RAM ring only); **subscribed to the 2 s watchdog (PANIC)** | `controller.cpp` (`Controller::start`) |
+| **`control`** | **18** | **1** (APP) | 6144 | **500 Hz** | Control loop: pluggable **stick→motor mixing** (`mixer.hpp`), **rollover protection**, active (PID) braking + speed limiter, arming/fault state machine, event-log pushes (RAM ring only); **subscribed to the 2 s watchdog (PANIC)** | `controller.cpp` (`Controller::start`) |
 | **`leds`** | **3** | **0** (PRO) | 3072 | ~20 Hz | Status display on the WS2812B strip (RMT) **+ event-log drain** (`evlog::maintain()`: RAM ring → flash, only while disarmed) | `leds.cpp` (`ledsStart`) |
 | **`bt`** | **5** | **0** (PRO) | 8192 | (loop) | **BTstack / Bluepad32 loop**: Bluetooth stack, pairing and gamepad frames | `input_bp32.c` (`inputbp_start`) |
 

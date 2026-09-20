@@ -84,12 +84,12 @@ struct VehicleParams
     float roll_n    = 30.f;     // rolling resistance (N, opposing the motion)
     float yaw_damp  = 4.5f;    // yaw damping N·m·s/rad — low: the free caster wheel FOLLOWS
 
-    // ── Battery (12 V lead-acid by default; V0=25.6/rint doubled for 24 V) ──
+    // ── Battery (12 V lead-acid) ── KEPT in the physics even though the firmware no longer
+    // measures anything: the terminal voltage sags under load, and that sag is what the
+    // motors actually see (it limits acceleration and top speed). It is a property of the
+    // pack, not a sensor reading.
     float batt_v0   = 12.8f;    // open-circuit voltage (full charge at rest)
     float batt_rint = 0.05f;    // internal resistance (Ω) — the sag under load
-    // Divider actually FITTED on the simulated board — defaults to what the firmware assumes
-    // (hw::VBAT_DIV_RATIO); a scenario can detune it to check a mis-sized bridge.
-    float vdiv      = hw::VBAT_DIV_RATIO;
 
     float slope_rad = 0.f;      // slope (+ = uphill) — F = m·g·sin(θ) opposing forward motion
 
@@ -104,7 +104,7 @@ enum class EncMode { Ok, Absent, Reversed, Stuck, Crazy };
 
 // Drive mode for the simulation step:
 // Drive = signed PWM applied · Brake = phase short-circuit (dynamic braking) ·
-// Float = POWER CUTOFF (kill switch): MOSFETs open, motors floating, NO
+// Float = POWER CUTOFF (main relay open: main switch or e-stop): MOSFETs open, motors floating, NO
 // electric force — only rolling resistance and slope remain (coasting).
 enum class DriveMode { Drive, Brake, Float };
 
@@ -318,8 +318,7 @@ public:
     {
         return (left ? enc_mode_l : enc_mode_r) != EncMode::Absent;
     }
-    // Voltage at the ADC pin (after voltage divider), −1 if the sensor is removed.
-    float vbatPinVolts() const { return vbat_sensor ? (m_vterm / m_p.vdiv) : -1.f; }
+    float vbatVolts() const { return m_vterm; }   // pack terminal voltage (display only)
 
     // ── Physical quantities (asserts + display) ──
     float v() const { return m_v; }         // m/s (signed)
@@ -366,7 +365,6 @@ public:
     std::function<bool(float, float)> wall_fn;
     EncMode enc_mode_l = EncMode::Ok;
     EncMode enc_mode_r = EncMode::Ok;
-    bool    vbat_sensor = true;
     VehicleParams& params() { return m_p; }
 
 private:

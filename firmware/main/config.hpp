@@ -16,8 +16,6 @@ struct KartStatus
     int      m_state = static_cast<int>(State::Lockout);
     int      m_fault = static_cast<int>(Fault::None);
     unsigned m_faults = 0;    // mask of ACTIVE conditions (Faults page)
-    float    m_vbat = 0.f;
-    int      m_batt_type = 0; // battery detected at startup: 0 = in progress, 12 or 24 (V)
     float    m_rpm_l = 0.f;   // SIGNED front left wheel (AS5600 #1, rpm)
     float    m_rpm_r = 0.f;
     float    m_speed_ms = 0.f;// SIGNED VEHICLE speed (m/s) — pivot in place → 0
@@ -40,7 +38,6 @@ struct KartStatus
     float    m_pad_rx2 = 0.f;   // RIGHT stick [-1..1] (display only)
     float    m_pad_ry2 = 0.f;
     unsigned m_pad_btns = 0;    // mask: buttons | (misc<<16) | (dpad<<24) (display)
-    int      m_idle_off_s = -1; // seconds before the idle power-off (-1 = not counting)
 };
 
 // PROTECTED access to the telemetry (internal mutex): coherent copy for the readers

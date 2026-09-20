@@ -1,7 +1,7 @@
 // controller.hpp — HARDWARE binding of the control core. EspController fills the two
 // KartController callbacks (sensors ← board::, motor outputs → board::) and pushes it
-// the inputs (gamepad, START button, web config); ALL the business logic is in the
-// core. The host decisions (rumble, power cutoff) are
+// the inputs (gamepad, web config); ALL the business logic is in the
+// core. The host decision left (rumble) is
 // derived from the telemetry via advisors.hpp. The Controller namespace is only the BOOTSTRAP:
 // it initializes the instance, creates the 500 Hz FreeRTOS task and runs tickOnce() in it.
 #pragma once
@@ -25,7 +25,7 @@ public:
     uint32_t sensMaxUs(int who);   // worst SENSOR-READ duration (µs) — I2C cost alone
 
 private:
-    SensorReadings readSensors();                 // sensor callback: encoders + Vbat (in battery VOLTS)
+    SensorReadings readSensors();                 // sensor callback: the two wheel encoders
     void           applyOutputs(const CtrlOutputs& out);   // output callback: motor command
     void           pushPad();                     // pushes the gamepad state to the core (setPad)
     void           publish(const CtrlTelemetry& t);   // telemetry + gamepad display → statusPublish
@@ -34,14 +34,10 @@ private:
     input::State   m_in;         // last complete gamepad snapshot (display fields)
     PadInputs      m_pad_in;     // last gamepad state pushed to the core (for the advisors)
     RumbleAdvisor  m_rumble;     // haptic feedback (host decision)
-    PowerOffAdvisor m_poweroff;  // power cutoff on prolonged LVC (host decision)
-    IdleOffAdvisor m_idle_off;   // power cutoff after N minutes disarmed (host decision)
     uint32_t       m_loop_max_us[PEAK_N] = {};   // worst tick duration, one slot per reader
     uint32_t       m_sens_max_us[PEAK_N] = {};   // worst readSensors() duration, same
     bool           m_ev_armed = false;     // arm/disarm edges → event log
     unsigned       m_ev_faults = 0;        // fault rising edges → event log
-    int            m_vbat_tick = 0;        // rate-limit the ADS1115 read (shares bus 0 w/ left enc)
-    float          m_pin_v = -1.f;         // last ADC pin voltage (cached between 20 Hz reads)
 };
 
 // ESP-side bootstrap: owns the EspController instance, creates the 500 Hz control task

@@ -11,9 +11,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-// Sensor callback: encoders + battery voltage — the read ERRORS travel in
-// the return (enc_ok_*/vbat_ok), and the voltage leaves in BATTERY VOLTS (the ADC pin →
-// battery conversion, divider ratio, is done HERE, not in the core).
+// Sensor callback: the two wheel encoders — the read ERRORS travel in the return
+// (enc_ok_*/mag_ok_*). Nothing else is measured on this kart: the pack is always 12 V.
 SensorReadings EspController::readSensors()
 {
     // Timed separately from the whole tick: loop_max_us is WALL CLOCK and so also counts
@@ -28,15 +27,6 @@ SensorReadings EspController::readSensors()
     board::refreshMagStatus();                 // poll AS5600 STATUS (rate-limited internally)
     s.mag_ok_l = board::encLeftMagOk();
     s.mag_ok_r = board::encRightMagOk();
-    // Read Vbat only at ~20 Hz (VBAT_READ_TICKS), not every tick: the ADS1115 shares I2C bus 0
-    // with the LEFT AS5600, and polling it (×ADC_OVERSAMPLE) every tick jittered the left
-    // encoder's read timing → RPM dips. The control loop only consumes Vbat at 20 Hz anyway.
-    // One ADS1115 read per tick for ADC_OVERSAMPLE ticks out of every VBAT_READ_TICKS, rather
-    // than all of them on one tick: same average, same ~20 Hz refresh, a fraction of the peak.
-    if ((m_vbat_tick++ % hw::VBAT_READ_TICKS) < hw::ADC_OVERSAMPLE) m_pin_v = board::vbatSample();
-    s.motor_pwr = board::motorPowerLive();
-    s.vbat_ok = (m_pin_v >= 0.f);
-    s.vbat_v = s.vbat_ok ? m_pin_v * hw::VBAT_DIV_RATIO : -1.f;
     const uint32_t d = static_cast<uint32_t>(esp_timer_get_time() - t0);
     for (uint32_t& peak : m_sens_max_us)
         if (d > peak) peak = d;
@@ -75,8 +65,6 @@ void EspController::publish(const CtrlTelemetry& t)
     st.m_state      = static_cast<int>(t.state);
     st.m_fault      = static_cast<int>(primaryFault(t.faults));   // derived from the bitset
     st.m_faults     = t.faults;
-    st.m_vbat       = t.vbat;
-    st.m_batt_type  = t.batt_type;
     st.m_rpm_l      = t.rpm_l;
     st.m_rpm_r      = t.rpm_r;
     st.m_speed_ms   = t.speed_ms;
@@ -100,7 +88,6 @@ void EspController::publish(const CtrlTelemetry& t)
     st.m_pad_rx2  = m_in.rx2;
     st.m_pad_ry2  = m_in.ry2;
     st.m_pad_btns = m_in.buttons;
-    st.m_idle_off_s = m_idle_off.remainingS();
     statusPublish(st);
 }
 
@@ -118,11 +105,8 @@ void EspController::tickOnce()
     // Worst tick since the last read, published in the telemetry. A sensor that goes quiet
     // costs an I2C timeout, and this is what makes that cost VISIBLE instead of suspected.
     const int64_t t_begin = esp_timer_get_time();
-    board::pollButtons();               // sampling/debounce of the START button
     pushPad();
-    m_ctrl.setStartButton(board::btnStart());
     const KartConfig cfg = configSnapshot();   // the web config can change at any time
-    const int cfg_idle_min = cfg.idle_off_min;
     m_ctrl.setConfig(cfg);
     const int64_t now = esp_timer_get_time();
     m_ctrl.tick(now);
@@ -131,26 +115,6 @@ void EspController::tickOnce()
     const CtrlTelemetry t = m_ctrl.telemetry();
     const RumbleCmd r = m_rumble.update(t, m_pad_in, now);
     if (r.active) input::rumble(r.strong, r.weak, r.duration_ms);
-    // Power-off records are drained to flash BEFORE the rail is cut: there is no hold
-    // capacitor anymore, so once POWER_HOLD releases, the logic rail is gone in tens of ms —
-    // too tight for the LED task's 50 ms cadence. Writing flash from the control task is
-    // forbidden while driving, but here the kart is disarmed and about to power off: a
-    // stalled last tick is exactly free.
-    if (m_poweroff.update(t, now))
-    {
-        evlog::push(evlog::Ev::LvcOff, t.faults);
-        evlog::maintain();
-        board::powerOff();
-    }
-    // Idle cutoff: fires ONCE. If the power does not actually drop (the hidden FORCE ON
-    // switch, or bench USB power), we stay alive with the countdown parked at 0.
-    if (m_idle_off.update(t.armed, cfg_idle_min, now))
-    {
-        evlog::push(evlog::Ev::IdleOff, static_cast<uint32_t>(cfg_idle_min));
-        evlog::maintain();
-        board::powerOff();
-    }
-
     // Event log: arm/disarm edges and fault bits raised mid-run. The Disarm record carries
     // the WHOLE fault mask of its tick — that mask IS the answer to "why did it stop": the
     // culprit bit (pad stale, e-stop, encoder…) rises on the very tick that disarms, so a

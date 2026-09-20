@@ -102,7 +102,7 @@
       ≈ 52 N per motor. Dynamic braking = short circuit (V = 0, current through R<sub>a</sub>).</li>
   <li><b>Battery</b>: ideal source + internal resistance (V = V₀ − R·I). No discharge model.</li>
   <li><b>Sensors</b>: AS5600 quantized to 12 bits ×1.28 (like the real one); perfect gamepad (the script speaks in calibrated setpoint); injectable failures (missing/inverted/frozen/aberrant).</li>
-  <li><b>Power cut (kill switch)</b>: the controller stops running and the bridges
+  <li><b>Power cut (main switch or e-stop)</b>: the controller stops running and the bridges
       open → FLOATING motors, no electrical force — only rolling against the slope
       remains (scenarios <code>coupure_pente8/16</code>: runaway demonstrated).</li>
  </ul>
@@ -568,7 +568,9 @@ scene.add(new THREE.Line(trailGeo, new THREE.LineBasicMaterial({color:0x58a6ff})
 
 // ── Stream state ──
 const ST = ['IDLE','CALIBRATION','ARMED','FAULT'];
-const FA = ['—','E-STOP','LOW BATTERY','NOT CALIBRATED','ENCODER STUCK','ENCODER INVERTED',
+// Index 2 (was LOW BATTERY) is retired with the voltage sensor; the slot stays so the
+// others keep their number, matching Fault:: on the firmware side.
+const FA = ['—','E-STOP','—','NOT CALIBRATED','ENCODER STUCK','ENCODER INVERTED',
             'ENCODER ABERRANT','ENCODER MISSING'];
 const BRK = ['⚪ traction','🟠 dynamic braking','🟢 active brake (PID)'];
 let atip = 5.0, vlim = 3.3, cur = null, es = null;

@@ -27,23 +27,24 @@ message ParamVal {
 }
 
 // ── Responses (kart → client) ──
+// Fields 4-7 (vbat, batt_type, batt_lo, batt_hi) and 30 (idle_off_s) are RESERVED, not
+// reused: nothing measures the battery any more and the firmware cannot cut its own power.
 message Status {
   // Nested so the generated C types are Status_State / Status_Fault / Status_BrakeMode —
   // they must NOT collide with the C++ enum class State/Fault/BrakeMode in control_types.hpp.
   enum State     { LOCKOUT = 0; CALIBRATE = 1; RUN = 2; FAULT = 3; }
   enum BrakeMode { NONE = 0; DYNAMIC = 1; ACTIVE = 2; }
   enum Fault {
-    NO_FAULT = 0; ESTOP = 1; LVC = 2; NOT_CALIBRATED = 3; ENCODER = 4;
+    // 2 (LVC) and 9 (MOTOR_POWER) are retired: no battery measurement, and the e-stop now
+    // opens the main relay's coil — it cuts the ESP itself, so there is nothing to report.
+    reserved 2, 9;
+    NO_FAULT = 0; ESTOP = 1; NOT_CALIBRATED = 3; ENCODER = 4;
     ENCODER_DIR = 5; ENCODER_MAD = 6; ENCODER_ABSENT = 7; ENCODER_MAGNET = 8;
-    MOTOR_POWER = 9;
   }
+  reserved 4, 5, 6, 7, 30;
   State  state = 1;
   Fault  fault = 2;
   uint32 faults = 3;            // mask of active conditions (fb:: bits)
-  float  vbat = 4;
-  int32  batt_type = 5;         // 0 while detecting, 12 or 24
-  float  batt_lo = 6;           // gauge scale decided on the firmware side
-  float  batt_hi = 7;
   float  speed_ms = 8;          // VEHICLE speed (m/s, signed — 0 while pivoting)
   float  rpm_l = 9;             // LEFT wheel speed in rpm (signed)
   float  rpm_r = 10;            // RIGHT wheel speed in rpm (signed)
@@ -66,7 +67,6 @@ message Status {
   float  pad_ry2 = 27;
   uint32 pad_btns = 28;
   int32  pad_age_ms = 29;       // gamepad heartbeat (age of the last HID report)
-  int32  idle_off_s = 30;       // seconds left before the idle power-off (-1 = not counting)
 }
 
 message ParamMeta {
@@ -88,16 +88,15 @@ message Vals   { repeated ParamVal  params = 1; }
 
 // History: each series = RAW bytes (1 byte/sample, oldest → newest).
 message Hist {
+  reserved 3, 10;               // dt_batt / batt — the battery chart went with the ADC
   uint32 dt_fast = 1;           // s between samples (accel/pwm/rpm)
   uint32 dt_spd = 2;
-  uint32 dt_batt = 3;
   bytes  accel = 4;
   bytes  pwml = 5;
   bytes  pwmr = 6;
   bytes  rpml = 7;
   bytes  rpmr = 8;
   bytes  spd = 9;               // m/s ×10
-  bytes  batt = 10;             // V ×10
   bytes  loop = 11;             // worst 500 Hz tick per slot, in 50 µs units
 }
 
@@ -161,8 +160,9 @@ message SysDyn {
 message Ok {}
 
 // Persistent event log ("why did it disarm"): last entries, oldest → newest.
-// code mirrors evlog::Ev (1 Boot, 2 Arm, 3 Disarm, 4 Fault, 5 IdleOff, 6 LvcOff);
-// data is the fault mask for Disarm/Fault/LvcOff, the reset reason for Boot.
+// code mirrors evlog::Ev (1 Boot, 2 Arm, 3 Disarm, 4 Fault; 5 IdleOff and 6 LvcOff are
+// retired with the power latch but may still sit in an older partition);
+// data is the fault mask for Disarm/Fault, the reset reason for Boot.
 message EvlogEntry {
   uint32 t_ms = 1;              // uptime of that boot, in ms
   uint32 boot = 2;              // boot counter (persisted): groups entries per power cycle

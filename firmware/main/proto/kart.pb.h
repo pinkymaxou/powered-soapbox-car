@@ -28,14 +28,12 @@ typedef enum _Status_BrakeMode {
 typedef enum _Status_Fault {
     Status_Fault_NO_FAULT = 0,
     Status_Fault_ESTOP = 1,
-    Status_Fault_LVC = 2,
     Status_Fault_NOT_CALIBRATED = 3,
     Status_Fault_ENCODER = 4,
     Status_Fault_ENCODER_DIR = 5,
     Status_Fault_ENCODER_MAD = 6,
     Status_Fault_ENCODER_ABSENT = 7,
-    Status_Fault_ENCODER_MAGNET = 8,
-    Status_Fault_MOTOR_POWER = 9
+    Status_Fault_ENCODER_MAGNET = 8
 } Status_Fault;
 
 /* Struct definitions */
@@ -61,15 +59,13 @@ typedef struct _ParamVal {
     } value;
 } ParamVal;
 
-/* ── Responses (kart → client) ── */
+/* ── Responses (kart → client) ──
+ Fields 4-7 (vbat, batt_type, batt_lo, batt_hi) and 30 (idle_off_s) are RESERVED, not
+ reused: nothing measures the battery any more and the firmware cannot cut its own power. */
 typedef struct _Status {
     Status_State state;
     Status_Fault fault;
     uint32_t faults; /* mask of active conditions (fb:: bits) */
-    float vbat;
-    int32_t batt_type; /* 0 while detecting, 12 or 24 */
-    float batt_lo; /* gauge scale decided on the firmware side */
-    float batt_hi;
     float speed_ms; /* VEHICLE speed (m/s, signed — 0 while pivoting) */
     float rpm_l; /* LEFT wheel speed in rpm (signed) */
     float rpm_r; /* RIGHT wheel speed in rpm (signed) */
@@ -92,7 +88,6 @@ typedef struct _Status {
     float pad_ry2;
     uint32_t pad_btns;
     int32_t pad_age_ms; /* gamepad heartbeat (age of the last HID report) */
-    int32_t idle_off_s; /* seconds left before the idle power-off (-1 = not counting) */
 } Status;
 
 typedef struct _ParamMeta {
@@ -138,14 +133,12 @@ typedef struct _Vals {
 typedef struct _Hist {
     uint32_t dt_fast; /* s between samples (accel/pwm/rpm) */
     uint32_t dt_spd;
-    uint32_t dt_batt;
     pb_callback_t accel;
     pb_callback_t pwml;
     pb_callback_t pwmr;
     pb_callback_t rpml;
     pb_callback_t rpmr;
     pb_callback_t spd; /* m/s ×10 */
-    pb_callback_t batt; /* V ×10 */
     pb_callback_t loop; /* worst 500 Hz tick per slot, in 50 µs units */
 } Hist;
 
@@ -211,8 +204,9 @@ typedef struct _Ok {
 } Ok;
 
 /* Persistent event log ("why did it disarm"): last entries, oldest → newest.
- code mirrors evlog::Ev (1 Boot, 2 Arm, 3 Disarm, 4 Fault, 5 IdleOff, 6 LvcOff);
- data is the fault mask for Disarm/Fault/LvcOff, the reset reason for Boot. */
+ code mirrors evlog::Ev (1 Boot, 2 Arm, 3 Disarm, 4 Fault; 5 IdleOff and 6 LvcOff are
+ retired with the power latch but may still sit in an older partition);
+ data is the fault mask for Disarm/Fault, the reset reason for Boot. */
 typedef struct _EvlogEntry {
     uint32_t t_ms; /* uptime of that boot, in ms */
     uint32_t boot; /* boot counter (persisted): groups entries per power cycle */
@@ -258,8 +252,8 @@ extern "C" {
 #define _Status_BrakeMode_ARRAYSIZE ((Status_BrakeMode)(Status_BrakeMode_ACTIVE+1))
 
 #define _Status_Fault_MIN Status_Fault_NO_FAULT
-#define _Status_Fault_MAX Status_Fault_MOTOR_POWER
-#define _Status_Fault_ARRAYSIZE ((Status_Fault)(Status_Fault_MOTOR_POWER+1))
+#define _Status_Fault_MAX Status_Fault_ENCODER_MAGNET
+#define _Status_Fault_ARRAYSIZE ((Status_Fault)(Status_Fault_ENCODER_MAGNET+1))
 
 
 
@@ -284,11 +278,11 @@ extern "C" {
 /* Initializer values for message structs */
 #define Req_init_default                         {"", "", "", 0, {{NULL}, NULL}}
 #define ParamVal_init_default                    {"", 0, {0}}
-#define Status_init_default                      {_Status_State_MIN, _Status_Fault_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _Status_BrakeMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Status_init_default                      {_Status_State_MIN, _Status_Fault_MIN, 0, 0, 0, 0, 0, 0, 0, 0, _Status_BrakeMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define ParamMeta_init_default                   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {0}, 0, {0}, 0, {0}, 0, {0}}
 #define Config_init_default                      {{{NULL}, NULL}}
 #define Vals_init_default                        {{{NULL}, NULL}}
-#define Hist_init_default                        {0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define Hist_init_default                        {0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Pad_init_default                         {0, {{NULL}, NULL}, 0, 0, 0, 0}
 #define Wifi_init_default                        {0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Ip6_init_default                         {{{NULL}, NULL}, {{NULL}, NULL}}
@@ -300,11 +294,11 @@ extern "C" {
 #define Msg_init_default                         {0, {Status_init_default}}
 #define Req_init_zero                            {"", "", "", 0, {{NULL}, NULL}}
 #define ParamVal_init_zero                       {"", 0, {0}}
-#define Status_init_zero                         {_Status_State_MIN, _Status_Fault_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _Status_BrakeMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define Status_init_zero                         {_Status_State_MIN, _Status_Fault_MIN, 0, 0, 0, 0, 0, 0, 0, 0, _Status_BrakeMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define ParamMeta_init_zero                      {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {0}, 0, {0}, 0, {0}, 0, {0}}
 #define Config_init_zero                         {{{NULL}, NULL}}
 #define Vals_init_zero                           {{{NULL}, NULL}}
-#define Hist_init_zero                           {0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define Hist_init_zero                           {0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Pad_init_zero                            {0, {{NULL}, NULL}, 0, 0, 0, 0}
 #define Wifi_init_zero                           {0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Ip6_init_zero                            {{{NULL}, NULL}, {{NULL}, NULL}}
@@ -328,10 +322,6 @@ extern "C" {
 #define Status_state_tag                         1
 #define Status_fault_tag                         2
 #define Status_faults_tag                        3
-#define Status_vbat_tag                          4
-#define Status_batt_type_tag                     5
-#define Status_batt_lo_tag                       6
-#define Status_batt_hi_tag                       7
 #define Status_speed_ms_tag                      8
 #define Status_rpm_l_tag                         9
 #define Status_rpm_r_tag                         10
@@ -354,7 +344,6 @@ extern "C" {
 #define Status_pad_ry2_tag                       27
 #define Status_pad_btns_tag                      28
 #define Status_pad_age_ms_tag                    29
-#define Status_idle_off_s_tag                    30
 #define ParamMeta_name_tag                       1
 #define ParamMeta_desc_tag                       2
 #define ParamMeta_cat_tag                        3
@@ -375,14 +364,12 @@ extern "C" {
 #define Vals_params_tag                          1
 #define Hist_dt_fast_tag                         1
 #define Hist_dt_spd_tag                          2
-#define Hist_dt_batt_tag                         3
 #define Hist_accel_tag                           4
 #define Hist_pwml_tag                            5
 #define Hist_pwmr_tag                            6
 #define Hist_rpml_tag                            7
 #define Hist_rpmr_tag                            8
 #define Hist_spd_tag                             9
-#define Hist_batt_tag                            10
 #define Hist_loop_tag                            11
 #define Pad_conn_tag                             1
 #define Pad_name_tag                             2
@@ -467,10 +454,6 @@ X(a, STATIC,   ONEOF,    FLOAT,    (value,fval,value.fval),   4)
 X(a, STATIC,   SINGULAR, UENUM,    state,             1) \
 X(a, STATIC,   SINGULAR, UENUM,    fault,             2) \
 X(a, STATIC,   SINGULAR, UINT32,   faults,            3) \
-X(a, STATIC,   SINGULAR, FLOAT,    vbat,              4) \
-X(a, STATIC,   SINGULAR, INT32,    batt_type,         5) \
-X(a, STATIC,   SINGULAR, FLOAT,    batt_lo,           6) \
-X(a, STATIC,   SINGULAR, FLOAT,    batt_hi,           7) \
 X(a, STATIC,   SINGULAR, FLOAT,    speed_ms,          8) \
 X(a, STATIC,   SINGULAR, FLOAT,    rpm_l,             9) \
 X(a, STATIC,   SINGULAR, FLOAT,    rpm_r,            10) \
@@ -492,8 +475,7 @@ X(a, STATIC,   SINGULAR, FLOAT,    pad_zr,           25) \
 X(a, STATIC,   SINGULAR, FLOAT,    pad_rx2,          26) \
 X(a, STATIC,   SINGULAR, FLOAT,    pad_ry2,          27) \
 X(a, STATIC,   SINGULAR, UINT32,   pad_btns,         28) \
-X(a, STATIC,   SINGULAR, INT32,    pad_age_ms,       29) \
-X(a, STATIC,   SINGULAR, INT32,    idle_off_s,       30)
+X(a, STATIC,   SINGULAR, INT32,    pad_age_ms,       29)
 #define Status_CALLBACK NULL
 #define Status_DEFAULT NULL
 
@@ -532,14 +514,12 @@ X(a, CALLBACK, REPEATED, MESSAGE,  params,            1)
 #define Hist_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   dt_fast,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   dt_spd,            2) \
-X(a, STATIC,   SINGULAR, UINT32,   dt_batt,           3) \
 X(a, CALLBACK, SINGULAR, BYTES,    accel,             4) \
 X(a, CALLBACK, SINGULAR, BYTES,    pwml,              5) \
 X(a, CALLBACK, SINGULAR, BYTES,    pwmr,              6) \
 X(a, CALLBACK, SINGULAR, BYTES,    rpml,              7) \
 X(a, CALLBACK, SINGULAR, BYTES,    rpmr,              8) \
 X(a, CALLBACK, SINGULAR, BYTES,    spd,               9) \
-X(a, CALLBACK, SINGULAR, BYTES,    batt,             10) \
 X(a, CALLBACK, SINGULAR, BYTES,    loop,             11)
 #define Hist_CALLBACK pb_default_field_callback
 #define Hist_DEFAULT NULL
@@ -704,7 +684,7 @@ extern const pb_msgdesc_t Msg_msg;
 #define KART_PB_H_MAX_SIZE                       Status_size
 #define Ok_size                                  0
 #define ParamVal_size                            28
-#define Status_size                              173
+#define Status_size                              135
 #define SysDyn_size                              41
 
 #ifdef __cplusplus

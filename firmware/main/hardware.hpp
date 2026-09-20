@@ -1,4 +1,4 @@
-// hardware.hpp — Low-level hardware access (LED, ADC, motors, encoders, buttons).
+// hardware.hpp — Low-level hardware access (LED, motors, encoders).
 // Free functions in the `board` namespace; everything is initialized by board::init().
 #pragma once
 
@@ -7,13 +7,10 @@
 namespace board
 {
 
-void init();   // initializes LED, motors (LEDC+DIR), 2× AS5600 (I2C), ADS1115 (Vbat), START button
+void init();   // initializes LED, motors (LEDC+DIR), 2× AS5600 (I2C)
 
 // Status LED (onboard)
 void led(bool on);
-
-// Analog reading (via external ADS1115 ADC) — voltage at pin A0 (BEFORE the divider ratio).
-float vbatVolts(int oversample);     // oversample = number of readings averaged
 
 // Motors (l, r ∈ [-1..1], independent; cap = max duty = PWM ceiling)
 void motorsSet(float l, float r, uint32_t cap);
@@ -31,19 +28,10 @@ bool encLeftMagOk();     // AS5600 STATUS: left magnet properly in field (MD, no
 bool encRightMagOk();    // same, right
 void refreshMagStatus(); // poll the AS5600 STATUS register (rate-limited); call once per control tick
 
-// START button: pollButtons() once per tick (debounce), then btnStart().
-void pollButtons();
-bool btnStart();
-float vbatSample();      // ONE ADS1115 read per call, averaged over ADC_OVERSAMPLE
-bool motorPowerLive();   // 40 A relay output present (opto sense, active low)
-
 // Call at the VERY START of boot: forces the PWM/DIR pins to the low level (motors stopped)
 // before full init, to prevent any spurious movement while the GPIOs float.
+// (There is no power latch any more: the main relay is a hardware affair — main switch and
+// e-stop mushroom in its coil loop — and the firmware neither holds nor cuts its own supply.)
 void motorsIdleEarly();
-
-// Power latch. powerLatch(): call as early as possible at boot
-// so the ESP holds its own power after the external button is released.
-void powerLatch();
-void powerOff();
 
 } // namespace board

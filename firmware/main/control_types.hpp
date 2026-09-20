@@ -26,49 +26,10 @@ constexpr int   WDT_TIMEOUT_S = 2;   // mirror of sdkconfig's CONFIG_ESP_TASK_WD
 constexpr int PWM_FREQ_HZ = 18000;
 constexpr int PWM_MAX     = 4095;   // 12 bits (the LEDC resolution lives in hardware.cpp)
 
-// Motors nominally 12 V, driver 6–30 V: the duty is capped AUTOMATICALLY at
-// MOTOR_V_NOM / measured Vbat (12 V → ~100%, 20 V → ~60%, 24 V → ~50%), see
-// ctl::dutyCapVolts. Vbat is smoothed slowly (τ ≈ 1 s at 500 Hz): without this filtering,
-// the sag under load would make the cap oscillate (sag → Vbat drops → duty rises).
-constexpr float MOTOR_V_NOM        = 12.0f;
-constexpr float VBAT_CAP_EMA_ALPHA = 0.002f;
-
-// LVC input smoothing. The 10.5 V cutoff is a lead-acid figure AT REST, and it was being
-// applied to a reading taken UNDER LOAD: ~20 A through ~0.05 Ω sags the pack about 2 V, so a
-// perfectly healthy half-charged battery dips to ~10.0 V for the ~0.6 s an acceleration lasts
-// — long enough to clear the 500 ms debounce and cut the kart dead mid-manoeuvre. Measured in
-// simulation: at 12.0 V open-circuit the old code cut 0.55 s after the throttle opened.
-// Feeding the LVC a slow EMA fixes it WITHOUT weakening the protection, because a genuinely
-// flat pack sits below the threshold at rest too and is still caught at the same instant.
-// Sweep over the sag probe: τ of 1–3 s classifies every test pack correctly, τ ≥ 5 s starts
-// missing a worn one. 2 s is the middle of that band.
-constexpr float VBAT_LVC_EMA_TAU_S = 2.0f;
-constexpr float VBAT_LVC_EMA_ALPHA = CTRL_DT_S / VBAT_LVC_EMA_TAU_S;   // ≈ 0.001 at 500 Hz
-
-constexpr int ADC_OVERSAMPLE = 8;   // number of ADS1115 reads averaged (smooths residual noise)
-// The ADS1115 in continuous mode at 128 SPS only produces a new value every ~8 ms: reading
-// the voltage on every 2 ms tick would waste ~4000 I2C transactions/s re-reading the same
-// value. We read at 20 Hz — plenty for the LVC (500 ms debounce) and the PWM cap.
-constexpr int VBAT_READ_TICKS = 25;   // 500 Hz / 25 = 20 Hz
-
-// External ADS1115 A/D converter (16-bit, I2C) — replaces the ESP32's internal ADC.
-// On bus 0 (with the left AS5600). Address set by ADDR; 0x48 = ADDR→GND.
-constexpr uint8_t ADS1115_ADDR = 0x48;
-
-// Battery measurement divider bridge on A0. Fixed by the resistors soldered on the board, so
-// it is a CONSTANT and not a settable parameter — a wrong value silently misreports the
-// battery and drags the LVC thresholds along with it. Swap the resistors ⇒ edit the two
-// values below and reflash; the ratio follows on its own.
-//
-//   Vbat + ──[ R_TOP ]──┬──[ R_BOTTOM ]── GND (switched by the latch)
-//                       └── A0        ⇒  V_adc = Vbat × R_BOTTOM / (R_TOP + R_BOTTOM)
-//
-// ⚠️ Sizing rule: V_adc must stay under the 3.3 V rail at the pack's MAXIMUM voltage (on
-// charge), otherwise the ADS1115 is driven past its absolute maximum. 100 k/15 k suits a 12 V
-// pack (1.93 V at 14.8 V); a 24 V pack needs 100 k/12 k.
-constexpr float VBAT_R_TOP    = 100000.0f;   // R1, from Vbat+ to the A0 node (Ω)
-constexpr float VBAT_R_BOTTOM =  15000.0f;   // R2, from the A0 node to ground (Ω)
-constexpr float VBAT_DIV_RATIO = (VBAT_R_TOP + VBAT_R_BOTTOM) / VBAT_R_BOTTOM;   // ≈ 7.667
+// Motors nominally 12 V, driver 6–30 V. The pack is ALWAYS 12 V (design input, see
+// doc/electronique.md): nothing measures the voltage any more, so the only PWM ceiling
+// is the manual one (KartConfig::duty_cap_frac). The old automatic cap 12 V / measured
+// Vbat, the LVC and their smoothing constants went with the ADS1115.
 
 // AS5600 angle sensor (I2C, 12-bit absolute = 4096 counts/turn). Kinematics (see
 // doc/reducteur.md): gearbox 16T→80T then 30T→80T = 1:13.33; magnet on the GEARBOX OUTPUT,
@@ -108,30 +69,6 @@ constexpr int     MAG_READ_TICKS    = 50;      // poll STATUS at CTRL_HZ/50 ≈ 
 // recomputes the exact worst-case bound at every build, so the number never rots here.
 constexpr size_t PB_REPLY_CAP = 9216;
 
-// Motor-power sense debounce: the opto line idles on a weak internal pull-up (~45 kΩ) and
-// runs near the 40 A cabling — one coupled spike must not throw the blocking MOTOR-POWER
-// fault (which disarms and demands a re-arm). 25 ticks = 50 ms of consecutive "dead" reads
-// to raise it; recovery is immediate. Still instant to a human pressing the mushroom.
-constexpr int   PWR_SENSE_DEBOUNCE_TICKS = 25;
-
-constexpr int   VBAT_SAG_DEBOUNCE_MS = 500;
-constexpr int   LVC_POWEROFF_MS      = 30000;  // auto power cutoff (powerOff) after 30 s below the threshold
-
-// ── Battery: 12 V / 24 V detection at startup, hard-coded LVC thresholds ──
-// The voltage must stay STABLE (spread ≤ TOL) for 3 s, then classification: a 12 V even
-// at full charge stays ≤ ~14.8 V, a 24 V even discharged stays ≥ ~21 V → the 18 V threshold
-// decides unambiguously. We NEVER change battery with the system powered on: type frozen until
-// restart. As long as unclassified: no LVC (and the auto PWM cap follows Vbat anyway).
-// Lead-acid thresholds per type — not web parameters: tied to chemistry, not to tuning.
-constexpr int64_t VBAT_DETECT_STABLE_US = 3000000;   // 3 s of stable voltage
-constexpr float   VBAT_DETECT_TOL_V     = 0.5f;      // min-max spread tolerated within the window
-constexpr float   VBAT_DETECT_24V_MIN   = 18.0f;     // stable average ≥ 18 V → 24 V, otherwise 12 V
-constexpr float   VBAT12_WARN_V = 11.5f, VBAT12_CUT_V = 10.5f, VBAT12_RECOVER_V = 12.0f;
-constexpr float   VBAT24_WARN_V = 23.0f, VBAT24_CUT_V = 21.0f, VBAT24_RECOVER_V = 24.0f;
-// Full charge AT REST (top of the web gauge; the bottom = cutoff threshold). The display
-// scale is decided on the firmware side and sent in the status (batt_lo / batt_hi).
-constexpr float   VBAT12_FULL_V = 13.0f;
-constexpr float   VBAT24_FULL_V = 26.0f;
 constexpr float EBRAKE_MIN_MPS       = 0.15f;  // below this, the wheel is considered stopped (PID braking)
 constexpr float ENC_STUCK_PWM        = 0.10f;
 constexpr int   ENC_STUCK_MS         = 1000;
@@ -149,7 +86,6 @@ constexpr int   ENC_MAD_MS          = 200;
 // Speed smoothing (exponential moving average): at 500 Hz the Δangle per tick is quantized
 // (~0.08 m/s per count with GEAR_RATIO 1.28 / 10" wheel). α ~0.25 → time constant ~4 ticks (8 ms).
 constexpr float SPEED_EMA_ALPHA      = 0.25f;
-constexpr int   BTN_DEBOUNCE_TICKS   = 3;
 
 // Arming and haptic feedback (named — no magic numbers in the controller).
 constexpr float ARM_CENTER_MAX   = 0.08f;    // stick considered "centered" to arm
@@ -194,11 +130,9 @@ struct KartConfig
     int32_t dyn_brake_en;   // 1 = short the motors when the stick is released; 0 = FREEWHEEL (coast)
     int32_t open_loop;      // 1 = TEST: mixed stick → motors, no control loops (limiter/rollover/PID/smoothing)
     int32_t use_encoders;   // 1 = speed/brake/fault control via AS5600; 0 = ignore the encoders
-    int32_t vbat_check_en;  // 1 = the LVC can block driving and cut power; 0 = voltage shown only
     int32_t enc_inv_l;      // 1 = flip the LEFT encoder's sign (convention: +rpm = forward)
     int32_t enc_inv_r;      // 1 = flip the RIGHT encoder's sign
     int32_t enc_rev_chk;    // 1 = runtime reversed-encoder watchdog (ENC_REV); 0 = commissioning-checked
-    int32_t idle_off_min;   // minutes disarmed before self power-off (0 = never)
     float   enc_per_wheel;  // encoder-shaft turns per WHEEL turn (mount: gearbox output 1.28, 1:5 shaft 3.41)
     int32_t arm_hold_ms;
     int32_t disarm_s;
@@ -250,7 +184,9 @@ enum class State : int { Lockout = 0, Calibrate = 1, Run = 2, Fault = 3 };
 // Dynamic = phase short-circuit (default state, disarmed, or fallback without encoders);
 // Active  = PID braking (speed command 0) — requires encoders present AND brk_pid_enable=1.
 enum class BrakeMode : int { None = 0, Dynamic = 1, Active = 2 };
-enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encoder = 4, EncoderDir = 5, EncoderMad = 6, EncoderAbsent = 7, EncoderMagnet = 8, MotorPower = 9 };
+// 2 (Lvc) and 9 (MotorPower) are RETIRED, not reused: no voltage sensor and no coil sense
+// any more. The remaining values keep their numbers so a stored event log still reads right.
+enum class Fault : int { None = 0, EStop = 1, NotCalibrated = 3, Encoder = 4, EncoderDir = 5, EncoderMad = 6, EncoderAbsent = 7, EncoderMagnet = 8 };
 
 // Bits of the m_faults mask: ALL conditions active simultaneously (m_fault keeps only
 // the highest-priority one). Single source on the firmware side; presentation mirror on the
@@ -258,11 +194,13 @@ enum class Fault : int { None = 0, EStop = 1, Lvc = 2, NotCalibrated = 3, Encode
 namespace fb
 {
 constexpr unsigned ESTOP     = 1u << 0;   // gamepad emergency stop (B)
-constexpr unsigned LVC       = 1u << 1;   // low battery
+// Bit 1 (LVC), bit 5 (NO_VBAT) and bit 13 (NO_MOTOR_PWR) are RETIRED — no battery
+// measurement and no relay-coil sense any more. Their positions stay VACANT rather than
+// being reused: the event log on flash stores raw masks, and a recycled bit would make the
+// records of an older firmware read as a fault that never happened.
 constexpr unsigned NOCAL     = 1u << 2;   // gamepad not calibrated
 constexpr unsigned ENC_STUCK = 1u << 3;   // wheel stuck (PWM without rotation)
 constexpr unsigned PAD_LOST  = 1u << 4;   // gamepad disconnected
-constexpr unsigned NO_VBAT   = 1u << 5;   // voltage sensor absent (info)
 constexpr unsigned ENC_REV   = 1u << 6;   // encoder/motor wired backwards
 constexpr unsigned ENC_MAD   = 1u << 7;   // aberrant speed measurement
 constexpr unsigned ENC_L_ABS = 1u << 8;   // left AS5600 absent (I2C silent) — if use_encoders=1
@@ -270,19 +208,15 @@ constexpr unsigned ENC_R_ABS = 1u << 9;   // right AS5600 absent — if use_enco
 constexpr unsigned PAD_STALE = 1u << 10;  // gamepad "connected" but silent (heartbeat, PAD_HB_TIMEOUT_US)
 constexpr unsigned MAG_L     = 1u << 11;  // left AS5600 magnet out of field (absent/too far/too close)
 constexpr unsigned MAG_R     = 1u << 12;  // right AS5600 magnet out of field
-// The 40 A relay COIL is de-energized while the logic rail is alive — i.e. the emergency
-// stop is engaged (coil sense on GPIO22). ALWAYS armed: there is deliberately no software
-// switch to ignore this input — on a bench without the opto, tie GPIO22 to GND (reads
-// "coil energized"); on the kart the opto is simply part of the build. Blocking is handled
-// in step(), like the encoder-sensor bits.
-constexpr unsigned NO_MOTOR_PWR = 1u << 13;
 
 // Aggregates: BLOCKING forbids driving (disarm + State::Fault);
 // HARD deserves the strong rumble (every blocking fault except the missing calibration).
 // The encoder-SENSOR conditions (ENC_L_ABS/ENC_R_ABS absence, MAG_L/MAG_R magnet-out) are
 // NOT here: they are reported regardless of use_encoders (so the bench sees the encoder
 // status with use_encoders=0) and only block when use_encoders=1 (handled in step()).
-constexpr unsigned BLOCKING = LVC | NOCAL | ENC_STUCK | ENC_REV | ENC_MAD;
+// The emergency stop is no longer in this list at all: the mushroom now opens the main
+// relay's coil, which drops the ESP itself — there is nothing left to report.
+constexpr unsigned BLOCKING = NOCAL | ENC_STUCK | ENC_REV | ENC_MAD;
 constexpr unsigned HARD     = BLOCKING & ~NOCAL;
 } // namespace fb
 
@@ -291,9 +225,6 @@ constexpr unsigned HARD     = BLOCKING & ~NOCAL;
 // as the old controller cascade.
 inline Fault primaryFault(unsigned faults)
 {
-    // Motor rail dead outranks everything: nothing else can be acted on until it is back.
-    if (faults & fb::NO_MOTOR_PWR)                return Fault::MotorPower;
-    if (faults & fb::LVC)                         return Fault::Lvc;
     if (faults & (fb::ENC_L_ABS | fb::ENC_R_ABS)) return Fault::EncoderAbsent;
     if (faults & (fb::MAG_L | fb::MAG_R))         return Fault::EncoderMagnet;
     if (faults & fb::ENC_MAD)                     return Fault::EncoderMad;

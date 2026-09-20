@@ -141,7 +141,7 @@ input:focus{border-color:var(--accent);box-shadow:0 0 8px rgba(0,229,255,.5)}
   component overrides. Because it sits **after** the structural rules in
   `style.css`, it wins on the cascade; the `*{border-radius:0}` in the tactical
   block needs `!important` only because the pill/button radii are more specific.
-- The fault-diagram wheel/battery/gamepad **highlight** colours (red = fault,
+- The fault-diagram wheel/gamepad **highlight** colours (red = fault,
   amber = warning) are intentionally left in the structural section — they mean
   the same thing in every skin.
 - Same for the **left/right convention** (nautical port/starboard): LEFT = red

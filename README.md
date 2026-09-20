@@ -15,9 +15,9 @@ Project to build a **two-seat electric kart** for kids (~10 years old, 1.38–1.
 - [2. Seat / controls position](#2-seat--controls-position)
 - [3. Differential steering](#3-differential-steering-skid-steer)
 - [4. Hardware & electronics](#4-hardware--electronics)
-  - [Propulsion (2 rear motors)](#propulsion--2-rear-12-v-dc-motors) · [ESP32 control](#electronic-control--esp32) · [AS5600 sensors](#as5600-speed-sensors-2-on-ic) · [Battery measurement / ADS1115](#battery-measurement--external-ads1115-adc) · [Calibration](#gamepad-calibration)
+  - [Propulsion (2 rear motors)](#propulsion--2-rear-12-v-dc-motors) · [ESP32 control](#electronic-control--esp32) · [AS5600 sensors](#as5600-speed-sensors-2-on-ic) · [Calibration](#gamepad-calibration)
   - [Electrical safety](#electrical-safety) · [Wiring & pinout](#wiring-diagram--esp32-pinout) · [System diagram](#full-system-diagram-all-connectors)
-  - [Battery measurement / LVC](#battery-voltage-measurement--low-voltage-cutoff-lvc) · [2 batteries in parallel (dropped)](#wiring-2-batteries-in-parallel) · [Power switch (two rails, two relays)](#power-switch-two-rails-two-relays)
+  - [The battery, unmeasured](#the-battery-unmeasured) · [2 batteries in parallel (dropped)](#wiring-2-batteries-in-parallel) · [Power switch (one main relay)](#power-switch-one-main-relay)
 - [5. Critical safety points](#5-critical-safety-points-child)
 - [6. Adjustable seat](#6-adjustable-seat)
 - [7. Mass estimate](#7-mass-estimate)
@@ -91,10 +91,10 @@ flowchart TB
 | **Transmission** | **3D-printed gearboxes** (16→80 then 30→80 = 1:13.33, 16T/24 DP motor pinion — see [`doc/reducteur.md`](doc/reducteur.md)) + **1.28:1 sprockets (25T→32T) bolted to the front wheels + #35 chain** = **1:17 total** |
 | **Wheels** | **2× rear drive Ø25.4 cm (10″)** (plastic rim, 1/2" bearing) + **1 free 10″ caster at the front centre** |
 | **Driving** | **Bluetooth gamepad** (stick: Y = forward/reverse, X = turn); **calibration mandatory**; analog joystick reserved (future) |
-| **Electronics** | **ESP32** → **dual-channel driver 20 A / 6–30 V** (PWM + DIR / channel), **PWM capped at ≈ 12 V/Vbat** (12 V → ~100%, 24 V → ~50%); **tech bay in the nose** (near the 2 motors, short power wiring) |
+| **Electronics** | **ESP32** → **dual-channel driver 20 A / 6–30 V** (PWM + DIR / channel), PWM bounded by the manual `duty_cap` (the pack is always 12 V — the motors' nominal — so nothing is measured or capped automatically); **tech bay in the nose** (near the 2 motors, short power wiring) |
 | **Power** | **One 12 V motorcycle battery**, **in the NOSE over the caster** — it keeps that single wheel planted (~20 % of the load). Single pack, no paralleling |
 | **Speed** | Measured by **2 AS5600 angle sensors** (one per wheel, 1 per I²C bus); control loop at **500 Hz** |
-| **Controls** | Driving with the **Bluetooth gamepad**; **arming** button (physical or gamepad START, ~1 s); **hardware emergency stop** at the **top of the seatback, centered** (opens the 40 A motor relay by breaking its COIL — thin wires, ~10-20 ms; the logic rail stays up so the kart reports WHY it stopped; reachable by both kids and by an adult behind) **+** software emergency stop = gamepad button **B**; **electric brake by default** |
+| **Controls** | Driving with the **Bluetooth gamepad**; **arming** by holding its **START/Options** button ~1 s (no button on the kart); **main switch** (dash) powers the kart; **hardware emergency stop** at the **top of the seatback, centered** (breaks the main relay's COIL — thin wires, ~10-20 ms — and cuts the whole kart, so it does **not** brake: the kart coasts; reachable by both kids and by an adult behind) **+** software emergency stop = gamepad button **B** (this one brakes); **electric brake by default** |
 | **Frame** | Lightweight **wood**: **2×3** studs + **6 mm plywood** floor |
 | **Mass** | ~**32 kg** empty · ~**98 kg** loaded (2 kids) |
 | **Rollover** | **a_tip ≈ 0.53 g** — the bench sits 6″ ahead of the paired (driven) axle, which keeps 61 % of the half-track in the tip triangle (it was 80 % when the two were coincident). ⚠️ With the turn limiter off the simulation **rolls over** (−0.60 m/s²); with it on, the same run keeps +2.75 |
@@ -104,10 +104,10 @@ flowchart TB
 - **Differential steering = zero mechanics**: no more steering wheel, column, kingpins, steering knuckles, tie rod or drag link → fewer parts to make, adjust and wear out; you **turn in software** (PWM difference between the 2 wheels). **Pivot in place** when forward motion ≈ 0.
 - **One free caster at the front centre, mass toward the rear axle**: the caster orients itself → no steering geometry, and the layout puts the CG **61 % of the way back from the single wheel**, which is what keeps the tip triangle usable. ⚠️ This is the whole design: **never move mass toward the caster**. The first version had the bench far from the driven axle and reached only 0.39 g; putting it *on* the axle gave 0.69 g; the 6″/6″ split of 2026-08-10 gave back a quarter of that, to 0.53 g. There is no margin left to spend. A three-point frame also never rocks on uneven ground, which a four-wheel version would.
 - **Stability now depends on the firmware**: **a_tip ≈ 0.53 g** (a car is ~1.0 g). The **firmware rollover protection** (turn amplitude clamped by speed + a slew-rate limiter) is what keeps the kart upright: disabled, the simulation **rolls over** on the reference manoeuvre (−0.60 m/s²); enabled, the same run keeps +2.75. `turn_alat_vmax` is capped at **0.2 — its own default**, because 0.3 lifts a wheel with one child off-centre (−0.27) and 0.25 leaves only +0.31.
-- **Flexible battery voltage (6–30 V driver)**: the motors are 12 V; the firmware **caps PWM AUTOMATICALLY at 12 V / measured Vbat** (smoothed ~1 s): motorcycle battery **12 V → ~100%**, 20 V pack → ~60%, **24 V → ~50%**. Changing battery = adjust the Vbat measurement **voltage divider** (swap the two resistors and edit the `hw::VBAT_R_TOP`/`VBAT_R_BOTTOM` constants — deliberately NOT a web setting, a wrong ratio would silently drag the LVC along); the LVC thresholds are **hard-coded per battery type** (12/24 V, detected at startup). A **manual** cap (`duty_cap`) remains available; ⚠️ **without the Vbat sensor (ADS1115), the auto cap is inactive** → set `duty_cap` by hand if the battery exceeds 12 V.
+- **One battery voltage, and it is 12 V** (2026-09-20 simplification): the motors are 12 V, the pack is 12 V, and **nothing measures it** — no ADS1115, no divider, no low-voltage cutoff, no automatic `12 V / Vbat` cap. The driver would accept 6–30 V, but running anything above 12 V would now need that cap back, so **do not**. The only power ceiling left is the manual **`duty_cap`** on the config page, which doubles as the "make it gentler for a small child" knob. The trade, stated: a flat pack is no longer reported, warned about or protected against — it just makes the kart slower. Charge it on a schedule and watch its own indicator.
 - **Free-rolling front wheels**: driven by **#35 chain** (sprocket bolted to the rim), they keep their original bearing — no through drive axle.
 - **Battery and electronics in the nose, drive at the rear**: longitudinal layout **CASTER + BATTERY + ESP32 + driver (nose) → CABIN → BENCH → DRIVEN AXLE 6″ behind it**. The children sit just ahead of the driven wheels, which puts **~61 % of the load on them** — traction and electric braking both act there, and weight transfer on a slope works with you. It was 79 % before the 6″/6″ move; that 18 points is the same thing the rollover margin lost. The battery in the nose keeps the caster planted. Power runs nose→rear in 10 AWG (~0.3 V at 40 A).
-- **Safety**: **central hardware emergency stop**, at the **top of the seatback** (within reach of both kids and an adult behind), **e-stop in the 40 A relay's coil loop** (the mushroom breaks 150 mA, the relay contact breaks the 40 A; the logic rail survives and the firmware raises the MOTOR-POWER fault — which doubles as the per-session welded-contact test) **and** software gamepad emergency stop (button B); start via **momentary button** priming the two-relay latch (small opto module = logic rail, 40 A relay = motor power, the ESP holds via `POWER_HOLD`), one 40 A fuse, **electric brake by default** (gamepad disconnect → immediate braking), low-voltage cutoff (LVC), **2 s watchdog (PANIC)**, **disarmed** start by default, guards over chains/sprockets, seatbelt, helmet.
+- **Safety**: **central hardware emergency stop**, at the **top of the seatback** (within reach of both kids and an adult behind), **in the MAIN RELAY's coil loop together with the main switch** — the mushroom breaks ~150 mA, the relay contact breaks the 40 A, and **the whole kart goes dark, ESP32 included**. ⚠️ That means **no braking after the cut**: the kart coasts (~15 m from full speed on the flat, measured in simulation — do not use the mushroom as a brake, and never rely on it downhill). The **brake** is releasing the stick; the **software** emergency stop (gamepad button B) brakes properly because the firmware is still alive. Plus: one 40 A fuse, **1N4007 across the relay coil** (flyback — and reverse-polarity protection as a side effect), **electric brake by default** (gamepad disconnect → immediate braking), **2 s watchdog (PANIC)**, **disarmed** start by default, guards over chains/sprockets, seatbelt, helmet.
 
 ---
 
@@ -156,17 +156,19 @@ Reference 0 = **caster axle** (front centre); dimensions measured **toward the r
 
 ➡️ With the **Bluetooth gamepad**, there's **no more pedal box or steering wheel** to position: only seating ergonomics matter. **Seatback → footrest ≈ 57 cm** ✔ leg almost straight, slight knee bend. ⚠️ The bench sits **6″ ahead of the driven axle** and the deck has ~15 cm of free length behind it: that space is the wheels' and the drive stack's, and moving the bench any further forward costs rollover margin directly (`w_eff ∝ 1 − x_cg/wheelbase`). Provide a safe place to **rest/charge the gamepad**. **Adjustable** seat (§6) to fit the child's size.
 
-➡️ **Emergency stop at the top of the seatback (centered)**: the **hardware mushroom button** (in series with the **40 A relay's coil**) is mounted **at the top of the seatback, in the center** — reachable by **both kids** and by an **adult following the kart**. It **opens the motor relay** (~10-20 ms, thin wires only); the logic rail stays up, so the firmware disarms, names the fault (`MOTOR POWER`) and requires a deliberate re-arm — complementing the **software** emergency stop on the gamepad (button **B**). **Side guardrails** on each side of the bench (no central divider: continuous bench). **Driving stays on the Bluetooth gamepad**.
+➡️ **Emergency stop at the top of the seatback (centered)**: the **hardware mushroom button** (in series with the **main relay's coil**, together with the main switch) is mounted **at the top of the seatback, in the center** — reachable by **both kids** and by an **adult following the kart**. It **opens the main relay** (~10-20 ms, thin wires only) and **everything stops being powered: motors and ESP32 together**. ⚠️ Nothing brakes afterwards — the kart **coasts** (~15 m from full speed on the flat, and it does not stop at all on a slope). The **software** emergency stop on the gamepad (button **B**) is the one that brakes, because the firmware survives it; the mushroom is the last resort for "make it all stop being powered, now". Power returns on the main switch and the kart boots **disarmed**. **Side guardrails** on each side of the bench (no central divider: continuous bench). **Driving stays on the Bluetooth gamepad**.
 
-> ⚠️ **Total power off = coasting; e-stop probably still brakes.** Dynamic braking closes the
-> driver's **low-side** MOSFETs, which need only gate drive — so with the two-rail wiring, an
-> e-stop that kills the 40 A motor feed while the **driver logic stays on the logic rail**
-> most likely keeps the electric brake (bench test: logic up, motor relay open, spin a wheel —
-> see [power switch](#power-switch-two-rails-two-relays)). What loses everything is a **full**
-> power drop (both rails, e.g. relay released mid-reboot): switches open, **no electric
-> brake**, only the passive ×17 gearbox drag — effective on the flat, **insufficient on a
-> slope**. Fail-safe remedy if ever needed: a **normally-closed-contact relay across each
-> motor** (coil on the main rail) — any power loss re-closes the contacts → automatic dynamic
+> ⚠️ **Power off = coasting, and that now includes the e-stop.** Dynamic braking works by
+> closing the driver's **low-side** MOSFETs, which needs gate drive — i.e. power. The old
+> two-rail wiring kept the driver's logic alive through an e-stop so the brake probably
+> survived it; with a single relay it does not. Cutting power (main switch, mushroom, blown
+> fuse, or a relay released mid-reboot) opens every switch: **no electric brake**, only the
+> passive ×17 gearbox drag — effective on the flat (the kart coasts ~15 m from full speed and
+> stops), **insufficient on a slope** (the `coupure_pente8/16` scenarios reach 4.4 and
+> 12 m/s eight seconds after the cut). That is the price of the single-relay simplification,
+> and it is why the mushroom is documented as a last resort rather than a brake.
+> Fail-safe remedy if ever needed: a **normally-closed-contact relay across each motor**
+> (coil on the switched rail) — any power loss re-closes the contacts → automatic dynamic
 > braking, no electronics.
 
 ### Side view
@@ -291,23 +293,22 @@ Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_a
 | | Sprockets + #35 chain | Sprocket **bolted to each front wheel** + #35 roller chain from the gearbox (**25T→32T = 1.28:1**). Chain rather than a belt: **it can be cut to any length**, so the gearbox-to-wheel centre distance is free instead of being dictated by stock belt lengths. |
 | | **2× AS5600 angle sensor** + diametric magnet | one per front wheel, **1 per I²C bus**; contactless magnetic, **12-bit absolute I²C** (fixed address 0x36), **3.3 V native** (no level-shift), 4.7 kΩ pull-ups |
 | **Driving** | **Bluetooth gamepad** | stick: Y = forward/reverse, X = turn; button **B** = emergency stop, button **START** = arming; **calibration mandatory** |
-| | *Analog joystick* | **reserved (future, not wired)**: 2 ADS1115 channels (A1/A2) planned behind the same software abstraction |
-| **Power / electronics** | Battery | **One 12 V motorcycle battery** (~40 A peak OK, PWM ~100%) **at the REAR, strapped in a retaining tray above the caster wheel**. No paralleling this phase. The driver accepts up to **30 V**, and the firmware still supports **24 V** (2×12 V in series, auto PWM ~50%) — unlikely to be used, and it would need the divider changed to 100 k/12 k (12 V/Vbat) |
+| | *Analog joystick* | **possible future**, behind the same software abstraction — but it would now need an ADC of its own (the ADS1115 and its two reserved channels are gone) |
+| **Power / electronics** | Battery | **One 12 V motorcycle battery** (~40 A peak OK, PWM ~100%) **at the REAR, strapped in a retaining tray above the caster wheel**. No paralleling this phase. **12 V is now a design constant**: nothing measures the pack, so nothing could cap the duty for a higher-voltage one — the 24 V option went away with the ADC |
 | | **Battery adapters** (×2) | Slide-on holder → power terminals (+ / −) |
-| | **40 A DC relay** + optocoupler + drive transistor | main power switch (see [power switch](#power-switch-two-rails-two-relays)) + 1 fuse |
-| | **Power switch (latch)** | **opto-isolated relay module** (logic rail, driven by `POWER_HOLD`) + **start button** (primes; hold ~1 s at power-up) + **hidden FORCE ON toggle** (bench/flash). **No hold capacitor**: a reboot powers the kart off cleanly. Full BOM: [`doc/electronique.md`](doc/electronique.md) |
-| | Motor driver | **1 dual-channel board 20 A / 6–30 V** (PWM+DIR/channel), duty **capped automatically at 12 V/measured Vbat** (+ manual cap `duty_cap`) |
+| | **40 A automotive relay** + **1N4007** across its coil | **the** main power switch: contact 30→87 carries the whole kart (see [power switch](#power-switch-one-main-relay)) + 1 fuse. The diode is flyback for the switches **and** reverse-polarity protection for everything downstream |
+| | **Main switch + e-stop mushroom** | both **in series in the relay's coil** (~150 mA, thin wire): the main switch on the dash is the kart's on/off, the mushroom at the top of the seatback is the emergency cut. No latch, no priming button, no FORCE ON toggle, no hold capacitor. Full BOM: [`doc/electronique.md`](doc/electronique.md) |
+| | Motor driver | **1 dual-channel board 20 A / 6–30 V** (PWM+DIR/channel), duty bounded by the manual cap `duty_cap` |
 | | Controller | **ESP32-WROOM board** (dual-core 240 MHz, Wi-Fi/BT, 4 MB flash) |
-| | **External ADC ADS1115** | **16-bit I²C**, powered at **3.3 V**, address **0x48** on bus 0 (with the left AS5600); A0 = Vbat, A1/A2 reserved for the future joystick |
-| | **Breakout board** | Screw terminals + 5 V / 3.3 V outputs + status LED; the **3.3 V** powers AS5600 + ADS1115 |
-| | **Buck → 5 V** (20 V-rated unit already on hand, fed from the 12 V logic rail) | powers the ESP32 (which makes its own 3.3 V) |
-| | **Soldered perfboard** | Vbat voltage divider 100 k/15 k (to A0 of the ADS1115) + decoupling capacitors (⚠️ no breadboard — vibration) |
-| | **Weatherproof electrical enclosure** (ABS, clear lid, ~150 × 100 × 70 mm, ≈IP65) | **in the front tech bay**; houses ESP32 + breakout + ADS1115 + perfboard; cable glands for the cables; protects against dust/rain/impact (clear lid = status LED visible) |
-| | Elec. safety | **Emergency stop (NC) in series** in the gate line (mushroom button **at the top of the seatback, centered**, within reach of both kids) + **fuse/pack** |
-| | **WS2812B** strip (~10 LEDs) | status: **moving rainbow = armed & ready**, yellow = disarmed (pulsing while arming), blinking red = fault, orange = low battery, blue = calibration |
-| **Controls** | **Arming** button + LED | momentary; arming = ~1 s press (physical button **or** gamepad START) |
+| | **Breakout board** | Screw terminals + 5 V / 3.3 V outputs + status LED; the **3.3 V** powers the two AS5600 |
+| | **Buck → 5 V** (20 V-rated unit already on hand, fed from the switched 12 V rail) | powers the ESP32 (which makes its own 3.3 V) |
+| | **Soldered perfboard** | I²C pull-ups and connectors (⚠️ no breadboard — vibration). The Vbat divider that used to live here is gone |
+| | **Weatherproof electrical enclosure** (ABS, clear lid, ~150 × 100 × 70 mm, ≈IP65) | **in the front tech bay**; houses ESP32 + breakout + perfboard; cable glands for the cables; protects against dust/rain/impact (clear lid = status LED visible) |
+| | Elec. safety | **Emergency stop (NC) in series in the relay coil** (mushroom button **at the top of the seatback, centered**, within reach of both kids) + **main switch** in the same loop + **fuse** |
+| | **WS2812B** strip (~10 LEDs) | status: **moving rainbow = armed & ready**, yellow = disarmed (pulsing while arming), blinking red = fault, blue = calibration |
+| **Controls** | **Arming** | ~1 s press on the **gamepad's START/Options** button, stick centered — no button on the kart itself |
 | **Brake** | **Electric brake (default)** ✅ | handled by the firmware (plugging PID); **default state = braking**; gamepad disconnect → immediate braking; no brake pad |
-| **Future reserves** (wired, unused) | **analog joystick** | joystick on A1/A2 of the ADS1115 |
+| **Future reserves** | **analog joystick** | would need its own ADC now, plus 2 free GPIOs — 13, 21, 22 and 23 are available |
 | **Fasteners / finish** | M8/M10 through-bolts, **nylock** nuts | brackets, wood screws, varnish; rounded edges |
 
 ### Propulsion — 2 rear 12 V DC motors
@@ -322,8 +323,8 @@ Each **rear wheel** is driven by its **own 12 V permanent-magnet DC motor** thro
 | Voltage / current | **12 VDC** / **19.6 A** |
 | Duty | **intermittent** (leisure, not continuous); TENV, class F |
 
-> ⚠️ **Voltage:** motors **12 V**, driver **6–30 V** → the firmware **caps PWM at 12 V/measured Vbat** to protect the motors: **12 V** battery **→ ~100%**, 20 V → ~60%, **24 V → ~50%**. Without the ADS1115: set the manual cap `duty_cap`.
-> ⚠️ **Current:** **19.6 A**/motor (driver 20 A/channel OK); **total ~40 A** — carried by the **single pack**, not split across two. Size the fuse, the cable and the relay for the full 40 A, and expect the sag that goes with it (see [LVC](#battery-voltage-measurement--low-voltage-cutoff-lvc)). Avoid prolonged wheel stalls.
+> ⚠️ **Voltage:** motors **12 V**, driver **6–30 V**, pack **12 V and only 12 V** — the two match, so there is nothing to cap automatically and nothing measures the battery. The manual `duty_cap` is the ceiling; a higher-voltage pack would cook the motors and is not an option any more.
+> ⚠️ **Current:** **19.6 A**/motor (driver 20 A/channel OK); **total ~40 A** — carried by the **single pack**, not split across two. Size the fuse, the cable and the relay for the full 40 A, and expect the sag that goes with it (see [the battery](#the-battery-unmeasured)). Avoid prolonged wheel stalls.
 
 ```mermaid
 flowchart LR
@@ -395,7 +396,7 @@ flowchart LR
 - The **ESP32** receives the **Bluetooth gamepad** axes, applies **arcade mixing** + **rollover protection**, then sends **an independent PWM + DIR to each channel** of the driver.
 - Driver: **dual-channel, 20 A continuous / 60 A peak, 6–30 V**, **PWM + DIR** inputs compatible with **3.3 V**, PWM up to 20 kHz; **overcurrent / undervoltage / temperature** protections. ⚠️ **No reverse-polarity protection** (VB+/VB-) → a reversed connection **destroys the board**.
 - **PID brake by default**: at a stop or with no forward command, a **PID brings each wheel to 0** (AS5600 reading) — signed output → can **reverse the motor** (plugging). This is the **default state**.
-- Best practices: **PWM capped at ≈ 12 V/Vbat**, **expo mixing curves** for a gentle throttle (`mix_type`), **speed limiter** (sensor measurement), **watchdog**, **braking if the gamepad disconnects**.
+- Best practices: **manual PWM cap** (`duty_cap`), **expo mixing curves** for a gentle throttle (`mix_type`), **speed limiter** (sensor measurement), **watchdog**, **braking if the gamepad disconnects**.
 
 ### AS5600 speed sensors (×2, on I²C)
 
@@ -408,14 +409,20 @@ Implementation: I²C read of the **RAW ANGLE** register (0x0C/0x0D) → **speed 
 
 > *A quadrature encoder per wheel was once held in reserve as an alternative — dropped: the AS5600 do the job.*
 
-### Battery measurement — external ADS1115 ADC
+### No analog measurements
 
-All analog measurements go through an **ADS1115** (16-bit, I²C, PGA) **instead of the ESP32's internal ADC** — more accurate and linear, and without the ADC2/Wi-Fi conflict. The breakout connects **piggyback on I²C bus 0** (with the left AS5600: distinct addresses **0x36 / 0x48**).
+**There is no ADC on this kart** (2026-09-20 simplification). The ADS1115, the 100 k / 15 k
+divider and everything they fed — low-voltage cutoff, 12/24 V detection at boot, automatic
+`12 V / measured Vbat` PWM cap, battery gauge and chart, `LVC` and `NO_VBAT` faults — were
+removed together. The pack is **always 12 V**, which is the motors' nominal voltage, so the
+measurement had nothing left to decide.
 
-- ⚠️ **Power at 3.3 V** (I²C levels compatible with the ESP32) → `AIN_max = 3.3 V`.
-- **A0 = battery voltage** (via the **100 k / 15 k** voltage divider), tracked in **continuous mode**.
-- **A1 / A2 = reserved** for the future X/Y joystick (single-shot read); **A3 free**.
-- The driver **degrades gracefully**: ADS1115 absent or silent → the voltage reads **unknown** (never 0 — a 0 V reading once fooled the LVC into cutting power); LVC and auto PWM cap simply stand down until readings return.
+What replaces it: **nothing, deliberately.** The manual `duty_cap` is the power ceiling, the
+battery's own indicator is the fuel gauge, and a worn pack shows up as a kart that feels
+slower (simulated in `batterie_usee`: 11.2 V and 0.12 Ω of internal resistance still drive,
+just less briskly, with no fault raised). Deep-discharge protection is the pack's business.
+I²C bus 0 now carries the left AS5600 alone — which also removed the read-timing interference
+the 20 Hz battery polling used to add to that bus.
 
 ### Gamepad calibration
 
@@ -428,11 +435,12 @@ The scale (center + half-amplitude per axis) is **persisted in NVS** (namespace 
 
 ### Electrical safety
 
-- **Emergency stop** easily accessible, **in the 40 A relay's coil loop**: pressing it de-energises the coil and the **relay contact breaks the 40 A** (~10-20 ms; with no hold capacitor, nothing delays it). The mushroom itself only switches ~150 mA on signal-gauge wires — no 40 A detour to the seatback, any decent NC mushroom qualifies. The **logic rail stays up**, and the sense opto reads the **coil** (after the mushroom): the firmware sees the e-stop the instant it is pressed, disarms, **dynamic-brakes** and names the fault — **even if the relay contact is welded closed** (the driver still has VB+ and logic, so the brake actually works). The trade: welding itself becomes undetectable; the pre-drive e-stop test verifies the sense chain. (In addition, the gamepad's **button B** triggers immediate braking on the firmware side.)
-- **Start via momentary button** (primes the latch); **fuse/pack**, wiring ≥ the 2 motors' current.
-- **Battery: one 12 V motorcycle battery** (lead-acid — no BMS of its own). Deep discharge protection = **the firmware LVC** (thresholds hard-coded per detected type: 12 V → cut 10.5 V, 24 V → cut 21 V) + the 40 A fuse.
-- **One 12 V pack, no paralleling** (this phase): it carries the whole ~40 A, so its internal resistance sets the sag under load — a motorcycle battery at ~0.05 Ω dips ~2 V at full throttle, which is why the LVC judges a smoothed voltage. ⚠️ **Never put packs in series** unless you also change the divider (24 V needs 100 k/12 k).
-- **Speed limiter** low at first; **battery secured/protected**; **guards**; **electric brake** + **auto disarm** + **2 s watchdog** + PWM auto-capped at 12 V/Vbat. Cut power before servicing.
+- **Emergency stop** easily accessible, **in the main relay's coil loop** (in series with the main switch): pressing it de-energises the coil and the **relay contact breaks the 40 A** (~10-20 ms). The mushroom itself only switches ~150 mA on signal-gauge wires — no 40 A detour to the seatback, any decent NC mushroom qualifies. ⚠️ **It cuts the ESP32 too**, so the firmware never sees it: no fault, no log entry, and above all **no braking** — the kart coasts (~15 m from full speed on the flat; a slope is worse). Power returns on the main switch and the kart boots **disarmed**. A **welded contact** is no longer detectable in software either: the commissioning test (mushroom pressed, multimeter on VB+) is what catches it. In exchange the wiring lost a relay, an opto, a sense pin and every software path that went with them. The gamepad's **button B** remains the emergency stop that actually **brakes**, because the firmware survives it.
+- **Main switch** (dash, in the same coil loop) is the kart's on/off — the only control on the vehicle. Arming is a gamepad button. **Fuse/pack**, wiring ≥ the 2 motors' current.
+- **1N4007 across the relay coil**: flyback for the two switches, and — because a reversed battery forward-biases it — the **fuse blows and the relay never closes**, so a polarity mistake never reaches the driver (which has no protection of its own).
+- **Battery: one 12 V motorcycle battery** (lead-acid — no BMS of its own). ⚠️ **Deep-discharge protection is now the pack's alone**: the firmware LVC went away with the voltage measurement. The 40 A fuse still covers shorts. Charge on a schedule rather than on a warning.
+- **One 12 V pack, no paralleling** (this phase): it carries the whole ~40 A, so its internal resistance sets the sag under load — a motorcycle battery at ~0.05 Ω dips ~2 V at full throttle, which the motors feel as a little less thrust. ⚠️ **Never put packs in series**: 24 V on 12 V motors, with no automatic cap left to hold the duty down, cooks them.
+- **Speed limiter** low at first; **battery secured/protected**; **guards**; **electric brake** + **auto disarm** + **2 s watchdog** + manual `duty_cap`. Cut power before servicing (main switch, and pull the fuse for anything invasive).
 
 ### Wiring diagram + ESP32 pinout
 
@@ -440,8 +448,9 @@ The scale (center + half-amplitude per axis) is **persisted in NVS** (namespace 
 flowchart LR
     BATT["🔋 1 pack 12 V<br/>(motorcycle battery)"]
     FUSE["Fuse 40 A"]
-    RAIL(["+12 V LOGIC rail<br/>(small opto relay module)"])
-    SW["🔌 40 A relay (MOTOR power)<br/>coil: +12V_LOG → 🛑 e-stop (NC) → 85<br/>contact 30→87 breaks the 40 A"]
+    COIL["🔑 MAIN SWITCH → 🛑 E-STOP (NC)<br/>in series, ~150 mA<br/>+ 1N4007 across the coil"]
+    SW["🔌 MAIN RELAY 40 A<br/>contact 30→87 carries the WHOLE kart"]
+    RAIL(["+12V_SW — the one switched rail"])
     GNDC(["Common GND"])
     BUCK["Buck<br/>12 V → 5 V"]
     ESP["🧠 ESP32"]
@@ -449,42 +458,34 @@ flowchart LR
     DRV["Dual-channel driver<br/>20 A / 6–30 V"]
     M1["⚙️ Rear L motor 12 V"]
     M2["⚙️ Rear R motor 12 V"]
-    ADS["📈 ADS1115 (0x48)<br/>16-bit I²C ADC (3.3 V)"]
     EG["🧭 AS5600 wheel L (bus 0)"]
     ED["🧭 AS5600 wheel R (bus 1)"]
-    DIVB(["Voltage divider 100k/15k<br/>(Vbat → A0)"])
-    BTN["START button (arming)"]
     WS["🌈 WS2812B strip"]
 
-    %% Power: two rails — the small module holds the LOGIC, the 40 A relay feeds the MOTORS
-    BATT -- "+" --> FUSE --> RAIL
-    FUSE --> SW
-    SW -- "V+ motors (40 A)" --> DRV
-    RAIL -- "V+ logic (driver board)" --> DRV
-    RAIL -- "V+ logic" --> BUCK --> ESP
+    %% Power: ONE relay, ONE rail — either switch in the coil kills everything
+    BATT -- "+" --> FUSE --> SW
+    FUSE -- "coil supply" --> COIL -- "coil 85/86" --> SW
+    SW -- "+12V_SW (40 A)" --> RAIL
+    RAIL -- "VB+ and board logic" --> DRV
+    RAIL --> BUCK --> ESP
     BATT -- "−" --> GNDC
     DRV -- "GND" --> GNDC
-    ESP -. "GPIO13 POWER_HOLD holds the logic rail" .-> RAIL
-    SW -. "opto sense → GPIO22 (motor power live?)" .-> ESP
 
     %% Motor outputs + speed feedback
     DRV -- "M1A / M1B" --> M1
     DRV -- "M2A / M2B" --> M2
     EG -. "I²C bus 0 SDA18/SCL19 (3.3 V)" .-> ESP
     ED -. "I²C bus 1 SDA27/SCL14 (3.3 V)" .-> ESP
-    ADS -. "I²C bus 0 (3.3 V)" .-> ESP
 
     %% Signals
     PAD -. "Bluetooth" .-> ESP
     ESP -- "PWM+DIR L/R" --> DRV
-    RAIL -- "÷ divider" --> DIVB -- "→ A0 ADS1115" --> ADS
-    BTN -- "GPIO16 (pull-up)" --> ESP
     ESP -- "data GPIO4" --> WS
 
     classDef pwr fill:#f8d7da,stroke:#333;
     classDef ctrl fill:#d1e7dd,stroke:#333;
     classDef mot fill:#cfe2ff,stroke:#333,stroke-width:2px;
-    class BATT,FUSE,RAIL,SW,BUCK pwr;
+    class BATT,FUSE,RAIL,SW,COIL,BUCK pwr;
     class ESP,DRV,PAD ctrl;
     class M1,M2 mot;
 ```
@@ -495,56 +496,43 @@ flowchart LR
 |---|---|---|---|
 | 25 / 26 | **PWM / DIR REAR left motor** | output | LEDC, **duty ≤ 50%** |
 | 32 / 33 | **PWM / DIR REAR right motor** | output | same |
-| 18 / 19 | **I²C bus 0 SDA / SCL** | I/O | **AS5600 wheel L (0x36)** + **ADS1115 (0x48)**, 3.3 V, 4.7 kΩ pull-ups |
+| 18 / 19 | **I²C bus 0 SDA / SCL** | I/O | **AS5600 wheel L (0x36)** alone on the bus, 3.3 V, 4.7 kΩ pull-ups |
 | 27 / 14 | **I²C bus 1 SDA / SCL** | I/O | **AS5600 wheel R (0x36)**, 3.3 V, 4.7 kΩ pull-ups |
-| 13 | **POWER_HOLD** (power latch) | output | **active LOW**: holds the logic rail; HIGH = cuts |
-| 16 | **Arming button (START)** | input | pull-up, ~1 s press (or gamepad START) |
-| 22 | **MOTOR_PWR_SENSE** (opto on the 40 A relay **COIL**, after the e-stop) | input | **active LOW** = coil energized = e-stop released; idles on the **internal pull-up** (GPIO22 has one — the input-only 34-39 do NOT, which is why the pin moved), so a broken wire reads "e-stop engaged" (safe side); **50 ms firmware debounce**; ALWAYS active — bench: tie to GND |
 | 4 | **WS2812B strip** (data) | output | ~10 LEDs |
 | 2 | **Status LED** (onboard) | output | — |
 | **Free** | | | |
 | 34 / 35 / 36 / 39 | unused | inputs only | input-only pins, **no internal pulls** |
-| 21 / 22 / 23 | unused | — | free |
-| — | **Battery voltage** | (ADS1115 A0) | **not on a GPIO**: measured by the ADS1115 via 100 k/15 k divider |
-| — | **Analog joystick** | (ADS1115 A1/A2) | reserved for future |
+| 13 / 16 / 21 / 22 / 23 | unused | — | free — **13** was `POWER_HOLD` (power latch), **22** `MOTOR_PWR_SENSE` (e-stop coil sense), **16** the arming button. **No GPIO input is used at all**: the kart's only controls are the main switch, the mushroom and the gamepad |
+| — | **Power on/off** | (no GPIO) | **hardware only**: main switch + e-stop in the relay coil. The firmware can neither hold nor cut its own supply |
 
 **Key wiring points:**
-- **Common ground** ESP32 ↔ driver ↔ ADS1115 ↔ I²C sensors: essential.
-- **Two rails**: the small opto relay module holds the **logic rail** (ESP32 + driver logic + divider), the **40 A relay** feeds the motors through the **e-stop in its main path**. GPIO22 reads the opto on the relay COIL, after the e-stop (active low: a broken wire reads "e-stop engaged", the safe side).
+- **Common ground** ESP32 ↔ driver ↔ I²C sensors: essential.
+- **One rail**: the main relay's contact carries everything (buck → ESP32 + strip, driver VB+ *and* driver logic). Its coil runs through the **main switch** and the **e-stop mushroom** in series, with the **1N4007** across it. No GPIO is involved in powering the kart.
 - **Brake by default**: at a stop, with no forward command, or if the gamepad disconnects, the firmware brakes.
 - **Power ~10 AWG** (crimped lugs); **signals thin wire**. **40 A fuse** on the single pack.
-- ⚠️ **Driver polarity (VB+/VB-)**: no reverse protection → **double-check**.
-- **Vbat via the ADS1115** (not the internal ADC): 100 k/15 k divider to A0, **decoupling capacitor** on the node.
+- ⚠️ **Driver polarity (VB+/VB-)**: the board has no reverse protection, and it sits **downstream of the relay contact**, where the coil diode cannot help → **double-check by hand**.
+- **Nothing measures the battery** — no divider, no ADC (see [the battery](#the-battery-unmeasured)).
 
 ### Full system diagram (all connectors)
 
-Block-by-block overview showing **each connector** (gamepad via the internal radio, 2× AS5600 on 2 I²C buses, ADS1115, START button, rear motors, WS2812), the **conditioning** (Vbat divider) and the **power supply**.
+Block-by-block overview showing **each connector** (gamepad via the internal radio, 2× AS5600 on 2 I²C buses, rear motors, WS2812) and the **power supply** (one relay, one rail).
 
 ```mermaid
 flowchart LR
     subgraph PWR["⚡ Power supply"]
         direction TB
-        PA["🔌 PACK CONN<br/>12 V (+ / −)"] --> FA["Fuse 40 A"] --> SR["🔌 Small opto relay<br/>(LOGIC rail)"]
-        FA --> BR["🔌 40 A DC relay<br/>(MOTOR power)"]
-        SR --> RAIL(["+12 V logic"])
-        SR -->|"coil"| BR
-        ESTOP["🛑 E-STOP (NC, in the coil loop)"] --> BR
-        BR --> MPWR(["+12 V motors"])
-        ESTOP -->|"coil sense (after the mushroom)"| SENSE(["GPIO22"])
+        PA["🔌 PACK CONN<br/>12 V (+ / −)"] --> FA["Fuse 40 A"] --> BR["🔌 MAIN RELAY 40 A<br/>contact 30→87"]
+        FA -->|"coil supply"| MSW["🔑 MAIN SWITCH"] --> ESTOP["🛑 E-STOP (NC)"] -->|"coil 85 (1N4007 across)"| BR
+        BR --> RAIL(["+12V_SW — everything"])
         RAIL --> BUCK["Buck 12→5 V"] --> V5(["+5 V"])
     end
 
     ESP["🧠 ESP32-WROOM<br/>3.3 V via on-board regulator"]
     V5 --> ESP
-    ESP -. "GPIO13 POWER_HOLD (active low)" .-> SR
-    SENSE -.->|"motor power live?"| ESP
 
     PAD["🎮 BLUETOOTH GAMEPAD<br/>(ESP32 internal radio)"] -.->|"x, y, buttons"| ESP
-    RAIL --> DIVB["Divider 100k/15k<br/>(on the LOGIC rail)"] -->|"A0"| ADS["📈 ADS1115 (0x48)<br/>bus 0 I²C (3.3 V)"]
-    ADS -->|"I²C GPIO18/19"| ESP
     EG["🧭 AS5600 L CONN (bus 0)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO18/19 (3.3 V)"| ESP
     ED["🧭 AS5600 R CONN (bus 1)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO27/14 (3.3 V)"| ESP
-    BST["🔌 START CONN<br/>(S / GND)"] -->|"GPIO16 pull-up"| ESP
 
     ESP -->|"PWM/DIR L+R<br/>GPIO25/26/32/33"| DRV["🛞 MOTOR DRIVER<br/>2 channels 20 A"]
     RAIL --> DRV
@@ -555,14 +543,11 @@ flowchart LR
     V5 -. "+5 V" .-> WS
     ESP -. "3.3 V" .-> EG
     ESP -. "3.3 V" .-> ED
-    ESP -. "3.3 V" .-> ADS
 
     classDef pwr fill:#f8d7da,stroke:#333;
     classDef conn fill:#fff3cd,stroke:#333;
-    classDef cond fill:#d1e7dd,stroke:#333;
-    class RAIL,V5,LATCH,DRV pwr;
-    class PA,PB,PAD,EG,ED,ADS,BST,MG,MD,WS conn;
-    class DIVB cond;
+    class RAIL,V5,BR,MSW,ESTOP,DRV pwr;
+    class PA,PAD,EG,ED,MG,MD,WS conn;
 ```
 
 ### Electrical schematic (symbols)
@@ -575,44 +560,39 @@ The same content as an **electrical schematic with standard symbols** (named-por
 > Regenerable: `. .venv-schem/bin/activate && python doc/schematics/full_schematic.py`.
 > The power-switching detail is in [`power_rails.png`](doc/schematics/power_rails.png).
 
-### Battery voltage measurement & low-voltage cutoff (LVC)
+### The battery, unmeasured
 
-A **voltage divider** brings Vbat below 3.3 V onto **the ADS1115's A0 input** (external 16-bit ADC,
-powered at 3.3 V) → software protection **on top of the BMS**. The divider is **sized to the
-chosen battery** (aim for < 3.3 V at the max voltage UNDER CHARGE); the firmware reconstructs
-Vbat from the **resistor constants** `hw::VBAT_R_TOP` / `VBAT_R_BOTTOM` (`control_types.hpp`):
+**Nothing on this kart measures the battery** — a deliberate removal (2026-09-20), together
+with the ADS1115, the 100 k / 15 k divider, the low-voltage cutoff, the 12/24 V detection and
+the automatic `12 V / Vbat` PWM cap. The pack is a **12 V motorcycle battery**, which is also
+the motors' nominal voltage, so the measurement had nothing left to decide: the duty ceiling
+is the manual `duty_cap`, and it does not depend on what the voltmeter says.
 
-| Battery | Vmax (under charge) | Divider (top/bottom) | Ratio | A0 at Vmax |
-|---|---|---|---|---|
-| **12 V motorcycle — FITTED** (matches `hw::VBAT_R_*`) | ~14.8 V | **100 k / 15 k** | 0.130 | 1.93 V ✔ |
-| *(alt. sizing, 12 V, more ADC range)* | ~14.8 V | 100 k / 27 k | 0.213 | 3.15 V ✔ |
-| *(out of scope) 24 V — 2×12 V in series* | ~29 V | 100 k / 12 k | 0.107 | 3.10 V ✔ |
+| What used to happen | What happens now |
+|---|---|
+| Voltage on the web gauge + 30 min chart | nothing — the gauge and the chart are gone |
+| Warning at 11.5 V (orange LED strip) | nothing; the strip keeps its rainbow |
+| Cutoff at 10.5 V: blocking fault, disarm, power cut after 30 s | nothing — the kart drives until the pack gives up |
+| PWM capped at 12 V / measured Vbat (24 V pack → ~50 %) | manual `duty_cap` only; **do not fit a >12 V pack** |
+| `LVC` and `NO_VBAT` faults, `vbat_check_en` setting | removed from the firmware, the page and the protocol |
 
-- Reconstruction: **Vbat = V_adc × (R_top + R_bottom) / R_bottom** — the ratio is a **compile-time constant**, deliberately NOT a web setting: a wrong value would silently misreport the battery and drag the LVC thresholds along. Swap the resistors ⇒ edit the two constants and reflash (the Documentation tab shows the live math on the divider diagram).
-- **Battery type detected automatically at startup**: the voltage must be **stable for 3 s** (deviation ≤ 0.5 V), then it is classified as **12 V or 24 V** (18 V threshold: a 12 V even under charge stays ≤ ~14.8 V, a 24 V even empty stays ≥ ~21 V). The type is **frozen until restart** (you never change battery with the system on). The **LVC thresholds are hardcoded per type** (lead-acid): 12 V → warning 11.5 / cutoff 10.5 / rearm 12.0; 24 V → 23.0 / 21.0 / 24.0. Until the type is classified: no LVC (the kart starts disarmed anyway).
-- Divider leakage ≈ 0.18 mA — the divider hangs on the **LOGIC rail** (downstream of the small relay, ⚠️ NOT the motor rail, which dies with the e-stop), so **nothing when off**.
-- **Decoupling capacitor** on the ADC node; the ADS1115 (16-bit, PGA) gives a more stable measurement than the internal ADC.
+**What you lose, plainly**: the kart will not warn you about a flat battery, will not refuse to
+drive on one, and will not turn itself off to save one. Deep-discharge protection is the pack's
+own business now. **What it feels like instead**: a worn pack sags under load, so the motors
+see less voltage and the kart is simply **slower** — the `batterie_usee` simulation scenario
+runs a 11.2 V / 0.12 Ω pack and confirms it drives, more feebly, with no fault raised.
 
-| State (12 V lead-acid, detected) | Voltage | Firmware action |
-|---|---:|---|
-| Full charge (at rest) | ~13.0 V | — (top of the web gauge) |
-| **Warning** | 11.5 V | orange LED strip |
-| **Cutoff (LVC)** | 10.5 V | blocking fault, disarm; **power cut after 30 s** below |
-| Rearm (hysteresis) | > 12.0 V | driving allowed again (re-arm on START) |
-
-*(24 V pack: 23.0 / 21.0 / 24.0 V — same logic, thresholds hard-coded per detected type.)*
-
-> **Anti-sag:** the LVC judges a **2 s smoothed** voltage + 0.5 s debounce — ~20 A through a
-> ~0.05 Ω pack sags ~2 V for the length of an acceleration, and a healthy half-charged battery
-> must not be cut mid-manoeuvre (measured in simulation: thresholding the raw voltage cut a
-> 12.0 V pack 0.55 s after opening the throttle). On return, a deliberate **rearm** (START).
+**What to do about it**: charge on a schedule rather than on a warning, and read the charge on
+the battery's own indicator, off the kart. A lead-acid pack that is regularly run flat dies
+young — that is the risk this simplification accepts.
 
 ### Wiring 2 batteries in parallel
 
 > ⛔ **Out of scope for this phase.** One **single 12 V pack**, no paralleling — so no
 > diode-OR, no ideal-diode modules, nothing to arbitrate between sources. Kept below because
-> the sizing holds if a second pack is ever added. *(The firmware still supports a 24 V pack;
-> the 12/24 V detection stays in place, it is just unlikely to be exercised.)*
+> the sizing holds if a second pack is ever added **in parallel** (same voltage). ⚠️ **In
+> series is now out of the question**: 24 V on 12 V motors used to be held back by the
+> automatic `12 V / Vbat` cap, and that cap went away with the voltage measurement.*
 
 ```mermaid
 flowchart LR
@@ -636,114 +616,85 @@ flowchart LR
 
 **Diode-OR:** each pack supplies **through a diode** → no balancing current, you can clip on a slightly discharged pack safely. **Sizing:** ~40 A shared → ~**20 A/diode** → **40 A / 60 A modules** (low MOSFET drop vs ~8 W of losses with a Schottky). ⚠️ Without diode-OR, a ΔV > 2 V between packs = **dangerous spike**; in that case only connect packs **at the same voltage**.
 
-### Power switch (two rails, two relays)
+### Power switch (one main relay)
 
-![Two-rail power schematic](doc/schematics/power_rails.png)
+![Single-relay power schematic](doc/schematics/power_rails.png)
 
 > Full design rationale, BOM and the terminal-by-terminal wiring guide:
 > **[`doc/electronique.md`](doc/electronique.md)**. Regenerable:
 > `. .venv-schem/bin/activate && python doc/schematics/power_rails.py`.
 
-> 🔁 **This phase: two rails, two relays.** The low-side MOSFET pair is replaced by
-> - a **small opto-isolated relay module** (ready-made, opto and flyback diode on board) that
->   holds the **LOGIC rail** — ESP32 + motor-controller board — driven from `POWER_HOLD`;
-> - a **40 A DC relay** that carries the **MOTOR power**, energised through the small one.
+> 🔁 **This phase: ONE relay, ONE rail.** The previous build had two (a small opto module
+> holding a logic rail from `POWER_HOLD`, plus a 40 A relay for the motors) so that the brain
+> could survive an emergency stop and *report* it. That reporting bought a fault message on a
+> page nobody was looking at mid-drive — it never made the kart stop any harder — and it cost a
+> second relay, an optocoupler, two GPIOs, a priming button, a hidden FORCE ON switch and a
+> "reboot = power-down" rule. All of it is gone.
 >
-> The ESP never sees pack voltage, and an unenergised coil draws nothing, so the kart at rest
-> consumes zero. Prime with the button, hold from the ESP, as before.
+> **The chain, end to end:** fused battery + → **main switch** → **e-stop mushroom (NC)** →
+> relay **coil** (85), coil → ground (86), **1N4007 across the coil, cathode to 85**. The
+> **contact (30 → 87)** carries the whole kart: buck → 5 V (ESP32, WS2812) and the driver's
+> **VB+ and logic** alike. Either switch opens ⇒ the coil drops ⇒ everything goes dark in the
+> relay's own ~10–20 ms. **87a stays spare.**
 >
-> **The emergency stop only needs to cut the motor relay.** That is the point of splitting the
-> rails: the logic survives, so the kart can *say* what happened instead of going dark. A
-> **feedback opto** on the 40 A relay's **coil** (after the mushroom) tells the firmware the
-> instant the e-stop is engaged (`pins::MOTOR_PWR_SENSE`, GPIO22, active low so a broken wire reads "e-stop engaged").
-> Wiring: the opto's input LED from the **coil node (pin 85, after the e-stop)** through its
-> 4.7 kΩ resistor to ground; output transistor between **GPIO22** and GND. Sensing the COIL
-> rather than the output means a **welded contact cannot defeat the e-stop**: the firmware
-> sees the command and dynamic-brakes (it keeps VB+ and logic to do it). The cost — welding
-> becomes undetectable — was accepted over a dual-opto variant. The pin
-> idles on the ESP32's **internal pull-up** (that is why it is GPIO22 and not one of the
-> pull-less input-only 34-39), and the firmware **debounces 50 ms** so a spike coupled from
-> the neighbouring 40 A cabling can never fake an emergency stop.
-> The firmware watches this input **unconditionally** (the software bypass was removed; a
-> bench without the opto ties GPIO22 to GND) and raises **`fb::NO_MOTOR_PWR`**, disarms, names the fault on
-> the page, and requires a deliberate re-arm on START — releasing the mushroom button never
-> resumes drive on its own.
+> **What the e-stop costs now: the brake.** Dynamic braking shorts the windings through the
+> driver's **low-side** MOSFETs, which need gate drive — i.e. power. With the two-rail wiring
+> the driver's logic stayed alive through an e-stop, so the brake probably survived it (a
+> bench test settled it either way). With one relay it does not survive: the mushroom removes
+> the gate drive along with everything else, and the kart **coasts**. The simulation puts a
+> number on it (`arret_urgence_plat`): from full speed on the flat, **~15 m** on rolling
+> resistance alone. On a slope it does not stop at all (`coupure_pente8/16`: 4.4 and 12 m/s
+> eight seconds later). **The mushroom is the last resort; the brake is releasing the stick**,
+> and the gamepad's button B is the emergency stop that actually brakes.
 >
-> **The e-stop may still BRAKE, not freewheel — and that is a bonus of splitting the rails.**
-> Dynamic braking is `motorsBrake()`: duty 0 + DIR low, which drives both bridge outputs low,
-> i.e. turns on both **low-side** MOSFETs and shorts the windings to ground. Low-side FETs are
-> referenced to ground and need only **gate drive** — they do not need VB+. So with the driver
-> board's logic alive on the logic rail and its 40 A supply cut, the firmware sees
-> `fb::NO_MOTOR_PWR`, disarms, and the disarm path already commands the brake. The chain works
-> end to end without a second pole on the mushroom button.
+> If that is ever judged unacceptable, the documented fix is a **normally-closed relay
+> shorting the motor phases**, coil on the switched rail: losing power re-closes the contacts
+> and the windings short themselves. Not fitted.
 >
-> ⚠️ **It hinges entirely on the driver board keeping its gate drive without VB+.** Boards with
-> a separate logic VCC generally do. Boards built around half-bridge ICs that take their own
-> supply from B+ (BTS7960 and friends) do **not** — cut B+ and the chip is simply off, outputs
-> floating. **Test it on the bench**, which the two-rail wiring makes trivial: logic up, 40 A
-> relay open, spin a wheel by hand and feel whether it resists. Thirty seconds, and it decides
-> whether the emergency stop stops the kart or merely stops driving it.
+> **A welded contact is no longer detected.** The old coil-side opto (GPIO22) saw the e-stop
+> command even when the contact had welded shut, and the firmware disarmed and braked on that
+> information. Nothing does now. The replacement is a **test, not a circuit**: press the
+> mushroom at commissioning and verify with a multimeter that driver VB+ actually reaches 0 V.
+> Welding happens on *closing* (inrush into the driver's bulk capacitors), and the relay always
+> closes with the motors commanded off, so the exposure is small — but it is a real, accepted
+> trade.
 >
-> If it turns out not to brake, freewheel is still acceptable *on the flat*: the 1:17 gearbox
-> is not meaningfully back-drivable — the wheel would have to spin the motor seventeen times
-> faster than itself through printed spur gears — so it coasts to a stop rather than rolling
-> away. That argument expires on a slope (`coupure_pente*`), where the fix is a second pole on
-> the mushroom button shorting the windings mechanically.
->
-> ⚠️ **Put the voltage divider on the LOGIC rail**, not the motor rail. On the motor rail it
-> would read 0 V the moment the e-stop is pressed, and the kart would report a dead battery
-> instead of an emergency stop.
->
-> ⚠️ **A reboot does NOT hold through — by decision.** After a watchdog reset the ESP32
-> spends ~700 ms in the bootloader with `POWER_HOLD` undriven; a relay coil draws real
-> current (unlike the old MOSFET gate), so without help the logic rail drops and the kart
-> powers off cleanly. **That is the accepted behavior**: a reboot becomes one press of
-> START, the motors are unpowered throughout (safe), and the event log records the boot
-> and its reason instead of a capacitor papering over it.
+> **A reboot no longer powers the kart off** — and that is an improvement. The latch had to be
+> re-asserted by software within ~700 ms of a reset, which it could not do, so a watchdog reset
+> dropped the rail and the kart needed a fresh press on the priming button. The relay is now held by a physical
+> switch: a reset just reboots, ~1 s of unpowered driver (coasting, motors safe), and the kart
+> comes back **disarmed** with the boot recorded in the event log.
 >
 > **Parts actually used**
 >
 > | | part | coil | contacts |
 > |---|---|---|---|
-> | logic rail | **TONGLING JQC-3FF-S-Z** module, opto in, high/low trigger | 12 V, ~400 Ω, **30 mA** | 10 A 30 VDC |
-> | motor power | **YONGCHUAN YCL-12V-C**, automotive SPDT (85/86 coil, 30/87/87a) | 12 V, ~80 Ω, **150 mA** | **40 A** on 87 (NO), 30 A on 87a |
+> | main relay | **YONGCHUAN YCL-12V-C**, automotive SPDT (85/86 coil, 30/87/87a) | 12 V, ~80 Ω, **150 mA** | **40 A** on 87 (NO), 30 A on 87a |
+> | coil switches | ordinary **NC mushroom** + **toggle/key switch**, in series | they only break the 150 mA coil current | signal-gauge wire to the seatback |
 >
-> Feed the motors from **87 (NO)** — that is the contact carrying the 40 A rating, and it also
-> means an unpowered relay is an unpowered kart. **87a (NC) is spare**: it cannot short the
-> windings *and* switch the supply at the same time (one pole, one job), but it is there for an
-> indicator or a future second relay. The module's 10 A contacts drive the 150 mA coil with a
-> factor of 66 in hand.
+> Feed everything from **87 (NO)**: it is the contact carrying the 40 A rating, and it also
+> means an unpowered relay is an unpowered kart. The **1N4007** across the coil is required for
+> the two mechanical switches (an inductive break arcs and erodes contacts) — and, as a side
+> effect nobody paid for, it is **reverse-polarity protection for the whole kart**. That
+> follows from the single relay: *everything* is behind the contact, so the only question a
+> reversed battery has to answer is whether the relay closes. It does not — reversed, the diode
+> is forward-biased across the coil and shorts it, so the coil never pulls in, the contact stays
+> open and **no current reaches the system at all**: not the motor driver (no reverse protection
+> of its own, destroyed instantly by reversed VB+), not the buck, not the ESP32, not the
+> sensors. ⚠️ Two caveats: the 1N4007 and the fuse race each other during the event, so
+> **replace the diode and check the fuse** afterwards (a relay that no longer clicks is a dead
+> diode); and it does **not** cover a VB+/VB− swap made *downstream* of the contact — check
+> that one by hand.
 >
-> **Decision (2026-08-02 review): NO hold capacitor.** The ~1500 µF ride-through was
-> designed, sized (RC decay, release at 10–30 % of nominal) and then **rejected**: it adds a
-> part whose only job is to hide reboots, and anything holding a relay up is a liability in
-> the same circuit as an emergency stop. What replaces it:
+> **And the last GPIO input went with them.** The panel **arming button** (GPIO16) is gone
+> too: arming already required a connected, calibrated gamepad whose own START/Options button
+> the driver was holding, so the button on the kart duplicated a control already in hand — and
+> a button on the vehicle is a button a bystander can press. The ESP32 now has **no input pin
+> in use at all**: two I²C buses in, four motor pins and one LED line out.
 >
-> - **Hold START ~1 s at power-up** — covers the boot, where the ESP does not exist yet to
->   hold anything (~700 ms to `app_main`).
-> - **A hidden FORCE ON toggle inside the electronics enclosure**, in parallel with the
->   button: forces the logic rail permanently on for bench work, flashing and diagnosis.
->   Unreachable from the driver's seat. If left on by mistake, the idle power-off fires,
->   the rail stays up, and the firmware stays alive with the countdown parked at 0 — the
->   designed behavior for power that refuses to die.
-> - **The e-stop sits in the 40 A relay's coil loop**: with no capacitor anywhere, nothing
->   holds the relay against it — drop-out is the relay's own ~10-20 ms, the mushroom only
->   ever switches ~150 mA, and the 40 A run stays in the nose.
->
-> **The relay's two historical problems are both answered**: the reboot hold is *deliberately
-> not provided* (reboot = clean power-off + START), and the e-stop lives in the coil loop,
-> where a plain NC mushroom on thin wires does the whole job. ⚠️ The relay-specific risk to watch is **contact welding
-> on inrush**: closing 40 A onto the driver's bulk capacitors is a hard surge, and a welded
-> contact fails ON. If it welds, add a pre-charge resistor across the contact. Its coil gets
-> a **1N4007 flyback** (the module's contacts must never break an arcing inductive load).
->
-> *(Also considered: a self-holding relay — auxiliary contact feeding its own coil. Rejected
-> for the same reason as the capacitor: power that survives a reboot is power the firmware no
-> longer controls; the FORCE ON switch gives that mode explicitly when a human wants it.)*
->
-> Why any of this matters: if the relay releases on a reboot the driver loses power, the windings
-> go open and the kart **freewheels**. On a slope that is the `coupure_pente*` simulation result —
-> 4.4 m/s eight seconds after the cut at 8 %, 12 m/s at 16 %.
+> *(Dropped with this change: the opto relay module, the coil-sense optocoupler, the priming
+> button, the arming button, the hidden FORCE ON toggle, the never-fitted hold capacitor, and
+> the idle auto-power-off that depended on the latch.)*
 
 ---
 
@@ -756,7 +707,7 @@ flowchart LR
 - ⚠️ **Chain/sprocket guard**: no fingers/laces/clothing caught.
 - ⚠️ **Rounded corners**, sanding against splinters, bolt heads countersunk/capped on the child side.
 - ⚠️ **Lap belt** anchored to the frame; **helmet mandatory**; **footrest**.
-- ⚠️ **Central hardware emergency stop**: at the **top of the seatback, centered**, **easily reachable by both kids** (and by an adult behind); it **opens the 40 A motor relay** (coil-loop break, ~10-20 ms) — the primary removal of drive power, complementing the **software** emergency stop on the gamepad (button **B**). A **welded relay contact** is covered in software: the coil-side sense still sees the e-stop and the firmware disarms + dynamic-brakes (VB+ being present is what makes that brake bite). The logic rail stays up so the kart reports the fault; whether the driver still *brakes* dynamically with its 40 A supply cut depends on the driver board keeping gate drive — **test it on the bench** (spin a wheel with the motor relay open). Check that the button is neither hidden nor blocked, and that the kids know how to use it.
+- ⚠️ **Central hardware emergency stop**: at the **top of the seatback, centered**, **easily reachable by both kids** (and by an adult behind); it **opens the main relay's coil** (~10-20 ms) and cuts **the entire kart, brain included**. ⚠️ **It does not brake — the kart coasts** (~15 m from full speed on the flat; on a slope it keeps accelerating). Teach it as "kill everything", not as "stop": the **brake** is letting go of the stick, and the gamepad's **button B** is the emergency stop that brakes. A **welded relay contact** is no longer detected in software — verify at commissioning that VB+ really dies when the mushroom is pressed. Check that the button is neither hidden nor blocked, and that the kids know how to use it.
 - ⚠️ **Gamepad**: calibrated before each session; check that **button B (software emergency stop)** brakes, and that a **disconnect** (gamepad off / out of range) triggers braking.
 - ⚠️ **Inspection before each use**: motor mounts, chain tension + lubrication + sprocket tightness, **front caster (swivels free, pad solid)**, **central hardware e-stop** + gamepad e-stop, tech bay mounting (battery secured in the nose), electric brake test.
 - ⚠️ **Flat ground, supervised**, away from traffic and slopes.
@@ -788,7 +739,7 @@ To adjust the **seatback ↔ front-of-seat** distance to the child's size:
 | 2 rear drive wheels Ø25.4 cm + 1 front caster (10″) | ~2.5 kg |
 | Fasteners / shoulder bolts | 1.6 kg |
 | Propulsion (2 rear motors + 2 3D gearboxes + sprockets/#35 chains) | 3.8 kg |
-| Electronics + battery (12 V motorcycle battery, driver, ESP32, ADS1115, relays, wiring) | 2.5 kg (⚠️ optimistic: a motorcycle battery alone is ~3–5 kg — re-weigh and update) |
+| Electronics + battery (12 V motorcycle battery, driver, ESP32, relay, wiring) | 2.5 kg (⚠️ optimistic: a motorcycle battery alone is ~3–5 kg — re-weigh and update) |
 | Brake/misc (seatbelt, guards, paint, gamepad) | 2.0 kg |
 | **EMPTY TOTAL** | **≈ 32 kg** |
 | + 2 kids (~33 kg each) | +66 kg |
@@ -806,7 +757,7 @@ Order from simplest to riskiest. **Golden rule: test everything with the wheels 
 flowchart LR
     P1["1. Wooden frame"] --> P2["2. Rear wheels + front caster"] --> P3["3. Rear drives<br/>(2 motors + gearbox + #35 chains)"]
     P3 --> P5["4. Power<br/>(batteries, latch, driver)"]
-    P5 --> P6["5. Control<br/>(ESP32, ADS1115, 2× AS5600)"] --> P7["6. Firmware<br/>+ gamepad pairing/calibration"]
+    P5 --> P6["5. Control<br/>(ESP32, 2× AS5600)"] --> P7["6. Firmware<br/>+ gamepad pairing/calibration"]
     P7 --> P8["7. Progressive tests"] --> P9["8. Final safety"]
 ```
 
@@ -818,13 +769,13 @@ flowchart LR
 
 **Phase 3 — Rear drives (replaces the old "steering").** On **each rear wheel**: bolted 32T sprocket (large washers / backing plate) + 3D gearbox with its 25T output **ahead of and above the axle** (165 mm centre distance, so chain slack hangs on the run instead of climbing the teeth) + motor on a reinforced mount + #35 chain cut to length + tension adjustment + guard. **No linkage**: steering is differential, so nothing to adjust on the steering-wheel/tie-rod side. ✅ *With no power: each rear wheel turns by hand, chain tensioned and lubricated.*
 
-**Phase 4 — Power electronics ⚠️ (in the nose).** The **single 12 V pack in the NOSE, strapped in its retaining tray over the caster** (build the tray first: plywood plate + rims on the deck); **fuse 40 A AT the battery → 40 A DC relay → +12 V rail → 10 AWG pair back to the rear motors**; the relay coil driven by an **opto-isolated relay module** from `POWER_HOLD`, primed by the **button**, **hold START ~1 s** at power-up (the ESP needs ~700 ms to reach `app_main`); **NO hold capacitor** — a reboot drops the rail and powers the kart off cleanly (re-prime with START); a **hidden FORCE ON toggle inside the enclosure** forces the logic rail for bench/flash work; the **e-stop (NC mushroom) goes in the 40 A relay's COIL loop** (+12V_LOG → mushroom → 85; thin wires to the seatback, the relay contact breaks the 40 A); **1N4007 flyback across the 40 A coil** (cathode to 85/+). See [`doc/electronique.md`](doc/electronique.md) for the full wiring guide and [`doc/schematics/power_rails.png`](doc/schematics/power_rails.png) for the schematic; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**) → 2 rear motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver, the button primes, and **the central e-stop kills the motor rail while the logic stays up** (the page must show the MOTOR POWER fault, GPIO22). Then check the reboot case: force a reset while powered — the relay MUST drop (clean power-off) and START must bring it back. Finally the 30-second brake test: logic up, motor relay open, spin a wheel by hand — if it resists, the e-stop brakes; if not, it freewheels (flat ground only).*
+**Phase 4 — Power electronics ⚠️ (in the nose).** The **single 12 V pack in the NOSE, strapped in its retaining tray over the caster** (build the tray first: plywood plate + rims on the deck); **fuse 40 A AT the battery → main relay (contact 30→87) → +12V_SW rail → 10 AWG pair back to the rear motors**; the relay **coil** fed through the **main switch (dash)** and the **e-stop mushroom (NC, top of the seatback)** in series — thin wires, the contact is what breaks the 40 A — with the **1N4007 across the coil** (cathode to 85/+), which also blows the fuse instead of letting a reversed battery through. No latch, no priming button, no FORCE ON toggle, no capacitor. See [`doc/electronique.md`](doc/electronique.md) for the full wiring guide and [`doc/schematics/power_rails.png`](doc/schematics/power_rails.png) for the schematic; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**, and the coil diode does NOT protect this side) → 2 rear motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver once the main switch is on, and **the e-stop kills everything — verify VB+ actually reads 0 V** (the only test that catches a welded contact). Then force a reset while powered: the kart must stay powered, reboot and come back disarmed. Finally, know the coast: with the kart rolling gently, press the mushroom and see how far it keeps going — it does not brake.*
 
-**Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the 12 V LOGIC rail** (the ESP makes its own 3.3 V); **e-stop coil-sense opto → GPIO22**; **ADS1115** (3.3 V) on bus 0, Vbat divider 100 k/15 k → A0 + capacitor; **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; START button (GPIO16, pull-up); WS2812B (GPIO4). *(Future reserve wired but unused: joystick on A1/A2 of the ADS1115.)* ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus) + ADS1115 (0x48).*
+**Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the switched 12 V rail** (the ESP makes its own 3.3 V); **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; WS2812B (GPIO4). **No buttons, no ADC, no divider, no sense line** — GPIO 13, 16, 22 stay free and the board has no input at all besides the two I²C buses. ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus — the boot-time I²C scan prints what actually answers).*
 
-**Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://kart.local` (or `http://192.168.4.1`). **Pair then calibrate the gamepad** (mandatory to drive); check the measured Vbat against a multimeter (the divider ratio is fixed by the resistor constants — see the Documentation tab). Speed conversion **already determined** (AS5600 at the output of the 1:13.33 gearbox + 1.28:1 sprockets → `enc_per_wheel=1.28`, 10″ wheel, **vehicle speed in m/s**) → **verify on the bench** (both rpm signs POSITIVE pushing forward; fix with `enc_inv_l/r`) + **fine-tune the PIDs** (limiter ≈ 0.54/0.50, brake ≈ 0.43/0.29/0.011 — in m/s). Set a **low speed limit** (`speed_limit_ms`) + **rollover protection** (`turn_gain`, `turn_full_ms`, `turn_alat_vmax`, `turn_rate`) + a child-friendly **mixing** (`mix_type` 1 or 2) + check LVC. *(500 Hz loop, IPv6, System page with persistent event log: automatic.)*
+**Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://kart.local` (or `http://192.168.4.1`). **Pair then calibrate the gamepad** (mandatory to drive). Speed conversion **already determined** (AS5600 at the output of the 1:13.33 gearbox + 1.28:1 sprockets → `enc_per_wheel=1.28`, 10″ wheel, **vehicle speed in m/s**) → **verify on the bench** (both rpm signs POSITIVE pushing forward; fix with `enc_inv_l/r`) + **fine-tune the PIDs** (limiter ≈ 0.54/0.50, brake ≈ 0.43/0.29/0.011 — in m/s). Set a **low speed limit** (`speed_limit_ms`) + **rollover protection** (`turn_gain`, `turn_full_ms`, `turn_alat_vmax`, `turn_rate`) + a child-friendly **mixing** (`mix_type` 1 or 2) + set `duty_cap` (the only power ceiling). *(500 Hz loop, IPv6, System page with persistent event log: automatic.)*
 
-**Phase 7 — Progressive tests (wheels in the air).** Arm (physical or gamepad START), light forward → correct direction of **each wheel** (swap M1A/M1B if needed); push the stick right → turns right; test **default brake**, **pivot in place**, **disarm**, **gamepad emergency stop (B)** and **gamepad disconnect → braking**, **central hardware e-stop** (motor rail dies, the page shows the MOTOR POWER fault, re-arm required); trigger the faults (simulated **LVC**, **sensor failure** by unplugging an AS5600) → must refuse/cut. Then on the ground: flat terrain, minimum speed, rollover protection active, 1 light child first, **progressive** limit.
+**Phase 7 — Progressive tests (wheels in the air).** Arm (gamepad START held ~1 s), light forward → correct direction of **each wheel** (swap M1A/M1B if needed); push the stick right → turns right; test **default brake**, **pivot in place**, **disarm**, **gamepad emergency stop (B)** and **gamepad disconnect → braking**, **central hardware e-stop** (everything dies, including the page's connection — then power back on with the main switch: the kart must come back **disarmed**); trigger the faults (**sensor failure** by unplugging an AS5600) → must refuse/cut. Then on the ground: flat terrain, minimum speed, rollover protection active, 1 light child first, **progressive** limit.
 
 **Phase 8 — Final safety.** Seatbelt anchored, helmets, guards, rounded corners, footrest, secured axles, tightened caster, **nose tech bay secured**, **battery strapped in its nose tray**, **central emergency stop clear and tested** (motor feed broken, fault reported). **Inspection before each use**. Use **under adult supervision**.
 
@@ -834,9 +785,9 @@ flowchart LR
 
 ESP-IDF 6.1 (C++) code in [`firmware/`](firmware/) — details in [`firmware/README.md`](firmware/README.md).
 
-- **500 Hz control loop** (FreeRTOS 1000 Hz): **gamepad** read (pluggable mixing: linear / expo / expo+speed-soft) + **rollover protection** (iso-a_lat clamp + turn slew-rate), **2 wheel speeds** via **AS5600** (I²C, one per bus), **braking PID** + **speed-limiter PID** per wheel, **independent PWM + DIR**. State machine, arming (physical or gamepad START), anti-sag **LVC** (via ADS1115), **watchdog**, **power latch** (POWER_HOLD). **Brake by default** from boot and if the gamepad disconnects.
+- **500 Hz control loop** (FreeRTOS 1000 Hz): **gamepad** read (pluggable mixing: linear / expo / expo+speed-soft) + **rollover protection** (iso-a_lat clamp + turn slew-rate), **2 wheel speeds** via **AS5600** (I²C, one per bus), **braking PID** + **speed-limiter PID** per wheel, **independent PWM + DIR**. State machine, arming (gamepad START), **watchdog**. No ADC and no power control: the pack is always 12 V and the kart is switched by hand. **Brake by default** from boot and if the gamepad disconnects.
 - **FreeRTOS tasks** (priority / core / stack): see [`doc/firmware-tasks.md`](doc/firmware-tasks.md); constants in [`firmware/main/rtos.hpp`](firmware/main/rtos.hpp).
-- **Bluetooth (gamepad) + Wi-Fi** in coexistence; **Wi-Fi AP + station**, **IPv6**, **mDNS** (`http://kart.local` on both interfaces — no IP to remember; Android excepted), **WebSocket** server: dashboard (scaled Chart.js graphs — forward/PWM + speed per wheel, speed, battery), live configuration, **Gamepad tab** (pairing, calibration, stick visualization), Wi-Fi, pinout, and a **System page** with the **persistent event log** (why did it disarm — survives reboots and power cuts). Settings that write flash are refused while armed.
+- **Bluetooth (gamepad) + Wi-Fi** in coexistence; **Wi-Fi AP + station**, **IPv6**, **mDNS** (`http://kart.local` on both interfaces — no IP to remember; Android excepted), **WebSocket** server: dashboard (scaled Chart.js graphs — forward/PWM + speed per wheel, vehicle speed, worst control tick), live configuration, **Gamepad tab** (pairing, calibration, stick visualization), Wi-Fi, pinout, and a **System page** with the **persistent event log** (why did it disarm — survives reboots and power cuts). Settings that write flash are refused while armed.
 - Build: `cd firmware && idf.py build flash monitor`.
 
 ---
@@ -846,7 +797,7 @@ ESP-IDF 6.1 (C++) code in [`firmware/`](firmware/) — details in [`firmware/REA
 Points to **address / validate before any real use**.
 
 **Safety & access**
-- **The central hardware emergency stop removes drive power by opening the 40 A relay** (mushroom in the relay's **coil loop**, at the top of the seatback, within reach of both kids; ~10-20 ms). A **welded relay contact** no longer defeats it: the sense reads the coil, so the firmware still disarms and dynamic-brakes. The logic rail deliberately survives — the kart disarms, reports `MOTOR POWER`, and requires a re-arm. The rest (gamepad emergency stop, LVC, disarm, watchdog, braking on disconnect) is software; the ESP can also cut itself via POWER_HOLD.
+- **The central hardware emergency stop removes ALL power by opening the main relay** (mushroom in the relay's **coil loop** with the main switch, at the top of the seatback, within reach of both kids; ~10-20 ms). It stops the kart being powered, not the kart: with no gate drive there is no electric brake, so it **coasts** (~15 m from full speed on the flat, measured). The firmware never sees it — it is off too — and the kart boots **disarmed** when power returns. Everything that actually brakes is software and needs power: gamepad emergency stop (button B), disarm, watchdog, braking on gamepad disconnect.
 - **Unauthenticated web — by choice**: only the AP password protects access (changing it is still recommended). **Gamepad calibration** is locked outside the disarmed/stopped state.
 - **Gamepad dependency**: if the gamepad disconnects, the kart **brakes** (safety), but the driver loses directional control until reconnection → drive within Bluetooth range, gamepad charged.
 
@@ -859,7 +810,7 @@ Points to **address / validate before any real use**.
 
 **Electrical / power**
 - **Motor current 19.6 A ≈ 20 A/channel limit**: a prolonged wheel stall triggers the driver's limiting/heating. **No current measurement** in firmware.
-- **Battery sag ~40 A** → risk of ESP32 brownout: good buck + capacitors — and the ESP32 sits on the **logic rail**, so motor-side sag reaches it already filtered.
+- **Battery sag ~40 A** → risk of ESP32 brownout: good buck + bulk capacitor at its input. ⚠️ The ESP32 now shares the **one switched rail** with the motors (the old logic rail filtered that sag), so tap the buck close to the relay rather than at the driver's terminals, and keep ≥ 470 µF there.
 - **Driver without reverse protection** (VB+/VB-): a reversed connection **destroys** it.
 - **Single 12 V pack**: no paralleling, no diode-OR. It carries the full ~40 A — fuse, cable and relay sized accordingly.
 

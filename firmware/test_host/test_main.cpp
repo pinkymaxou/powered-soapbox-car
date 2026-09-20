@@ -103,60 +103,6 @@ static void test_turn_limit()
     CHECK(near(ctl::turnLimit(2.0f, 0.5f, 0.5f, 0.5f), 0.125f)); // v_max ≤ v_full → 1/v direct, no division by 0
 }
 
-static void test_duty_cap_volts()
-{
-    // Auto PWM cap = V_nom / measured Vbat; 1 (no capping) if voltage unknown or low.
-    CHECK(near(ctl::dutyCapVolts(0.f, 12.f), 1.f));      // sensor absent (Vbat unknown)
-    CHECK(near(ctl::dutyCapVolts(-1.f, 12.f), 1.f));
-    CHECK(near(ctl::dutyCapVolts(11.5f, 12.f), 1.f));    // discharged motorcycle battery → full duty
-    CHECK(near(ctl::dutyCapVolts(12.f, 12.f), 1.f));     // exactly 12 V → 100%
-    CHECK(near(ctl::dutyCapVolts(20.f, 12.f), 0.6f));    // 20 V tool pack → 60%
-    CHECK(near(ctl::dutyCapVolts(24.f, 12.f), 0.5f));    // 24 V → 50%
-    CHECK(near(ctl::dutyCapVolts(28.8f, 12.f), 12.f / 28.8f));   // 2×12 V charging
-}
-
-static void test_batt_detect()
-{
-    const int64_t S = 3000000;   // 3 s of stability required
-    const float TOL = 0.5f, V24 = 18.f;
-    const int64_t DT = 2000;     // 500 Hz
-
-    // Stable 12 V battery → classified 12 after 3 s, not before.
-    ctl::BattDetect d;
-    int64_t t = 0;
-    for (int i = 0; i < 1400; ++i) { d.update(12.6f, t, S, TOL, V24); t += DT; }
-    CHECK(0 == d.volts);                     // 2.8 s: not yet
-    for (int i = 0; i < 200; ++i) { d.update(12.6f, t, S, TOL, V24); t += DT; }
-    CHECK(12 == d.volts);
-
-    // 24 V battery (2×12 lead-acid, at rest ~25.3 V) → classified 24.
-    ctl::BattDetect d24; t = 0;
-    for (int i = 0; i < 1600; ++i) { d24.update(25.3f, t, S, TOL, V24); t += DT; }
-    CHECK(24 == d24.volts);
-
-    // UNSTABLE voltage (>|tol|) → the window restarts, no classification.
-    ctl::BattDetect du; t = 0;
-    for (int i = 0; i < 3000; ++i) { du.update((i % 2) ? 12.f : 13.f, t, S, TOL, V24); t += DT; }
-    CHECK(0 == du.volts);
-    // …then the voltage stabilizes → classified.
-    for (int i = 0; i < 1600; ++i) { du.update(12.5f, t, S, TOL, V24); t += DT; }
-    CHECK(12 == du.volts);
-
-    // Invalid measurement (sensor absent) in the middle → restart from zero, without classifying.
-    ctl::BattDetect di; t = 0;
-    for (int i = 0; i < 1000; ++i) { di.update(12.6f, t, S, TOL, V24); t += DT; }
-    di.update(-1.f, t, S, TOL, V24); t += DT;
-    for (int i = 0; i < 1400; ++i) { di.update(12.6f, t, S, TOL, V24); t += DT; }
-    CHECK(0 == di.volts);                    // 2.8 s since the dropout: not yet
-
-    // Once classified, detection is FINAL (you don't swap batteries while powered on).
-    ctl::BattDetect df; t = 0;
-    for (int i = 0; i < 1600; ++i) { df.update(12.6f, t, S, TOL, V24); t += DT; }
-    CHECK(12 == df.volts);
-    for (int i = 0; i < 3000; ++i) { df.update(25.f, t, S, TOL, V24); t += DT; }
-    CHECK(12 == df.volts);
-}
-
 static void test_rev_detect()
 {
     const int64_t WIN = 400000;   // 400 ms
@@ -313,8 +259,6 @@ int main()
     test_mix_arcade();
     test_square_map();
     test_turn_limit();
-    test_duty_cap_volts();
-    test_batt_detect();
     test_rev_detect();
     test_pid();
     test_ring();

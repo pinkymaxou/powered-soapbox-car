@@ -47,14 +47,12 @@ struct RunResult
     float max_v = 0.f;             // max |speed| reached
     float max_alat = 0.f;
     float final_v = 0.f;
-    float stop_dist = -1.f;        // distance traveled since the start of braking (if measured)
+    float coast_dist = -1.f;       // distance travelled since the power was cut (-1 = never cut)
     bool  ever_armed = false;
     bool  ever_fault = false;
     bool  wheel_lifted = false;   // a wheel left the ground (even briefly)
     bool  tipped = false;         // tipped (point of no return crossed)
     Fault final_fault = Fault::None;
-    int   batt_type = 0;
-    bool  powered_off = false;
     float t_first_fault = -1.f;
     float t_disarmed_after = -1.f;   // time of the first disarm AFTER having been armed
 };
@@ -77,6 +75,8 @@ inline RunResult runScenario(const Scenario& sc, const FrameHook& hook = nullptr
 
     RunResult r;
     bool was_armed = false;
+    bool was_powered = true;
+    float x_cut = 0.f, y_cut = 0.f;
     const int steps = static_cast<int>(sc.duration_s * hw::CTRL_HZ);
     for (int i = 0; i < steps; ++i)
     {
@@ -96,13 +96,21 @@ inline RunResult runScenario(const Scenario& sc, const FrameHook& hook = nullptr
         }
         if (was_armed && !t.armed && r.t_disarmed_after < 0.f) r.t_disarmed_after = veh.t();
         was_armed = t.armed;
+        // Coasting after a power cut: the distance the kart keeps travelling once the main
+        // relay opens. With no power there is no brake of any kind, so this is what the
+        // emergency stop actually costs in metres.
+        if (was_powered && !ctrl.powered()) { x_cut = veh.x(); y_cut = veh.y(); }
+        if (!ctrl.powered())
+        {
+            const float dx = veh.x() - x_cut, dy = veh.y() - y_cut;
+            r.coast_dist = std::sqrt(dx * dx + dy * dy);
+        }
+        was_powered = ctrl.powered();
 
         if (hook) hook(veh, ctrl, t);
     }
     r.final_v = veh.v();
     r.final_fault = primaryFault(ctrl.telemetry().faults);
-    r.batt_type = ctrl.telemetry().batt_type;
-    r.powered_off = ctrl.powered_off;
     return r;
 }
 
@@ -315,22 +323,25 @@ inline std::vector<Scenario> allScenarios()
             c.y = 1.f;
             return c;
         }});
-    // Two-rail e-stop as the firmware SEES it: the opto reports the 40 A motor rail dead
-    // while the logic keeps running. A single-tick glitch at t=4 s (weak pull-up next to
-    // the 40 A cabling — coupled spikes happen) must NOT fault: the 50 ms debounce eats it.
-    // The sustained drop at t=6 s must fault as MOTOR_POWER and brake.
+    // The emergency stop, as it now IS: the mushroom sits in the main relay's coil loop, so
+    // it cuts the ESP32 along with the motors. Nothing is reported, nothing is braked — the
+    // kart COASTS. On the flat, rolling resistance alone (~30 N against ~98 kg = 0.31 m/s²)
+    // takes about TEN SECONDS and fifteen metres to bring it down from full speed: the e-stop
+    // removes the power, it does not stop the kart. That is the number this scenario exists to
+    // print, and the reason the mushroom is a last resort rather than the normal way to stop —
+    // releasing the stick, which brakes, is the normal way. The slope scenarios below show the
+    // same cut where it is genuinely dangerous.
     v.push_back({
-        "estop_moteur",
-        "E-stop coil sense (always on): 1-tick glitch ignored, sustained drop = MOTOR_POWER",
-        10.f,
+        "arret_urgence_plat",
+        "E-stop at full speed on the flat: everything dies, the kart coasts ~15 m to a stop",
+        20.f,
         nullptr,
         nullptr,
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
             c.y = 1.f;
-            if (t >= 4.f && t < 4.004f) c.motor_pwr = false;   // 1-2 ticks: a coupled spike
-            if (t >= 6.f) c.motor_pwr = false;                 // the mushroom, for real
+            if (t >= 6.f) c.sys_power = false;   // the mushroom: coil open, whole kart off
             return c;
         }});
     v.push_back({
@@ -367,50 +378,15 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // LVC: worn battery that sags under load (12 V detection then cutoff).
+    // What a WORN pack does now that nothing measures it. 11.2 V open-circuit and 0.12 Ω
+    // collapse to ~8 V under a 25 A launch: the motors see less voltage, so the kart is simply
+    // SLOWER. No fault, no cutoff, no warning — the LVC went with the ADS1115, and this
+    // scenario is what states the trade-off out loud: a flat battery is now a driving feel,
+    // not a diagnosis. (Deep-discharge protection is the pack's own business.)
     v.push_back({
-        "lvc_batterie_faible",
-        "Worn 12 V battery: the sag under load triggers the LVC (after debounce)",
+        "batterie_usee",
+        "Worn 12 V pack: no fault of any kind, the kart is just slower",
         12.f, nullptr,
-        [](Vehicle& v) {
-            v.params().batt_v0 = 11.2f;     // open-circuit: above the threshold (10.5 V)
-            v.params().batt_rint = 0.12f;   // worn: collapses under 20-30 A
-        },
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = (t > 5.f) ? 1.f : 0.f;    // 3.4 s at rest (type detection), then load
-            return c;
-        }});
-
-    // REGRESSION: a healthy half-charged pack must survive full throttle. At 12.0 V
-    // open-circuit and 0.05 Ω the terminals dip to ~10.0 V for ~0.6 s while the kart
-    // accelerates — under the 10.5 V cutoff for longer than the 500 ms debounce. Thresholding
-    // the RAW voltage cut the kart dead 0.55 s after the throttle opened; the LVC now judges
-    // a 2 s EMA (hw::VBAT_LVC_EMA_*), which is what makes this scenario pass.
-    v.push_back({
-        "sag_acceleration",
-        "Healthy 12.0 V pack, full throttle: the acceleration sag must NOT trip the LVC",
-        12.f, nullptr,
-        [](Vehicle& v) {
-            v.params().batt_v0 = 12.0f;     // half charge, perfectly serviceable
-            v.params().batt_rint = 0.05f;   // healthy internal resistance
-        },
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = (t > 5.f) ? 1.f : 0.f;    // rest for type detection, then full throttle
-            return c;
-        }});
-
-    // SAME worn battery, but the voltage check is switched off (bench option): the sag must
-    // no longer trip anything — no LVC, no disarm, no power cutoff. The pack's own BMS
-    // becomes the only protection, which is the documented trade-off of vbat_check_en=0.
-    v.push_back({
-        "lvc_desactive",
-        "Same worn battery with vbat_check_en=0: no LVC, the kart keeps driving",
-        12.f,
-        [](KartConfig& c) { c.vbat_check_en = 0; },
         [](Vehicle& v) {
             v.params().batt_v0 = 11.2f;
             v.params().batt_rint = 0.12f;
@@ -419,18 +395,6 @@ inline std::vector<Scenario> allScenarios()
             PadCmd c;
             if (armPhase(t, c)) return c;
             c.y = (t > 5.f) ? 1.f : 0.f;
-            return c;
-        }});
-
-    // 24 V detection at boot (stable voltage 3 s).
-    v.push_back({
-        "detection_24v",
-        "24 V battery (2×12 V series): type detected = 24 after 3 s of stability",
-        6.f, nullptr,
-        [](Vehicle& v) { v.params().batt_v0 = 25.6f; },
-        [](float t) {
-            PadCmd c;
-            armPhase(t, c);
             return c;
         }});
 
@@ -491,25 +455,26 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // KILL SWITCH ON A SLOPE: power cut off → MOSFETs open → COASTING. Only
-    // rolling resistance (~30 N) remains against gravity: on 8% (77 N) as on 16% (152 N),
-    // the kart RUNS AWAY — this is the quantified demonstration of the README warning
-    // (hardware fix: normally-closed relay across the motors).
+    // POWER CUT ON A SLOPE: main relay open → MOSFETs open → COASTING. Only rolling
+    // resistance (~30 N) remains against gravity: on 8% (77 N) as on 16% (152 N), the kart
+    // RUNS AWAY — the quantified demonstration of the README warning, and it now applies to
+    // the EMERGENCY STOP itself, which opens that same relay. Hardware fix if it ever
+    // matters: a normally-closed relay shorting the motor phases when power goes away.
     v.push_back({
         "coupure_pente8",
-        "Slope 8%: kill switch pressed at t=6 s → coasting, runaway expected",
+        "Slope 8%: e-stop pressed at t=6 s → coasting, runaway expected",
         14.f, nullptr,
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.08f); },
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
             c.y = (t < 5.f) ? 0.3f : 0.f;
-            if (t >= 6.f) c.sys_power = false;   // kill switch
+            if (t >= 6.f) c.sys_power = false;   // the mushroom: the whole kart goes dark
             return c;
         }});
     v.push_back({
         "coupure_pente16",
-        "Slope 16%: kill switch pressed at t=6 s → fast runaway",
+        "Slope 16%: e-stop pressed at t=6 s → fast runaway",
         14.f, nullptr,
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.16f); },
         [](float t) {

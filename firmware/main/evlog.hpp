@@ -11,7 +11,9 @@
 // maintain(), called from the LED task's 20 Hz loop, drains the ring to the partition ONLY
 // while the kart is disarmed. No dedicated task: the first version had one, and its 3 KB
 // stack helped push an already-tight heap to heap_min = 864 bytes — the page choked. The
-// 50 ms cadence still lands a pre-power-off record well inside the hold-capacitor's ~1 s.
+// 50 ms cadence is plenty: nothing is racing a power cut any more — the kart is switched off
+// by hand (main switch or e-stop), and an unflushed record is lost, which is acceptable for
+// a disarmed kart sitting idle.
 #pragma once
 
 #include <cstdint>
@@ -26,8 +28,9 @@ enum class Ev : uint8_t
     Arm     = 2,   // data = 0
     Disarm  = 3,   // data = fault mask at that tick (0 = manual / inactivity timeout)
     Fault   = 4,   // data = fault bits NEWLY RAISED while armed (rising edges only)
-    IdleOff = 5,   // data = idle_off_min — self power-off after N minutes disarmed
-    LvcOff  = 6,   // data = fault mask — power cut after 30 s of LVC
+    // 5 (IdleOff) and 6 (LvcOff) are RETIRED with the power latch — the firmware cannot cut
+    // its own supply any more. The codes stay reserved so records written by an older
+    // firmware keep their meaning when the page reads the partition back.
 };
 
 // One persisted record, 16 bytes, flash-friendly (a blank slot reads 0xFFFFFFFF).
