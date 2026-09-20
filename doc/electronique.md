@@ -147,7 +147,7 @@ schedule rather than on a warning.
 
 | # | Part | Spec / rating | Qty | Role |
 |--:|---|---|--:|---|
-| 1 | Motorcycle battery | 12 V lead-acid, ≥ 40 A peak | 1 | single pack, **REAR** — strapped in a retaining tray above the caster |
+| 1 | Motorcycle battery | 12 V lead-acid, ≥ 40 A peak | 1 | single pack, **in the NOSE** — strapped in a retaining tray above the front caster (counterweight) |
 | 2 | Blade fuse + holder | **40 A** | 1 | master protection at battery + |
 | 3 | Automotive relay | 12 V coil, **40 A** on 87 (NO), SPDT | 1 | **the** main relay: whole kart |
 | 4 | Diode 1N4007 | 1 A / 1000 V | 1 | flyback across the coil + reverse-polarity guard |
@@ -155,7 +155,7 @@ schedule rather than on a warning.
 | 6 | Main switch | toggle or key, ≥ 1 A, panel mount | 1 | in the coil loop, on the dash — the on/off of the kart |
 | 7 | Buck converter | 12 V in → **5 V ≥ 2 A cont.** (3 A class) | 1 | 5 V rail |
 | 8 | ESP32-WROOM board | dual-core, 4 MB | 1 | controller |
-| 9 | Motor driver | dual channel, 20 A/ch, 6–30 V, PWM+DIR | 1 | both front motors |
+| 9 | Motor driver | dual channel, 20 A/ch, 6–30 V, PWM+DIR | 1 | both rear (driven) motors |
 | 10 | AS5600 breakout + diametric magnet | 12-bit angle, I²C 0x36 | 2 | one per wheel, one per bus |
 | 11 | Resistors 4.7 k | ¼ W | 4 | I²C pull-ups (2 per bus) |
 | 12 | Resistor ~330 Ω | ¼ W | 1 | WS2812 DIN series |
@@ -172,17 +172,19 @@ toggle, the priming/arming momentary button — and with it the last GPIO input 
 
 Work with the battery disconnected; connect it last.
 
-1. **Battery + → fuse holder (40 A) AT the battery** (rear tray, above the caster) — then the
-   **10 AWG pair runs rear→front** along a frame rail to the nose (≈ 1.1 m each way: ~7 mΩ
-   round trip, ~0.3 V at 40 A — fine). Battery − → common ground bus (10 AWG). Keep signal
-   looms on the other rail, away from this run.
+1. **Battery + → fuse holder (40 A) AT the battery**, in the **nose tray above the front
+   caster** — the battery, the relay, the buck and the driver all live in that bay, so these
+   runs are short. The long pair is the **motor wiring**: 10 AWG **nose→rear** along a frame
+   rail to the two driven wheels (≈ 1.1 m each way: ~7 mΩ round trip, ~0.3 V at 40 A — fine).
+   Battery − → common ground bus (10 AWG). Keep signal looms on the other rail, away from
+   that run.
 2. **Fused + → relay pin 30** (10 AWG).
 3. **Coil loop** (18–22 AWG): fused + → **main switch** (dash) → **e-stop mushroom (NC, top of
    seatback)** → **85**; **86** → ground bus. **1N4007 across 85/86, cathode (ring) on 85.**
    Order matters only for reach — either switch cuts the same loop.
 4. **Relay pin 87 → +12V_SW bus** (10 AWG, short run inside the nose). **87a stays spare.**
 5. **+12V_SW → driver VB+** (10 AWG) and **→ driver logic supply** (18 AWG). Driver VB− →
-   ground bus (10 AWG). ⚠️ **Triple-check VB+/VB− polarity before the battery goes in — the
+   ground bus (10 AWG). The driver's two motor outputs are what run nose→rear (step 1). ⚠️ **Triple-check VB+/VB− polarity before the battery goes in — the
    driver has no reverse protection, and it sits on the far side of the relay contact, so the
    coil diode cannot save it from a swap made here.**
 6. **Buck**: IN ← +12V_SW (+ ≥ 470 µF bulk at its input), OUT 5 V → ESP32 5V/VIN, WS2812

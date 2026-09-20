@@ -16,7 +16,7 @@ struct KartStatus
     int      m_state = static_cast<int>(State::Lockout);
     int      m_fault = static_cast<int>(Fault::None);
     unsigned m_faults = 0;    // mask of ACTIVE conditions (Faults page)
-    float    m_rpm_l = 0.f;   // SIGNED front left wheel (AS5600 #1, rpm)
+    float    m_rpm_l = 0.f;   // SIGNED rear left wheel (AS5600 #1, rpm)
     float    m_rpm_r = 0.f;
     float    m_speed_ms = 0.f;// SIGNED VEHICLE speed (m/s) — pivot in place → 0
     float    m_fwd = 0.f;     // forward command after mix/limits [-1..1]

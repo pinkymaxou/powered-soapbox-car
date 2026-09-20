@@ -17,8 +17,19 @@ so the live telemetry keeps working untouched.
 Rebuild + flash after editing (`idf.py build flash`); the assets are embedded
 in the firmware image.
 
-The previews below are static mockups of the **Dashboard** and **Configuration**
-pages rendered from the real components (sample data, not a live kart).
+The previews below are **rendered from the real page** — `index.html` loaded headless with
+its WebSocket stubbed and one sample telemetry frame pushed through its own render functions
+(Dashboard + Configuration, sample data, no kart attached). Regenerate them after any UI
+change with:
+
+```
+. .venv-schem/bin/activate && python doc/webui/render_previews.py
+```
+
+([`render_previews.py`](render_previews.py) — it reads the CSS blocks below, so the skins in
+this document and the images cannot drift apart. The few emoji of the real page are swapped
+for plain glyphs because the rendering box has no emoji font.) Previews built by hand are how
+these three spent a month showing a kart whose caster was still at the rear.
 
 ---
 

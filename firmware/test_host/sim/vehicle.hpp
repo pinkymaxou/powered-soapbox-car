@@ -60,7 +60,8 @@ struct VehicleParams
     // REAR under the bench. 4 = the two-caster variant that was evaluated and not built
     // (0.97 g instead of 0.69) — kept so the scenarios can quantify what it would buy.
     // This single number changes the rollover geometry completely: a tricycle tips about the
-    // line joining a front wheel to the single rear contact, so the usable half-track shrinks
+    // line joining the single FRONT contact (the caster) to a REAR wheel, so the usable
+    // half-track shrinks
     // as (1 − xcg/wb); with four contacts the tip line is parallel to the centreline and the
     // FULL half-track counts, whatever the CG's fore/aft position (see wEff). Measured on the
     // same manoeuvres: 3.79 (tricycle with the mass at the wrong end) → 6.75 (this layout)

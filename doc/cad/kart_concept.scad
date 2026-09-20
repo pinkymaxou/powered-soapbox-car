@@ -14,6 +14,11 @@
 // Ne JAMAIS déplacer de masse vers la roulette, et ne pas éloigner davantage la banquette.
 //
 // Repère : x=0 = pivot de la roulette avant (+x vers l'arrière), z=0 sol.
+//
+// Rendu de doc/cad/kart_concept.png (vue 3/4 avant-gauche : la roulette AVANT doit rester
+// visible, c'est tout l'intérêt de l'image) :
+//   openscad -o doc/cad/kart_concept.png --imgsize=1600,1000 --projection=p \
+//            --camera=0,0,0,68,0,320,4000 --viewall --autocenter doc/cad/kart_concept.scad
 
 // ── Cotes principales (mm) ──
 WHEEL_D = 254;   WHEEL_W = 70;       // roues 10" (motrices ET roulette : un seul type)

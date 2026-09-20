@@ -1,5 +1,6 @@
 // pinout.hpp — Hardware pinout (fixed). EXPERIMENTAL variant: differential-drive
-// tricycle — 2 independent driven FRONT wheels + 1 free rear caster.
+// tricycle — 2 independent driven REAR wheels + 1 free FRONT caster (reversed layout:
+// the single wheel leads, the mass sits over it, and the pair drives under the bench).
 // Driven by Bluetooth gamepad (no pedal input). ESP-IDF 6.1 / C++.
 //
 // SIMPLIFIED ELECTRICAL ARCHITECTURE (2026-09-20): ONE main relay carries the whole kart
@@ -14,19 +15,19 @@
 namespace pins
 {
 
-// Motor outputs (dual-channel driver: PWM + DIR per channel) — one motor per front wheel.
-constexpr gpio_num_t PWM_L = GPIO_NUM_25;   // front LEFT wheel
+// Motor outputs (dual-channel driver: PWM + DIR per channel) — one motor per REAR wheel.
+constexpr gpio_num_t PWM_L = GPIO_NUM_25;   // rear LEFT wheel
 constexpr gpio_num_t DIR_L = GPIO_NUM_26;
-constexpr gpio_num_t PWM_R = GPIO_NUM_32;   // front RIGHT wheel
+constexpr gpio_num_t PWM_R = GPIO_NUM_32;   // rear RIGHT wheel
 constexpr gpio_num_t DIR_R = GPIO_NUM_33;
 
 // ───────────────────────── I2C buses (two independent buses) ─────────────────────────
 // One AS5600 (0x36) per bus: the address is fixed on that chip, so two sensors need two
 // buses. Since the ADS1115 went away, bus 0 carries the left sensor ALONE — which is also
 // what removed the read-timing interference the battery polling used to add to that bus.
-constexpr gpio_num_t I2C0_SDA = GPIO_NUM_18;   // bus 0 → LEFT wheel AS5600 (0x36)
+constexpr gpio_num_t I2C0_SDA = GPIO_NUM_18;   // bus 0 → LEFT rear wheel AS5600 (0x36)
 constexpr gpio_num_t I2C0_SCL = GPIO_NUM_19;
-constexpr gpio_num_t I2C1_SDA = GPIO_NUM_27;   // bus 1 → RIGHT wheel AS5600 (0x36)
+constexpr gpio_num_t I2C1_SDA = GPIO_NUM_27;   // bus 1 → RIGHT rear wheel AS5600 (0x36)
 constexpr gpio_num_t I2C1_SCL = GPIO_NUM_14;
 // Native 3.3 V (no level-shift); 4.7 kΩ pull-ups per SDA/SCL pair.
 

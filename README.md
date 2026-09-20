@@ -67,10 +67,12 @@ flowchart TB
 ![3D concept of the kart](doc/cad/kart_concept.png)
 
 > Regenerable visual concept: [`doc/cad/kart_concept.scad`](doc/cad/kart_concept.scad) (OpenSCAD —
-> 2 powered 10″ wheels at the front **with the axle set back into the body** (nose ~30 cm ahead of
-> the axle → short turning radius), free 10″ caster wheel on a raised tail with the **12 V motorcycle battery in a
-> retaining tray above it (REAR)**, 2-child bench, side guardrails, emergency stop at the top of
-> the seatback, 2×3 frame + 1/2″ plywood).
+> the render command is in the file header). **Reversed tricycle, as built**: the free 10″ caster
+> leads at the **front centre**, on a beam ~15 cm ahead of the deck, with the **12 V motorcycle
+> battery in a retaining tray right above it** (the counterweight that keeps that single wheel
+> planted); the **2 powered 10″ wheels are at the REAR**, each on its own motor + printed gearbox
+> + #35 chain, axle 6″ behind the bench; 2-child bench, side guardrails, emergency stop at the
+> top of the seatback, 2×3 frame + 1/2″ plywood.
 
 ![Dimensioned drawing of the kart](doc/schematics/kart_dimensions.png)
 
@@ -88,7 +90,7 @@ flowchart TB
 | **Seats** | 2, single bench side by side; **driver on the left** (gamepad) |
 | **Steering** | **Differential (skid steer)**: speed difference between the 2 REAR driven wheels; **pivot in place** possible; **no mechanical steering parts** |
 | **Propulsion** | **2× 12 V DC motors (~172 W / 0.23 HP)** at the REAR, **independent** (one per wheel) — **PWM/DIR per wheel** |
-| **Transmission** | **3D-printed gearboxes** (16→80 then 30→80 = 1:13.33, 16T/24 DP motor pinion — see [`doc/reducteur.md`](doc/reducteur.md)) + **1.28:1 sprockets (25T→32T) bolted to the front wheels + #35 chain** = **1:17 total** |
+| **Transmission** | **3D-printed gearboxes** (16→80 then 30→80 = 1:13.33, 16T/24 DP motor pinion — see [`doc/reducteur.md`](doc/reducteur.md)) + **1.28:1 sprockets (25T→32T) bolted to the rear wheels + #35 chain** = **1:17 total** |
 | **Wheels** | **2× rear drive Ø25.4 cm (10″)** (plastic rim, 1/2" bearing) + **1 free 10″ caster at the front centre** |
 | **Driving** | **Bluetooth gamepad** (stick: Y = forward/reverse, X = turn); **calibration mandatory**; analog joystick reserved (future) |
 | **Electronics** | **ESP32** → **dual-channel driver 20 A / 6–30 V** (PWM + DIR / channel), PWM bounded by the manual `duty_cap` (the pack is always 12 V — the motors' nominal — so nothing is measured or capped automatically); **tech bay in the nose** (near the 2 motors, short power wiring) |
@@ -105,7 +107,7 @@ flowchart TB
 - **One free caster at the front centre, mass toward the rear axle**: the caster orients itself → no steering geometry, and the layout puts the CG **61 % of the way back from the single wheel**, which is what keeps the tip triangle usable. ⚠️ This is the whole design: **never move mass toward the caster**. The first version had the bench far from the driven axle and reached only 0.39 g; putting it *on* the axle gave 0.69 g; the 6″/6″ split of 2026-08-10 gave back a quarter of that, to 0.53 g. There is no margin left to spend. A three-point frame also never rocks on uneven ground, which a four-wheel version would.
 - **Stability now depends on the firmware**: **a_tip ≈ 0.53 g** (a car is ~1.0 g). The **firmware rollover protection** (turn amplitude clamped by speed + a slew-rate limiter) is what keeps the kart upright: disabled, the simulation **rolls over** on the reference manoeuvre (−0.60 m/s²); enabled, the same run keeps +2.75. `turn_alat_vmax` is capped at **0.2 — its own default**, because 0.3 lifts a wheel with one child off-centre (−0.27) and 0.25 leaves only +0.31.
 - **One battery voltage, and it is 12 V** (2026-09-20 simplification): the motors are 12 V, the pack is 12 V, and **nothing measures it** — no ADS1115, no divider, no low-voltage cutoff, no automatic `12 V / Vbat` cap. The driver would accept 6–30 V, but running anything above 12 V would now need that cap back, so **do not**. The only power ceiling left is the manual **`duty_cap`** on the config page, which doubles as the "make it gentler for a small child" knob. The trade, stated: a flat pack is no longer reported, warned about or protected against — it just makes the kart slower. Charge it on a schedule and watch its own indicator.
-- **Free-rolling front wheels**: driven by **#35 chain** (sprocket bolted to the rim), they keep their original bearing — no through drive axle.
+- **Independently-mounted rear wheels**: driven by **#35 chain** (sprocket bolted to the rim), each keeps its original bearing on its own shoulder bolt — no through drive axle.
 - **Battery and electronics in the nose, drive at the rear**: longitudinal layout **CASTER + BATTERY + ESP32 + driver (nose) → CABIN → BENCH → DRIVEN AXLE 6″ behind it**. The children sit just ahead of the driven wheels, which puts **~61 % of the load on them** — traction and electric braking both act there, and weight transfer on a slope works with you. It was 79 % before the 6″/6″ move; that 18 points is the same thing the rollover margin lost. The battery in the nose keeps the caster planted. Power runs nose→rear in 10 AWG (~0.3 V at 40 A).
 - **Safety**: **central hardware emergency stop**, at the **top of the seatback** (within reach of both kids and an adult behind), **in the MAIN RELAY's coil loop together with the main switch** — the mushroom breaks ~150 mA, the relay contact breaks the 40 A, and **the whole kart goes dark, ESP32 included**. ⚠️ That means **no braking after the cut**: the kart coasts (~15 m from full speed on the flat, measured in simulation — do not use the mushroom as a brake, and never rely on it downhill). The **brake** is releasing the stick; the **software** emergency stop (gamepad button B) brakes properly because the firmware is still alive. Plus: one 40 A fuse, **1N4007 across the relay coil** (flyback — and reverse-polarity protection as a side effect), **electric brake by default** (gamepad disconnect → immediate braking), **2 s watchdog (PANIC)**, **disarmed** start by default, guards over chains/sprockets, seatbelt, helmet.
 
@@ -234,17 +236,17 @@ flowchart TB
 
 ## 3. Differential steering (skid steer)
 
-### Principle: **turn by speed difference between the 2 front wheels**
+### Principle: **turn by speed difference between the 2 rear wheels**
 
-There are **no mechanical steering parts**: no steering wheel, no column, no wheel kingpins, no steering knuckles, no tie rod, no drag link, no Pitman arm, no steering stops. **You turn by making one front wheel roll faster than the other.** The **rear wheel is a free caster** that follows the motion.
+There are **no mechanical steering parts**: no steering wheel, no column, no wheel kingpins, no steering knuckles, no tie rod, no drag link, no Pitman arm, no steering stops. **You turn by making one rear wheel roll faster than the other.** The **front wheel is a free caster** that follows the motion.
 
 ```mermaid
 flowchart TD
     PAD["🎮 Bluetooth gamepad<br/>stick Y = forward · stick X = turn"]
     MIX["'arcade' mixing (firmware)<br/>left = forward + turn·gain<br/>right = forward − turn·gain"]
     LIM["Rollover protection<br/>(clamped amplitude + slew-rate limiter)"]
-    ML["⚙️ Front left motor"]
-    MR["⚙️ Front right motor"]
+    ML["⚙️ Rear left motor"]
+    MR["⚙️ Rear right motor"]
     RG["🛞 Rear left wheel"]
     RD["🛞 Rear right wheel"]
     CAS["🛞 Free front caster (10″)<br/>(orients itself)"]
@@ -287,14 +289,14 @@ Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_a
 | | Rear motor mounts / seatback | Hardwood block + plate; seatback in 6 mm plywood |
 | **Wheels** | **2× rear drive wheels** identical | **Ø25.4 cm (10″)**, plastic rim + PVC tire, 1/2" bearing |
 | | **1× pivoting FRONT caster wheel** | **Free**, unpowered; **Ø 25.4 cm (10")**, plate at ~33 cm, **load ≥ 50 kg** |
-| | Shoulder bolts (front wheels) | **Supplied with the wheels** (1/2" shoulder, 3/8" thread) |
+| | Shoulder bolts (driven wheels) | **Supplied with the wheels** (1/2" shoulder, 3/8" thread) |
 | **Propulsion** | **2× 12 V DC motors** (one per **front** wheel) | ~172 W (0.23 HP), 19.6 A, 4615 rpm; **independent** |
 | | 2 3D gearboxes | **1:13.33** (16→80 then 30→80, [design](doc/reducteur.md)) + 1.28:1 sprockets = **1:17 total**, printed (PETG/ABS/nylon) |
-| | Sprockets + #35 chain | Sprocket **bolted to each front wheel** + #35 roller chain from the gearbox (**25T→32T = 1.28:1**). Chain rather than a belt: **it can be cut to any length**, so the gearbox-to-wheel centre distance is free instead of being dictated by stock belt lengths. |
-| | **2× AS5600 angle sensor** + diametric magnet | one per front wheel, **1 per I²C bus**; contactless magnetic, **12-bit absolute I²C** (fixed address 0x36), **3.3 V native** (no level-shift), 4.7 kΩ pull-ups |
+| | Sprockets + #35 chain | Sprocket **bolted to each rear (driven) wheel** + #35 roller chain from the gearbox (**25T→32T = 1.28:1**). Chain rather than a belt: **it can be cut to any length**, so the gearbox-to-wheel centre distance is free instead of being dictated by stock belt lengths. |
+| | **2× AS5600 angle sensor** + diametric magnet | one per driven (rear) wheel, **1 per I²C bus**; contactless magnetic, **12-bit absolute I²C** (fixed address 0x36), **3.3 V native** (no level-shift), 4.7 kΩ pull-ups |
 | **Driving** | **Bluetooth gamepad** | stick: Y = forward/reverse, X = turn; button **B** = emergency stop, button **START** = arming; **calibration mandatory** |
 | | *Analog joystick* | **possible future**, behind the same software abstraction — but it would now need an ADC of its own (the ADS1115 and its two reserved channels are gone) |
-| **Power / electronics** | Battery | **One 12 V motorcycle battery** (~40 A peak OK, PWM ~100%) **at the REAR, strapped in a retaining tray above the caster wheel**. No paralleling this phase. **12 V is now a design constant**: nothing measures the pack, so nothing could cap the duty for a higher-voltage one — the 24 V option went away with the ADC |
+| **Power / electronics** | Battery | **One 12 V motorcycle battery** (~40 A peak OK, PWM ~100%) **in the NOSE, strapped in a retaining tray above the front caster** — it is the counterweight that keeps that single wheel planted. No paralleling this phase. **12 V is now a design constant**: nothing measures the pack, so nothing could cap the duty for a higher-voltage one — the 24 V option went away with the ADC |
 | | **Battery adapters** (×2) | Slide-on holder → power terminals (+ / −) |
 | | **40 A automotive relay** + **1N4007** across its coil | **the** main power switch: contact 30→87 carries the whole kart (see [power switch](#power-switch-one-main-relay)) + 1 fuse. The diode is flyback for the switches **and** reverse-polarity protection for everything downstream |
 | | **Main switch + e-stop mushroom** | both **in series in the relay's coil** (~150 mA, thin wire): the main switch on the dash is the kart's on/off, the mushroom at the top of the seatback is the emergency cut. No latch, no priming button, no FORCE ON toggle, no hold capacitor. Full BOM: [`doc/electronique.md`](doc/electronique.md) |
@@ -400,7 +402,7 @@ flowchart LR
 
 ### AS5600 speed sensors (×2, on I²C)
 
-**AS5600** angle sensor: **contactless** magnetic, **12-bit absolute angle** (4096 points/turn) read over **I²C**, with a **diametric magnet** on the shaft end. There is **one AS5600 per front wheel**, **one per I²C bus** (each AS5600 having the fixed address **0x36**, they cannot coexist on the same bus). **Known kinematics** (see [`doc/reducteur.md`](doc/reducteur.md)): the magnet is on the **output of the 1:13.33 gearbox**, followed by **1.28:1 sprockets** → **the sensor makes 1.28 turns per wheel turn** ⇒ web parameter `enc_per_wheel = 1.28` (3.41 if the magnet moves to the 1:5 intermediate shaft), **10″ wheel = 0.254 m**. The **vehicle speed** (m/s) = **signed average** of the 2 wheels (pivot in place → 0 m/s). The conversion is **fully determined**. They serve to:
+**AS5600** angle sensor: **contactless** magnetic, **12-bit absolute angle** (4096 points/turn) read over **I²C**, with a **diametric magnet** on the shaft end. There is **one AS5600 per driven (rear) wheel**, **one per I²C bus** (each AS5600 having the fixed address **0x36**, they cannot coexist on the same bus). **Known kinematics** (see [`doc/reducteur.md`](doc/reducteur.md)): the magnet is on the **output of the 1:13.33 gearbox**, followed by **1.28:1 sprockets** → **the sensor makes 1.28 turns per wheel turn** ⇒ web parameter `enc_per_wheel = 1.28` (3.41 if the magnet moves to the 1:5 intermediate shaft), **10″ wheel = 0.254 m**. The **vehicle speed** (m/s) = **signed average** of the 2 wheels (pivot in place → 0 m/s). The conversion is **fully determined**. They serve to:
 - **Measure each wheel's speed** → reliable limiter; **PID brake** toward 0; **direction** (sign of Δangle, the DIR pin sets the convention); **safety** (stall: PWM active with no rotation > 1 s → fault).
 
 ✅ **3.3 V native** (VDD5V/VDD3V3 tied together) → **SDA/SCL directly on the ESP32, NO level-shift**. Wiring per sensor: **SDA, SCL, 3.3 V, GND** (+ magnet), **4.7 kΩ** pull-ups per bus.
@@ -536,8 +538,8 @@ flowchart LR
 
     ESP -->|"PWM/DIR L+R<br/>GPIO25/26/32/33"| DRV["🛞 MOTOR DRIVER<br/>2 channels 20 A"]
     RAIL --> DRV
-    DRV -->|"M1A / M1B"| MG["⚙️ FRONT L MOTOR CONN"]
-    DRV -->|"M2A / M2B"| MD["⚙️ FRONT R MOTOR CONN"]
+    DRV -->|"M1A / M1B"| MG["⚙️ REAR L MOTOR CONN"]
+    DRV -->|"M2A / M2B"| MD["⚙️ REAR R MOTOR CONN"]
     ESP -->|"GPIO4 data"| WS["🌈 WS2812B CONN"]
 
     V5 -. "+5 V" .-> WS

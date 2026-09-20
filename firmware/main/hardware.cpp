@@ -1,4 +1,4 @@
-// hardware.cpp — Hardware access (differential variant: 2 front motors + 2 AS5600).
+// hardware.cpp — Hardware access (differential variant: 2 REAR motors + 2 AS5600).
 // No inputs of any kind: arming is a gamepad button and power is a physical switch.
 // The driver handles (LEDC, 2× I2C) live here as statics; the rest of the firmware
 // goes through the free functions of the `board` namespace.

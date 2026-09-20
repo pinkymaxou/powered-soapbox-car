@@ -1,7 +1,7 @@
 # full_schematic.py — Kart electrical schematic (differential drive, SINGLE-RELAY power).
 # Single 12 V battery; ONE switched rail (+12V_SW) behind the main relay, whose coil runs
 # through the main switch and the e-stop mushroom — the switching detail lives in
-# power_rails.png. 2 independent FRONT motors, 2 AS5600 sensors (one per I2C bus), driven by
+# power_rails.png. 2 independent REAR motors, 2 AS5600 sensors (one per I2C bus), driven by
 # BLUETOOTH GAMEPAD (ESP32 internal radio, no pedal). No ADC and no buttons: the pack is
 # always 12 V and nothing measures it, and arming is the gamepad's own START button.
 # Generates doc/schematics/full_schematic.png via schemdraw.
@@ -61,7 +61,7 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
     d += elm.Line().down().at(P(esp, 'GND')).length(0.6); d += elm.Ground()
 
     # ───────────── AS5600 LEFT wheel sensor (bus 0) + pull-ups ─────────────
-    hg = header(d, -11.5, 6.5, 'AS5600 wheel L (0x36)', ['SDA', 'SCL', '3V3', 'GND'])
+    hg = header(d, -11.5, 6.5, 'AS5600 rear wheel L (0x36)', ['SDA', 'SCL', '3V3', 'GND'])
     flag(d, P(hg, 'pin1'), 'SDA0', 'left')
     flag(d, P(hg, 'pin2'), 'SCL0', 'left')
     flag(d, P(hg, 'pin3'), '+3V3', 'left')
@@ -74,7 +74,7 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
     flag(d, d.here, 'SCL0', 'down')
 
     # ───────────── AS5600 RIGHT wheel sensor (bus 1) + pull-ups ─────────────
-    hd = header(d, -11.5, 1.4, 'AS5600 wheel R (0x36)', ['SDA', 'SCL', '3V3', 'GND'])
+    hd = header(d, -11.5, 1.4, 'AS5600 rear wheel R (0x36)', ['SDA', 'SCL', '3V3', 'GND'])
     flag(d, P(hd, 'pin1'), 'SDA1', 'left')
     flag(d, P(hd, 'pin2'), 'SCL1', 'left')
     flag(d, P(hd, 'pin3'), '+3V3', 'left')
@@ -86,7 +86,7 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
     d += elm.Resistor().down().at((-6.7, 1.8)).length(1.2).label('4k7', fontsize=8)
     flag(d, d.here, 'SCL1', 'down')
 
-    # ───────────────────────── Motor driver + 2 FRONT motors ─────────────────────────
+    # ───────────────────────── Motor driver + 2 REAR motors ─────────────────────────
     DRV_X, DRV_Y, DRV_W, DRV_H = 10.5, 2.0, 6.0, 5.0
     drv = elm.Ic(pins=[
         elm.IcPin(name='PWM_L', side='left', slot='4/4'), elm.IcPin(name='DIR_L', side='left', slot='3/4'),
@@ -98,13 +98,13 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
     d += elm.Line().up().at((DRV_X, DRV_Y + DRV_H / 2)).length(0.7); d += elm.Vdd().label('+12V_SW (VB+)')
     d += elm.Label().label('board logic on the SAME rail: the e-stop kills both', fontsize=7, color=NET).at((DRV_X, DRV_Y + DRV_H / 2 + 1.6))
     d += elm.Line().down().at((DRV_X, DRV_Y - DRV_H / 2)).length(0.7); d += elm.Ground()
-    mL = header(d, 18.0, 3.4, 'FRONT MOTOR L', ['A', 'B'])
+    mL = header(d, 18.0, 3.4, 'REAR MOTOR L', ['A', 'B'])
     d += elm.Line().at(P(drv, 'M1A')).tox(P(mL, 'pin1')[0])
     d += elm.Line().at(P(drv, 'M1B')).tox(P(mL, 'pin2')[0])
-    mR = header(d, 18.0, 0.4, 'FRONT MOTOR R', ['A', 'B'])
+    mR = header(d, 18.0, 0.4, 'REAR MOTOR R', ['A', 'B'])
     d += elm.Line().at(P(drv, 'M2A')).tox(P(mR, 'pin1')[0])
     d += elm.Line().at(P(drv, 'M2B')).tox(P(mR, 'pin2')[0])
-    d += elm.Label().label('rear caster wheel: free (not motorized)', fontsize=8).at((15.5, -1.2))
+    d += elm.Label().label('FRONT caster wheel: free (not motorized)', fontsize=8).at((15.5, -1.2))
 
     # ───────────────────────── WS2812 ─────────────────────────
     hw = header(d, 8.5, -3.6, 'CONN WS2812B', ['DIN', '+5V', 'GND'])

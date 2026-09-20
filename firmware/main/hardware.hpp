@@ -18,9 +18,10 @@ void motorsSet(float l, float r, uint32_t cap);
 // DEFAULT state of the controller at rest (rather than coasting).
 void motorsBrake();
 
-// AS5600 angle sensors (one per front wheel): signed Δcounts (12 bits) since the last call.
-int encLeftDelta();    // front left wheel   (I2C bus 0)
-int encRightDelta();   // front right wheel  (I2C bus 1)
+// AS5600 angle sensors (one per DRIVEN wheel, i.e. the rear pair): signed Δcounts (12 bits)
+// since the last call.
+int encLeftDelta();    // rear left wheel   (I2C bus 0)
+int encRightDelta();   // rear right wheel  (I2C bus 1)
 uint32_t ledcClkFixCount();   // number of LEDC clock-gate repairs (DPORT anti-race sentinel)
 bool encLeftPresent();   // last I2C read of the left AS5600 succeeded
 bool encRightPresent();  // same, right
