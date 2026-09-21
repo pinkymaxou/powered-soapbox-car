@@ -1,15 +1,15 @@
 # power_rails.py — Kart power architecture, SINGLE-RELAY build (current design).
 # Single 12 V battery → 40 A fuse → ONE main relay that carries the WHOLE kart:
-#   · COIL circuit: +12V_BAT → MAIN SWITCH → E-STOP (NC mushroom) → coil 85; 86 → GND.
-#     Opening either one drops the coil, the contact opens, and everything dies together —
-#     motors AND brain. There is no second rail and no software involvement whatsoever:
-#     the firmware cannot hold its own power and cannot cut it (GPIO13/GPIO22 are free now).
+#   · COIL circuit: +12V_BAT → MAIN SWITCH → E-STOP (NC mushroom) → SERIES DIODE → coil 85;
+#     86 → GND. Opening either switch drops the coil, the contact opens, and everything dies
+#     together — motors AND brain. No second rail, no software involvement whatsoever: the
+#     firmware cannot hold its own power and cannot cut it (GPIO13/GPIO22 are free now).
 #   · CONTACT (30 → 87): the 40 A path feeding the buck (5 V logic) and the driver's VB+.
-#     Because EVERYTHING is behind that contact, a reversed battery reaches nothing at all.
-#   · 1N4007 across the coil (cathode to 85/+): flyback for the switch contacts — and, as a
-#     side effect, REVERSE-POLARITY protection for the whole kart: wire the battery backwards
-#     and the diode conducts, the fuse blows, and the relay never closes, so nothing
-#     downstream (the driver above all, which has no protection of its own) ever sees it.
+#   · THE RELAY IS A POLARITY GATE. The SERIES diode lets the coil energize in ONE direction
+#     only, and the contact carries the whole kart — so with the battery backwards the coil
+#     simply does not pull in, nothing downstream is ever powered, and nothing blows either:
+#     no current flows at all. Re-wire the right way round and it works. The second diode,
+#     ACROSS the coil (cathode to 85/+), is the flyback for the two mechanical switches.
 # Nothing measures the battery any more: no divider, no ADS1115, no LVC. Always 12 V.
 #   . .venv-schem/bin/activate && python doc/schematics/power_rails.py
 import schemdraw
@@ -71,9 +71,13 @@ with schemdraw.Drawing(file='doc/schematics/power_rails.png', dpi=150, show=Fals
     n85 = d.here
     d += elm.Dot()
     d += elm.Switch().left().at(n85).label('E-STOP (mushroom NC,\nin the COIL loop)',
-                                           loc='top', fontsize=9).length(3.0).color(HL)
+                                           loc='top', fontsize=9).length(2.6).color(HL)
+    # SERIES diode, anywhere in the coil loop: the coil can only be energized one way round.
+    # THIS is what makes the relay a polarity gate rather than a plain switch.
+    d += elm.Diode().left().length(1.8).reverse().label(
+        '1N4007 SERIES\n(polarity gate)', loc='bottom', fontsize=8, ofst=0.95).color(HL)
     d += elm.Switch().left().label('MAIN SWITCH\n(key/toggle, on the dash)',
-                                   loc='bottom', fontsize=9).length(3.0)
+                                   loc='bottom', fontsize=9).length(2.6)
     flag(d, d.here, '+12V_BAT', 'left')
     d += elm.Line().left().at(P(rly, '86')).length(1.0)
     n86 = d.here
@@ -88,10 +92,10 @@ with schemdraw.Drawing(file='doc/schematics/power_rails.png', dpi=150, show=Fals
                            '(motors AND ESP32 — the firmware never sees it, and nothing brakes:\n'
                            'with no power the kart COASTS — 15 m from full speed on the flat)',
                            fontsize=8, color=HL).at((11.6, 7.9))
-    d += elm.Label().label('REVERSE POLARITY: the diode conducts and shorts the coil, so the relay\n'
-                           'NEVER CLOSES — and since everything hangs off that contact,\n'
-                           'no current reaches the system at all (replace the diode, check the fuse)',
-                           fontsize=8, color=HL).at((3.2, 13.6))
+    d += elm.Label().label('POLARITY GATE: the SERIES diode means the coil can only pull in one way round,\n'
+                           'and the contact carries the whole kart — so a reversed battery closes nothing,\n'
+                           'powers nothing, and blows nothing. Put it back the right way and it just works.',
+                           fontsize=8, color=HL).at((3.4, 13.8))
 
     # ───────── Loads: everything hangs off the contact ─────────
     buck = d.add(elm.Ic(pins=[elm.IcPin(name='IN', side='left'), elm.IcPin(name='OUT', side='right')],

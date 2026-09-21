@@ -61,6 +61,11 @@ constexpr char AP_SSID[]  = "Kart-Config";
 constexpr char AP_PASS[]  = "kart12345";   // ≥ 8 characters (otherwise open AP)
 constexpr int  AP_CHANNEL = 1;
 constexpr int  AP_MAX_CONN = 4;
+// STA reconnection HEARTBEAT: 5 s between attempts, never faster. A failed association is
+// retried by a one-shot timer rather than from the disconnect handler itself — reconnecting
+// in a tight loop would hammer the band (each attempt is a probe/auth/assoc exchange) and
+// starve the Bluetooth side, which shares the one radio with Wi-Fi on this chip. The kart
+// drives on that radio, so a home network that is simply out of range must cost nothing.
 constexpr int  STA_RETRY_MS = 5000;   // delay before a new STA connection attempt
 
 httpd_handle_t     m_server = nullptr;
@@ -70,7 +75,7 @@ char               m_sta_ip[16] = "0.0.0.0";
 esp_netif_t*       m_netif_ap = nullptr;
 esp_netif_t*       m_netif_sta = nullptr;
 
-// Timed STA reconnection (avoids looping too fast).
+// Timed STA reconnection — the only place that retries (STA_START does the first connect).
 void staRetryCb(void*)
 {
     esp_wifi_connect();
@@ -97,6 +102,8 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
         std::strcpy(m_sta_ip, "0.0.0.0");
         if (m_sta_retry)
         {
+            // One-shot: if a retry is already armed this returns ESP_ERR_INVALID_STATE and we
+            // keep the pending one — either way the next attempt is at least 5 s away.
             esp_timer_start_once(m_sta_retry, static_cast<int64_t>(STA_RETRY_MS) * 1000);   // 5 s
         }
     }

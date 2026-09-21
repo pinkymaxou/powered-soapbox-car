@@ -8,10 +8,10 @@ in [`../firmware/README.md`](../firmware/README.md).
 **Design inputs (fixed):** single **12 V** motorcycle battery — always 12 V, never measured ·
 **5 V rail ≥ 2 A** (it powers everything: ESP32, WS2812 strip, sensors) · **ONE main relay
 carries the whole kart**, its coil in series with the **main switch** and the **e-stop
-mushroom** · **1N4007 across that coil** (flyback — and, because nothing is powered until the
-relay closes, reverse-polarity protection for the whole vehicle) · ESP32 and 2× AS5600
-confirmed · **no ADC, no voltage divider, no power latch, no buttons**: the ESP32 has no GPIO
-input left at all.
+mushroom** · **two 1N4007 on that coil**: one **in series** (the coil energizes in ONE
+polarity only — the relay becomes a polarity gate in front of the whole vehicle) and one
+**across** it (flyback for the two switches) · ESP32 and 2× AS5600 confirmed · **no ADC, no
+voltage divider, no power latch, no buttons**: the ESP32 has no GPIO input left at all.
 
 ![Single-relay power](schematics/power_rails.png)
 
@@ -23,7 +23,7 @@ input left at all.
 
 | | |
 |---|---|
-| **Coil circuit** (~150 mA, thin wire) | fused battery + → **MAIN SWITCH** → **E-STOP (NC mushroom)** → pin **85**; **86** → ground. **1N4007 across 85/86**, cathode on 85. |
+| **Coil circuit** (~150 mA, thin wire) | fused battery + → **MAIN SWITCH** → **1N4007 in SERIES** → **E-STOP (NC mushroom)** → pin **85**; **86** → ground. Plus a second **1N4007 across 85/86**, cathode on 85. |
 | **Contact** (30 → 87, the 40 A path) | feeds **+12V_SW**: the buck (→ 5 V: ESP32, WS2812), the motor driver's **VB+** *and* its logic board. |
 | **Dies when** | the main switch is turned off, the mushroom is pressed, the fuse blows, or the battery is disconnected. There is no fourth case — **the firmware has no say in it at all**. |
 
@@ -74,34 +74,43 @@ kart goes dark: motors and brain together**. Consequences, stated plainly:
 - **No hidden FORCE ON switch**, no priming button, no hold capacitor: the main switch *is*
   the bench switch, and USB power alone runs the ESP32 for flashing with the relay open.
 
-### The diode, and the reverse-polarity protection nobody paid for
+### The relay is a polarity gate
 
-**1N4007 across the coil, cathode to 85 (+).** Its job is flyback: the coil is an inductor and
-whichever contact opens it — the main switch or the mushroom — would otherwise break a few
-hundred volts of kickback and erode itself. Both switches are ordinary hardware, so this is
-not optional.
+This is the real reverse-polarity protection, and it is a consequence of the single-relay
+layout rather than of any one component: **nothing on this kart is powered until the contact
+closes, and the contact only closes if the coil is energized.** Make the coil energize in one
+polarity only and the whole vehicle is gated — the motor driver (no reverse protection of its
+own, destroyed instantly by reversed VB+), the buck, the ESP32, the sensors, all of it sits
+behind that one contact.
 
-**The side effect protects the entire kart, and it follows from the single relay.** Because
-*everything* now sits behind the contact, the only question a reversed battery has to answer
-is "does the relay close?". It does not: with the polarity reversed the diode is
-forward-biased across the coil, so the coil is shorted and never pulls in. The contact stays
-open, **no current reaches the system at all** — not the motor driver (which has no reverse
-protection of its own and dies instantly from reversed VB+), not the buck, not the ESP32, not
-the sensors. The two-rail design could not have claimed that: its logic rail was fed through a
-separate module, on its own path, with its own exposure.
+A relay coil does **not** do that by itself: it is a solenoid, it pulls in whichever way the
+current flows. So the coil carries **two 1N4007, with two different jobs**:
 
-The old design answered this risk with "process, not parts" — polarized connectors and a
-checklist. The process still applies; now the topology backs it up, for free.
+| Diode | Where | What it does |
+|---|---|---|
+| **Series** | in the coil loop (between the main switch and the mushroom), **band/cathode toward pin 85** | **The gate.** Reversed battery ⇒ it blocks ⇒ the coil sees nothing ⇒ the contact stays open ⇒ **no current reaches the system, and nothing is stressed**. Re-wire the right way round and the kart starts. Costs ~0.9 V on the coil. |
+| **Flyback** | across the coil, 85/86, **cathode on 85 (+)** | **The arc killer.** When either switch opens the coil, the collapsing field would otherwise break a few hundred volts across the contact that just opened, eroding the mushroom and the main switch. Does nothing in normal operation. |
 
-⚠️ Two things the diode does not do:
-- It does not survive the event politely. Shorted across a reversed 12 V through thin coil
-  wiring, the 1N4007 (1 A continuous) and the 40 A fuse race each other — **expect to replace
-  the diode, and check the fuse**, before concluding that anything is fixed. A relay that no
-  longer clicks after a polarity mistake is a dead diode, not a dead relay.
-- It does not cover a reversal made **downstream of the contact** — VB+/VB− swapped by hand at
-  the driver's own terminals, which is on the other side of the relay. The polarity check at
-  step 6 of the wiring guide is still the only thing standing between that mistake and a dead
-  driver.
+**Why the series diode, when the flyback one alone already keeps the relay open.** It does
+keep it open — reversed, the flyback diode is forward-biased across the coil and shorts it, so
+the coil cannot pull in either. But it does that by *conducting the fault*: the 40 A fuse
+blows, the diode takes a surge far beyond its 1 A rating, and the protection is **single-use**
+— worse, a 1N4007 that fails **open** removes it silently, and the next reversed connection
+energizes the coil normally. The series diode makes the same protection **passive and
+repeatable**: the reversed connection simply does nothing at all.
+
+**The voltage it costs is free.** The coil draws ~150 mA at 12 V (~80 Ω); the diode drops
+~0.9 V at that current, so the coil sees ~11 V on a fresh pack and ~10.4 V with the battery
+sagged to 11.3 V. A 12 V automotive relay pulls in around 7–8 V and holds well below that, so
+the margin stays wide. Use a plain 1N4007 (1 A / 1000 V) — the same part as the flyback.
+
+⚠️ **Fit the series diode the right way round**: band toward the relay (pin 85). Backwards, the
+relay never closes at all — which is a loud, immediate, harmless failure, and exactly the
+failure mode you want from a protection device.
+
+⚠️ **What it still does not cover**: a **VB+/VB− swap made downstream of the contact**, at the
+driver's own terminals. That wiring is on the far side of the gate, so only the polarity check
+at step 6 of the wiring guide stands between that mistake and a dead driver.
 
 ### 5 V rail — the ≥ 2 A budget
 
@@ -138,7 +147,7 @@ schedule rather than on a warning.
 | Risk | Measure |
 |---|---|
 | Short / overload | **40 A blade fuse** in a holder, as close to the battery + as possible — everything downstream is protected, relay included |
-| Reversed battery connection | **1N4007 across the coil** (see above): the fuse blows and the relay never closes. Plus polarized connectors + color discipline (red/+, black/−) |
+| Reversed battery connection | **1N4007 in SERIES in the coil loop** (see above): the coil cannot energize, so the relay never closes and nothing downstream is powered — no current, no damage, no part to replace. Plus polarized connectors + color discipline (red/+, black/−) |
 | Coil kickback eroding the switches | that same **1N4007 across 85/86** |
 | ESP32 brownout during motor surges | bulk electrolytic (≥ 470 µF) at the buck input; keep the buck's input tap off the motor cables' IR drop |
 | No braking after a power cut | **behavioral**: the e-stop is a last resort; the brake is the stick. Hardware option documented above (NC relay across the phases) |
@@ -150,7 +159,7 @@ schedule rather than on a warning.
 | 1 | Motorcycle battery | 12 V lead-acid, ≥ 40 A peak | 1 | single pack, **in the NOSE** — strapped in a retaining tray above the front caster (counterweight) |
 | 2 | Blade fuse + holder | **40 A** | 1 | master protection at battery + |
 | 3 | Automotive relay | 12 V coil, **40 A** on 87 (NO), SPDT | 1 | **the** main relay: whole kart |
-| 4 | Diode 1N4007 | 1 A / 1000 V | 1 | flyback across the coil + reverse-polarity guard |
+| 4 | Diode 1N4007 | 1 A / 1000 V | **2** | one **in series** in the coil loop (polarity gate) + one **across** the coil (flyback) |
 | 5 | E-stop mushroom | NC, latching (coil current only: ≥ 1 A) | 1 | in the coil loop, top of seatback — thin wires |
 | 6 | Main switch | toggle or key, ≥ 1 A, panel mount | 1 | in the coil loop, on the dash — the on/off of the kart |
 | 7 | Buck converter | 12 V in → **5 V ≥ 2 A cont.** (3 A class) | 1 | 5 V rail |
@@ -179,9 +188,12 @@ Work with the battery disconnected; connect it last.
    Battery − → common ground bus (10 AWG). Keep signal looms on the other rail, away from
    that run.
 2. **Fused + → relay pin 30** (10 AWG).
-3. **Coil loop** (18–22 AWG): fused + → **main switch** (dash) → **e-stop mushroom (NC, top of
-   seatback)** → **85**; **86** → ground bus. **1N4007 across 85/86, cathode (ring) on 85.**
-   Order matters only for reach — either switch cuts the same loop.
+3. **Coil loop** (18–22 AWG): fused + → **main switch** (dash) → **1N4007 in series, band
+   (cathode) toward the relay** → **e-stop mushroom (NC, top of seatback)** → **85**; **86** →
+   ground bus. Then the second **1N4007 across 85/86, cathode (ring) on 85**. The order of the
+   two switches matters only for reach — either one cuts the same loop — but the **series
+   diode's direction does matter**: backwards, the relay never closes. Solder it inside the
+   enclosure with short leads, not in the middle of the loom.
 4. **Relay pin 87 → +12V_SW bus** (10 AWG, short run inside the nose). **87a stays spare.**
 5. **+12V_SW → driver VB+** (10 AWG) and **→ driver logic supply** (18 AWG). Driver VB− →
    ground bus (10 AWG). The driver's two motor outputs are what run nose→rear (step 1). ⚠️ **Triple-check VB+/VB− polarity before the battery goes in — the
@@ -202,6 +214,9 @@ Work with the battery disconnected; connect it last.
 1. No continuity between +12V_SW and ground, **with the main switch off** (before anything).
 2. **Main switch on**: the relay clicks, +12V_SW present, buck outputs 5.0 V, ESP32 boots
    (status LED, then the Wi-Fi access point). The page shows the kart **disarmed**.
+   ⚠️ **The relay does not click?** Check the battery polarity and the series diode's direction
+   *before* anything else — those are the two things that stop the coil energizing, and both
+   are harmless as long as you do not "fix" them by bypassing the diode.
 3. **Press the e-stop**: the relay drops, **everything** goes dark — verify with the
    multimeter that **driver VB+ is actually at 0 V** (this is the only test that catches a
    welded contact; nothing in software can). The web page loses its connection, which is the
@@ -228,7 +243,7 @@ Work with the battery disconnected; connect it last.
 | Power latch (GPIO13) | **removed** | a firmware that can cut its own supply needs a priming button, a bootstrap rail, a FORCE ON switch and a "reboot = power-down" rule. A main switch does the same job with no failure modes and no code |
 | Idle auto power-off | **removed with the latch** | it needed `POWER_HOLD`. A forgotten kart is now switched off by hand — the same hand that switched it on |
 | Battery measurement (ADS1115 + divider) | **removed** | one 12 V pack, which is the motors' nominal voltage: nothing to cap automatically. Cost, stated: no LVC, no low-battery warning, no gauge — a flat pack is felt, not reported. The pack's own protection remains |
-| Reverse-polarity protection | **the coil diode + the single relay, by design now** | the 1N4007 was already required for flyback. Reversed, it shorts the coil so the relay never closes — and since the single relay feeds *everything*, no current reaches any part of the system. The two-rail build could not have made that claim. Free; budget a replacement diode |
+| Reverse-polarity protection | **the relay IS the gate: series diode in the coil** | the single relay feeds *everything*, so gating the coil gates the vehicle. A **series** 1N4007 makes the coil energize in one polarity only: reversed, nothing pulls in, nothing is powered, nothing blows — passive and repeatable. Considered and rejected: relying on the **flyback** diode alone (reversed, it shorts the coil and does keep the relay open, but it blows the fuse, exceeds its own rating, and vanishes silently if it ever fails open). Cost of the gate: one diode and ~0.9 V on a coil that has volts to spare |
 | Arming button (GPIO16) | **removed** | arming already required a connected, calibrated gamepad holding its own START button, so the panel button duplicated a control the driver had in hand. Removing it takes the last GPIO input off the board and leaves nothing on the vehicle a bystander can press |
 | Welded relay contact | **not detected, tested at commissioning** | the coil sense used to catch it in software. Now step 3 of the checklist (VB+ dead with the mushroom pressed) is the only test — deliberately accepted with the single-relay trade |
 | Braking after the e-stop | **none — documented and measured** | with no power there is no electric brake of any kind. `arret_urgence_plat` puts a number on it (~15 m on the flat) so the behaviour is a known quantity rather than a surprise. NC relay across the phases stays the documented fix if ever wanted |
