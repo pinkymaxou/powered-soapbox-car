@@ -496,8 +496,8 @@ flowchart LR
 
 | GPIO | Function | Direction | Note |
 |---|---|---|---|
-| 25 / 26 | **PWM / DIR REAR left motor** | output | LEDC, **duty ≤ 50%** |
-| 32 / 33 | **PWM / DIR REAR right motor** | output | same |
+| 26 / 25 | **PWM / DIR REAR left motor** | output | LEDC, **duty ≤ 50%** |
+| 33 / 32 | **PWM / DIR REAR right motor** | output | same |
 | 18 / 19 | **I²C bus 0 SDA / SCL** | I/O | **AS5600 wheel L (0x36)** alone on the bus, 3.3 V, 4.7 kΩ pull-ups |
 | 27 / 14 | **I²C bus 1 SDA / SCL** | I/O | **AS5600 wheel R (0x36)**, 3.3 V, 4.7 kΩ pull-ups |
 | 4 | **WS2812B strip** (data) | output | ~10 LEDs |
@@ -536,7 +536,7 @@ flowchart LR
     EG["🧭 AS5600 L CONN (bus 0)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO18/19 (3.3 V)"| ESP
     ED["🧭 AS5600 R CONN (bus 1)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO27/14 (3.3 V)"| ESP
 
-    ESP -->|"PWM/DIR L+R<br/>GPIO25/26/32/33"| DRV["🛞 MOTOR DRIVER<br/>2 channels 20 A"]
+    ESP -->|"PWM/DIR L+R<br/>GPIO26/25/33/32"| DRV["🛞 MOTOR DRIVER<br/>2 channels 20 A"]
     RAIL --> DRV
     DRV -->|"M1A / M1B"| MG["⚙️ REAR L MOTOR CONN"]
     DRV -->|"M2A / M2B"| MD["⚙️ REAR R MOTOR CONN"]

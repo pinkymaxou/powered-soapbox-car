@@ -40,7 +40,7 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
     # ───────────────────────── ESP32 (central integrated circuit) ─────────────────────────
     # 2 I2C buses: bus 0 (SDA0/SCL0 = AS5600 L) · bus 1 (SDA1/SCL1 = AS5600 R).
     LEFT = [('18', 'SDA0'), ('19', 'SCL0'), ('27', 'SDA1'), ('14', 'SCL1')]
-    RIGHT = [('25', 'PWM_L'), ('26', 'DIR_L'), ('32', 'PWM_R'), ('33', 'DIR_R'),
+    RIGHT = [('25', 'DIR_L'), ('26', 'PWM_L'), ('32', 'DIR_R'), ('33', 'PWM_R'),
              ('4', 'WS')]
     pins = []
     for i, (g, _) in enumerate(LEFT):

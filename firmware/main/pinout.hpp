@@ -16,10 +16,10 @@ namespace pins
 {
 
 // Motor outputs (dual-channel driver: PWM + DIR per channel) — one motor per REAR wheel.
-constexpr gpio_num_t PWM_L = GPIO_NUM_25;   // rear LEFT wheel
-constexpr gpio_num_t DIR_L = GPIO_NUM_26;
-constexpr gpio_num_t PWM_R = GPIO_NUM_32;   // rear RIGHT wheel
-constexpr gpio_num_t DIR_R = GPIO_NUM_33;
+constexpr gpio_num_t PWM_L = GPIO_NUM_26;   // rear LEFT wheel
+constexpr gpio_num_t DIR_L = GPIO_NUM_25;
+constexpr gpio_num_t PWM_R = GPIO_NUM_33;   // rear RIGHT wheel
+constexpr gpio_num_t DIR_R = GPIO_NUM_32;
 
 // ───────────────────────── I2C buses (two independent buses) ─────────────────────────
 // One AS5600 (0x36) per bus: the address is fixed on that chip, so two sensors need two
