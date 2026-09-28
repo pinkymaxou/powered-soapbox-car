@@ -1,9 +1,12 @@
-# Table de partitions — flash 4 Mo, app ~2,75 Mo (Wi-Fi + BT), sans OTA.
-# ⚠️ Les offsets existants ne bougent JAMAIS : les déplacer efface la NVS
-# (réglages + appairage manette). « evlog » a été AJOUTÉ dans l'espace libre
-# après l'app, précisément pour cette raison.
+# Table de partitions — flash 4 Mo, DEUX slots OTA de 1,875 Mo (app ~1,5 Mo, Wi-Fi + BT).
+# ⚠️ nvs et phy_init ne bougent JAMAIS : déplacer nvs efface les réglages et l'appairage
+# manette. Passage à l'OTA (2026-09-27) : factory 0x2C0000 → ota_0/ota_1 0x1E0000 chacun ;
+# « evlog » a DÛ déménager en fin de flash (l'ancien 0x2D0000 tombe dans ota_1) → journal
+# perdu une fois, effacer sa nouvelle zone au premier flash série (voir README).
 # Name,     Type, SubType, Offset,   Size
 nvs,        data, nvs,     0x9000,   0x6000
 phy_init,   data, phy,     0xf000,   0x1000
-factory,    app,  factory, 0x10000,  0x2C0000
-evlog,      data, 0x40,    0x2D0000, 0x10000
+ota_0,      app,  ota_0,   0x10000,  0x1E0000
+ota_1,      app,  ota_1,   0x1F0000, 0x1E0000
+otadata,    data, ota,     0x3D0000, 0x2000
+evlog,      data, 0x40,    0x3E0000, 0x10000

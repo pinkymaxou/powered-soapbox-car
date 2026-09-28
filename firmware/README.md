@@ -41,6 +41,32 @@ idf.py build
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
+### Over the air (OTA)
+
+Once a board runs an OTA-capable firmware, no cable is needed (kart **disarmed**):
+
+```bash
+curl --data-binary @build/kart_firmware.bin http://kart.local/ota   # or the STA / 192.168.4.1 IP
+```
+
+— or the **System** tab of the page (file picker → *Upload & reboot*). The image goes to
+the idle slot, is validated, and the board reboots into it. **Rollback** is on: if the new
+image crashes before the end of `app_main`, the next reset returns to the previous one. The
+upload is refused while armed and aborted if the kart gets armed mid-way (every chunk writes
+flash, which freezes the control loop). ⚠️ No authentication: anyone on the kart's network
+can flash it — same as the settings.
+
+**Migrating a board from the old `factory` table (one time, by cable):** the partition
+table, bootloader (rollback) and evlog location all change, so flash over serial and erase
+the evlog's new area (it may hold stale bytes):
+
+```bash
+idf.py -p /dev/ttyUSB0 flash
+python -m esptool -p /dev/ttyUSB0 erase-region 0x3E0000 0x10000
+```
+
+NVS (settings + gamepad pairing) does not move and survives; the old event log is lost.
+
 > **Vendored components** (in [`components/`](components/), **committed** — a fresh clone
 > builds without any manual step): `bluepad32`, `btstack`, `cmd_nvs`, `cmd_system`, **patched
 > for IDF 6.1**. Provenance and patch details: [`components/README.md`](components/README.md).
@@ -54,10 +80,10 @@ idf.py -p /dev/ttyUSB0 flash monitor
 The ESP32 shares a **single radio** between Wi-Fi and Bluetooth (TDM coexistence) and the app
 grows significantly (~1.4 MB). Settings in [`sdkconfig.defaults`](sdkconfig.defaults):
 
-- **Custom partition table** ([`partitions.csv`](partitions.csv)): `factory` ~2.75 MB,
-  **no OTA** (4 MB flash), plus a dedicated **64 kB `evlog` partition** at 0x2D0000 for the
-  persistent event log — appended in the free space AFTER the app, so reflashing the table
-  never moves (or wipes) the NVS.
+- **Custom partition table** ([`partitions.csv`](partitions.csv)): **two OTA slots**
+  `ota_0`/`ota_1` of 1.875 MB each (app ~1.5 MB, 4 MB flash), `otadata`, and a dedicated
+  **64 kB `evlog` partition** at 0x3E0000 for the persistent event log. The NVS never moves
+  (moving it would wipe the settings and the pairing).
 - **BT enabled** (`BT_ENABLED`, **BTDM** mode = BLE + BR/EDR, *modem sleep* disabled) +
   **software coexistence** (`ESP_COEX_SW_COEXIST_ENABLE`).
 - **Bluepad32**: **CUSTOM** platform (`BLUEPAD32_PLATFORM_CUSTOM`), audio disabled.

@@ -9,6 +9,7 @@
 #include "webserver.hpp"
 
 #include "esp_log.h"
+#include "esp_ota_ops.h"
 #include "nvs_flash.h"
 
 extern "C" void app_main()
@@ -30,6 +31,11 @@ extern "C" void app_main()
     Controller::init();  // hardware (PWM, I2C sensors, button)
     ledsStart();         // WS2812B strip display task
     Controller::start(); // 500 Hz control loop (system disarmed at startup)
+
+    // OTA rollback: a freshly uploaded image boots "pending verify". Reaching this line means
+    // every subsystem came up without a panic → keep it. (No-op on an already-valid image.)
+    // Done HERE, while still disarmed: it writes otadata, and flash writes freeze the loop.
+    esp_ota_mark_app_valid_cancel_rollback();
 
     ESP_LOGI("kart", "Kart ready. Config: Wi-Fi 'Kart-Config' → http://%s.local (or http://192.168.4.1)",
              mdnsHostname());

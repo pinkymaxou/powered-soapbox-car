@@ -33,6 +33,7 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
+#include "esp_ota_ops.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
@@ -845,6 +846,60 @@ esp_err_t wsHandler(httpd_req_t* req)
     if (0 == strcmp(cmd, "status"))    { return wsReply(req, buildStatusPb()); }
     return wsReply(req, buildConfigPb());   // "get" (and default)
 }
+// POST /ota — raw firmware image in the body (curl --data-binary @kart_firmware.bin).
+// Written to the idle OTA slot as it streams in; the image is validated (esp_ota_end),
+// becomes the boot partition, and the board restarts into it. Rollback is on: the new image
+// must reach the end of app_main or the bootloader returns to this one.
+// REFUSED while armed, and ABORTED if the kart gets armed mid-upload: every chunk erases or
+// writes flash, which suspends the cache and freezes the 500 Hz control loop.
+esp_err_t otaPost(httpd_req_t* req)
+{
+    auto fail = [req](const char* status, const char* why)
+    {
+        ESP_LOGW(TAG, "OTA refused: %s", why);
+        httpd_resp_set_status(req, status);
+        httpd_resp_sendstr(req, why);
+        return ESP_OK;
+    };
+    if (statusSnapshot().m_arming) return fail("409 Conflict", "Kart armed: disarm before updating.");
+    const esp_partition_t* part = esp_ota_get_next_update_partition(nullptr);
+    if (nullptr == part) return fail("500 Internal Server Error", "No OTA slot.");
+    if (req->content_len <= 0 || req->content_len > part->size)
+        return fail("413 Content Too Large", "Image size missing or larger than the OTA slot.");
+
+    esp_ota_handle_t ota = 0;
+    esp_err_t err = esp_ota_begin(part, OTA_WITH_SEQUENTIAL_WRITES, &ota);
+    if (ESP_OK != err) return fail("500 Internal Server Error", esp_err_to_name(err));
+    ESP_LOGW(TAG, "OTA: %u bytes → %s", static_cast<unsigned>(req->content_len), part->label);
+
+    // Heap buffer: the httpd stack is already the tight spot (overflow experienced).
+    constexpr size_t BUF = 4096;
+    char* buf = static_cast<char*>(malloc(BUF));
+    if (nullptr == buf) { esp_ota_abort(ota); return fail("500 Internal Server Error", "Out of memory."); }
+    size_t left = req->content_len;
+    const char* why = nullptr;
+    while (left > 0 && nullptr == why)
+    {
+        const int n = httpd_req_recv(req, buf, (left < BUF) ? left : BUF);
+        if (HTTPD_SOCK_ERR_TIMEOUT == n) continue;
+        if (n <= 0)                              why = "Upload interrupted.";
+        else if (statusSnapshot().m_arming)      why = "Kart armed during the upload: aborted.";
+        else if (ESP_OK != (err = esp_ota_write(ota, buf, n))) why = esp_err_to_name(err);
+        else                                     left -= n;
+    }
+    free(buf);
+    if (why) { esp_ota_abort(ota); return fail("500 Internal Server Error", why); }
+    if (ESP_OK != (err = esp_ota_end(ota)))   // validates the image (header, checksum)
+        return fail("400 Bad Request", (ESP_ERR_OTA_VALIDATE_FAILED == err) ? "Invalid image." : esp_err_to_name(err));
+    if (ESP_OK != (err = esp_ota_set_boot_partition(part)))
+        return fail("500 Internal Server Error", esp_err_to_name(err));
+
+    httpd_resp_sendstr(req, "OK, rebooting into the new firmware.");
+    ESP_LOGW(TAG, "OTA done → reboot on %s", part->label);
+    vTaskDelay(pdMS_TO_TICKS(300));
+    esp_restart();   // does not return; on boot → disarmed
+    return ESP_OK;
+}
 } // namespace
 
 void wifiSoftAPInit()
@@ -934,5 +989,10 @@ void webServerStart()
     reg("/chart.js",  chartGet, false);
     reg("/pb.js",     pbJsGet,  false);
     reg("/ws",        wsHandler, true);
+    httpd_uri_t ota{};
+    ota.uri = "/ota";
+    ota.method = HTTP_POST;
+    ota.handler = otaPost;
+    httpd_register_uri_handler(m_server, &ota);
     ESP_LOGI(TAG, "Web + WebSocket server started");
 }

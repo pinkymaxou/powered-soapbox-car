@@ -11,9 +11,13 @@ CONFIG_LWIP_IPV6_AUTOCONFIG=y
 # Taille réelle de la flash de la carte (ESP32-WROOM 4 Mo)
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
-# Table de partitions custom : Wi-Fi + Bluetooth → app ~2,75 Mo (flash 4 Mo), sans OTA
+# Table de partitions custom : 2 slots OTA de 1,875 Mo (flash 4 Mo), app ~1,5 Mo
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+# OTA avec retour arrière : une nouvelle image démarre « en attente de validation » ; si elle
+# plante avant esp_ota_mark_app_valid_cancel_rollback() (fin de app_main), le bootloader
+# revient à l'image précédente au reset suivant.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # Bluetooth (manette via Bluepad32/BTstack) + coexistence Wi-Fi/BT (radio partagée)
 CONFIG_BT_ENABLED=y

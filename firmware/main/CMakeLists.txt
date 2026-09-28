@@ -22,6 +22,7 @@ idf_component_register(
         esp_driver_i2c
         esp_driver_rmt
         esp_app_format
+        app_update
         esp_partition
         spi_flash
         nvs_flash

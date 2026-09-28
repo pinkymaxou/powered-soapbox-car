@@ -415,6 +415,16 @@
    <button class="danger" onclick="clearEvlog()">🗑 Clear</button>
   </div>
   <div id="evlog" class="evlog">—</div>
+  <hr>
+  <h3>⬆️ Firmware update (OTA)</h3>
+  <p class="note">Upload <code>build/kart_firmware.bin</code>. Refused while armed. The kart
+   reboots into the new image; if it crashes before finishing its boot, the next reset goes
+   back to the previous one.</p>
+  <div class="row">
+   <input type="file" id="otafile" accept=".bin">
+   <button class="danger" onclick="otaUpload()">⬆ Upload &amp; reboot</button>
+  </div>
+  <div id="otamsg" class="note">—</div>
  </section>
 
 </div>
@@ -944,6 +954,14 @@ function showEvlog(m){
  el.innerHTML='<p class="note">'+head+'</p>'+rows.reverse().join('');   // newest first
 }
 function loadEvlog(){sendReq({type:'evlog'});}
+function otaUpload(){
+ const f=document.getElementById('otafile').files[0],m=document.getElementById('otamsg');
+ if(!f){m.textContent='Choose a .bin first.';return;}
+ if(!confirm('Flash '+f.name+' ('+Math.round(f.size/1024)+' kB) and reboot?'))return;
+ m.textContent='Uploading…';
+ fetch('/ota',{method:'POST',body:f}).then(r=>r.text().then(t=>{m.textContent=(r.ok?'✔ ':'✖ ')+t;}))
+  .catch(e=>{m.textContent='✖ '+e;});
+}
 function clearEvlog(){if(confirm('Erase the whole event log?'))sendReq({type:'evlogclear'});}
 function upt(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
  return (d?d+'d ':'')+h+'h '+m+'m '+(s%60)+'s';}
