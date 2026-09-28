@@ -187,7 +187,9 @@ On startup, the ESP32 creates an access point:
 
 The **Wi-Fi** tab lets you enter an SSID/password and **enable station mode**
 (checkbox): the kart then connects to that network **while keeping the SoftAP**
-(AP+STA mode). Applied **at restart**; automatic reconnection every 5 s.
+(AP+STA mode). Applied **at restart**. Automatic reconnection with a **growing delay** (5 s after a drop,
+then 10, 20, 40 s… up to 5 min; back to 5 s once connected) and **never while armed**: an
+attempt scans every Wi-Fi channel on the radio the gamepad's Bluetooth shares.
 
 ### mDNS (`kart.local`)
 

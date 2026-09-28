@@ -197,6 +197,18 @@ typedef struct _SysDyn {
     uint32_t ledc_fix; /* LEDC clock sentinel */
     uint32_t loop_max_us; /* worst 500 Hz tick since last read (budget 2000 µs) */
     uint32_t sens_max_us; /* worst sensor read (I2C cost alone, no preemption) */
+    /* Gamepad link quality: CUMULATIVE count of HID report-to-report gaps per bucket
+ (diff two reads), and the worst gap of the last complete 1 s window. */
+    uint32_t pad_gap_max_ms;
+    uint32_t pad_gap_le15;
+    uint32_t pad_gap_le30;
+    uint32_t pad_gap_le60;
+    uint32_t pad_gap_le120;
+    uint32_t pad_gap_le250;
+    uint32_t pad_gap_over;
+    /* Wi-Fi context for the same read: stations on the SoftAP, STA link RSSI (0 = not connected). */
+    uint32_t ap_sta;
+    int32_t sta_rssi;
 } SysDyn;
 
 typedef struct _Ok {
@@ -287,7 +299,7 @@ extern "C" {
 #define Wifi_init_default                        {0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Ip6_init_default                         {{{NULL}, NULL}, {{NULL}, NULL}}
 #define SysInfo_init_default                     {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
-#define SysDyn_init_default                      {0, 0, 0, 0, 0, 0}
+#define SysDyn_init_default                      {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Ok_init_default                          {0}
 #define EvlogEntry_init_default                  {0, 0, 0, 0}
 #define Evlog_init_default                       {{{NULL}, NULL}, 0, 0}
@@ -303,7 +315,7 @@ extern "C" {
 #define Wifi_init_zero                           {0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}}
 #define Ip6_init_zero                            {{{NULL}, NULL}, {{NULL}, NULL}}
 #define SysInfo_init_zero                        {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
-#define SysDyn_init_zero                         {0, 0, 0, 0, 0, 0}
+#define SysDyn_init_zero                         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Ok_init_zero                             {0}
 #define EvlogEntry_init_zero                     {0, 0, 0, 0}
 #define Evlog_init_zero                          {{{NULL}, NULL}, 0, 0}
@@ -413,6 +425,15 @@ extern "C" {
 #define SysDyn_ledc_fix_tag                      4
 #define SysDyn_loop_max_us_tag                   5
 #define SysDyn_sens_max_us_tag                   6
+#define SysDyn_pad_gap_max_ms_tag                7
+#define SysDyn_pad_gap_le15_tag                  8
+#define SysDyn_pad_gap_le30_tag                  9
+#define SysDyn_pad_gap_le60_tag                  10
+#define SysDyn_pad_gap_le120_tag                 11
+#define SysDyn_pad_gap_le250_tag                 12
+#define SysDyn_pad_gap_over_tag                  13
+#define SysDyn_ap_sta_tag                        14
+#define SysDyn_sta_rssi_tag                      15
 #define EvlogEntry_t_ms_tag                      1
 #define EvlogEntry_boot_tag                      2
 #define EvlogEntry_code_tag                      3
@@ -584,7 +605,16 @@ X(a, STATIC,   SINGULAR, UINT32,   heap_free,         2) \
 X(a, STATIC,   SINGULAR, UINT32,   heap_min,          3) \
 X(a, STATIC,   SINGULAR, UINT32,   ledc_fix,          4) \
 X(a, STATIC,   SINGULAR, UINT32,   loop_max_us,       5) \
-X(a, STATIC,   SINGULAR, UINT32,   sens_max_us,       6)
+X(a, STATIC,   SINGULAR, UINT32,   sens_max_us,       6) \
+X(a, STATIC,   SINGULAR, UINT32,   pad_gap_max_ms,    7) \
+X(a, STATIC,   SINGULAR, UINT32,   pad_gap_le15,      8) \
+X(a, STATIC,   SINGULAR, UINT32,   pad_gap_le30,      9) \
+X(a, STATIC,   SINGULAR, UINT32,   pad_gap_le60,     10) \
+X(a, STATIC,   SINGULAR, UINT32,   pad_gap_le120,    11) \
+X(a, STATIC,   SINGULAR, UINT32,   pad_gap_le250,    12) \
+X(a, STATIC,   SINGULAR, UINT32,   pad_gap_over,     13) \
+X(a, STATIC,   SINGULAR, UINT32,   ap_sta,           14) \
+X(a, STATIC,   SINGULAR, SINT32,   sta_rssi,         15)
 #define SysDyn_CALLBACK NULL
 #define SysDyn_DEFAULT NULL
 
@@ -685,7 +715,7 @@ extern const pb_msgdesc_t Msg_msg;
 #define Ok_size                                  0
 #define ParamVal_size                            28
 #define Status_size                              135
-#define SysDyn_size                              41
+#define SysDyn_size                              95
 
 #ifdef __cplusplus
 } /* extern "C" */

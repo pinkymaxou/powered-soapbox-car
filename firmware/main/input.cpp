@@ -38,6 +38,16 @@ std::atomic<uint32_t> m_buttons{0};      // button mask: buttons | (misc<<16) (d
 std::atomic<float> m_zl{0.f};            // left analog trigger [0..1]
 std::atomic<float> m_zr{0.f};            // right analog trigger [0..1]
 std::atomic<float> m_rx2{0.f};           // right stick X [-1..1] (display)
+
+// Link-quality diagnostic: gap between two consecutive HID reports. Cumulative histogram
+// (readers diff two snapshots) + worst gap of the last COMPLETE 1 s window. Written by the
+// BT task only; m_prev/m_win_* are touched by that task alone.
+constexpr int64_t GAP_EDGES_US[input::GAP_BUCKETS - 1] = {15000, 30000, 60000, 120000, 250000};
+std::atomic<uint32_t> m_gap_hist[input::GAP_BUCKETS]{};
+std::atomic<uint32_t> m_gap_max_1s_ms{0};
+int64_t  m_prev_report_us = 0;   // 0 = no previous report on this connection
+int64_t  m_win_start_us = 0;
+uint32_t m_win_max_us = 0;
 std::atomic<float> m_ry2{0.f};           // right stick Y [-1..1] (display)
 std::atomic<bool>  m_pairing{false};
 
@@ -98,6 +108,12 @@ void calClear()
 
 int64_t input::lastReportUs() { return m_last_report_us.load(); }
 
+void input::gapStats(uint32_t (&hist)[GAP_BUCKETS], uint32_t& max_1s_ms)
+{
+    for (int i = 0; i < GAP_BUCKETS; ++i) hist[i] = m_gap_hist[i].load(std::memory_order_relaxed);
+    max_1s_ms = m_gap_max_1s_ms.load();
+}
+
 namespace
 {
 // Calibration requires FRESH DATA from the gamepad (HID report < 250 ms, same
@@ -115,7 +131,23 @@ bool padDataFresh()
 extern "C" void inputbp_on_data(float x, float y, int estop, int start, uint32_t buttons,
                                 float zl, float zr, float rx2, float ry2)
 {
-    m_last_report_us.store(esp_timer_get_time());
+    const int64_t now = esp_timer_get_time();
+    m_last_report_us.store(now);
+    if (0 != m_prev_report_us)
+    {
+        const int64_t gap = now - m_prev_report_us;
+        int b = 0;
+        while (b < input::GAP_BUCKETS - 1 && gap > GAP_EDGES_US[b]) ++b;
+        m_gap_hist[b].fetch_add(1, std::memory_order_relaxed);
+        if (gap > m_win_max_us) m_win_max_us = static_cast<uint32_t>(gap);
+    }
+    m_prev_report_us = now;
+    if (now - m_win_start_us >= 1000000)
+    {
+        m_gap_max_1s_ms.store(m_win_max_us / 1000);
+        m_win_max_us = 0;
+        m_win_start_us = now;
+    }
     m_raw_x.store(x);
     m_raw_y.store(y);
     m_estop.store(0 != estop);
@@ -154,6 +186,7 @@ extern "C" void inputbp_on_conn(int connected, const char* name, int batt)
         m_estop.store(false);
         m_start.store(false);
         m_buttons.store(0);
+        m_prev_report_us = 0;   // the reconnection gap is not a link-quality sample
     }
     if (connected)
     {

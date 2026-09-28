@@ -11,6 +11,11 @@ namespace input
 {
 int64_t lastReportUs();   // timestamp (µs, esp_timer) of the last HID report — gamepad heartbeat
 
+// Link quality: CUMULATIVE count of report-to-report gaps per bucket (≤15, ≤30, ≤60, ≤120,
+// ≤250, >250 ms — diff two reads for a period) + worst gap of the last complete 1 s window.
+constexpr int GAP_BUCKETS = 6;
+void gapStats(uint32_t (&hist)[GAP_BUCKETS], uint32_t& max_1s_ms);
+
 struct State
 {
     float x = 0.f;          // CALIBRATED steering [-1..1]  (+ = right)

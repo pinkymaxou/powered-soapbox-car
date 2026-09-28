@@ -154,7 +154,7 @@
    or under-8-character password (WPA2 minimum) is <b>refused</b> and changes nothing.</p>
   <button type="button" id="wifisave" onclick="saveWifi()">💾 Save &amp; reboot</button>
   <p class="note locknote" hidden>🔒 <b>Kart armed</b> — disarm to change these settings.</p>
-  <p class="note">The kart connects to the chosen network <b>after reboot</b>, while keeping the "Kart-Config" access point active. Automatic reconnection every 5 s if the link drops.</p>
+  <p class="note">The kart connects to the chosen network <b>after reboot</b>, while keeping the "Kart-Config" access point active. If the link drops it retries with a growing delay (5 s, 10, 20… up to 5 min), and <b>never while the kart is armed</b>: each attempt scans every channel on the radio the gamepad shares.</p>
   <p class="note"><b>mDNS:</b> on either network the page is reachable at <a href="http://kart.local/">http://kart.local</a> — no need to know the IP. Works on Windows 10+, macOS/iOS and Linux (Avahi); <b>on Android use the IP address</b> (Chrome does not resolve <code>.local</code>).</p>
  </section>
 
@@ -483,7 +483,10 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
   ip6_sta:{rule:"repeated",type:"Ip6",id:22},mdns:{type:"string",id:23}}},
  SysDyn:{fields:{uptime_s:{type:"int64",id:1},heap_free:{type:"uint32",id:2},
   heap_min:{type:"uint32",id:3},ledc_fix:{type:"uint32",id:4},
-  loop_max_us:{type:"uint32",id:5}}},
+  loop_max_us:{type:"uint32",id:5},pad_gap_max_ms:{type:"uint32",id:7},
+  pad_gap_le15:{type:"uint32",id:8},pad_gap_le30:{type:"uint32",id:9},pad_gap_le60:{type:"uint32",id:10},
+  pad_gap_le120:{type:"uint32",id:11},pad_gap_le250:{type:"uint32",id:12},pad_gap_over:{type:"uint32",id:13},
+  ap_sta:{type:"uint32",id:14},sta_rssi:{type:"sint32",id:15}}},
  Ok:{fields:{}},
  EvlogEntry:{fields:{t_ms:{type:"uint32",id:1},boot:{type:"uint32",id:2},
   code:{type:"uint32",id:3},data:{type:"uint32",id:4}}},
@@ -971,10 +974,24 @@ const heapTxt=m=>`${(m.heap_free/1024).toFixed(1)} KB (min ${(m.heap_min/1024).t
 const loopTxt=us=>{const pct=(us/2000*100).toFixed(0);
  const col=us>2000?'var(--red)':us>1200?'var(--amber)':'var(--green)';
  return `<b style="color:${col}">${us} µs</b> <small>(${pct} % of the 2000 µs budget)</small>`;};
+// Gamepad link: gaps between HID reports. The histogram is cumulative on the kart → diff
+// against the previous read so the line describes the last refresh period, not the boot.
+let padGapPrev=null;
+function padLinkTxt(m){
+ const k=['pad_gap_le15','pad_gap_le30','pad_gap_le60','pad_gap_le120','pad_gap_le250','pad_gap_over'];
+ const cur=k.map(n=>m[n]||0), d=padGapPrev?cur.map((v,i)=>v-padGapPrev[i]):cur; padGapPrev=cur;
+ const n=d.reduce((a,b)=>a+b,0), late=d[2]+d[3]+d[4]+d[5];
+ const mx=m.pad_gap_max_ms||0, col=mx>120?'var(--red)':mx>60?'var(--amber)':'var(--green)';
+ const wifi=`AP clients ${m.ap_sta||0} · STA ${m.sta_rssi?m.sta_rssi+' dBm':'off'}`;
+ if(!n)return `no reports <small>(${wifi})</small>`;
+ return `<b style="color:${col}">worst gap ${mx} ms</b> (last 1 s) · ${(late*100/n).toFixed(1)} % of gaps &gt; 30 ms`+
+  ` <small>(${n} reports · ${wifi})</small>`;
+}
 function showSysDyn(m){
  const u=document.getElementById('sysup'),h=document.getElementById('sysheap');
- const lp=document.getElementById('sysloop');
+ const lp=document.getElementById('sysloop'),pl=document.getElementById('syspad');
  if(lp&&m.loop_max_us!==undefined)lp.innerHTML=loopTxt(m.loop_max_us);
+ if(pl)pl.innerHTML=padLinkTxt(m);
  if(u)u.textContent=upt(m.uptime_s);
  if(h)h.textContent=heapTxt(m);
 }
@@ -988,6 +1005,7 @@ function showSys(m){
   `<tr><th>Uptime</th><td id="sysup">${upt(m.uptime_s)}</td></tr>`+r('Last reset cause',m.reset)+
   `<tr><th>Free heap</th><td id="sysheap">${heapTxt(m)}</td></tr>`+
   `<tr><th>Worst control tick</th><td id="sysloop">—</td></tr>`+
+  `<tr><th>Gamepad link</th><td id="syspad">—</td></tr>`+
   r('Access point MAC',m.mac_ap)+r('Station MAC',m.mac_sta)+
   r('mDNS name',m.mdns?`<a href="http://${m.mdns}.local/">${m.mdns}.local</a>`:'—')+
   r('AP — SSID',m.ap_ssid)+r('AP — IPv4',m.ip_ap)+r('AP — IPv6',fmt6(m.ip6_ap))+

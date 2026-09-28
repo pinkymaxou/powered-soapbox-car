@@ -62,23 +62,36 @@ constexpr char AP_SSID[]  = "Kart-Config";
 constexpr char AP_PASS[]  = "kart12345";   // ≥ 8 characters (otherwise open AP)
 constexpr int  AP_CHANNEL = 1;
 constexpr int  AP_MAX_CONN = 4;
-// STA reconnection HEARTBEAT: 5 s between attempts, never faster. A failed association is
-// retried by a one-shot timer rather than from the disconnect handler itself — reconnecting
-// in a tight loop would hammer the band (each attempt is a probe/auth/assoc exchange) and
-// starve the Bluetooth side, which shares the one radio with Wi-Fi on this chip. The kart
-// drives on that radio, so a home network that is simply out of range must cost nothing.
-constexpr int  STA_RETRY_MS = 5000;   // delay before a new STA connection attempt
+// STA reconnection: EXPONENTIAL BACKOFF, and NEVER while armed. Each attempt is a scan of
+// every channel (when the network is absent) + probe/auth/assoc, on the one radio this chip
+// shares with the gamepad's Bluetooth — a scan is exactly when the coexistence scheduler
+// gives Wi-Fi its longest slices. So: 5 s after a drop, then 10, 20, 40 s… capped at 5 min;
+// back to 5 s once connected. While the kart is armed the attempt is POSTPONED (re-checked
+// every few seconds, backoff unchanged) — a home network out of range must cost nothing to
+// someone driving. A failed association is retried by a one-shot timer, never from the
+// disconnect handler itself (a tight loop would hammer the band).
+constexpr int  STA_RETRY_MIN_MS    = 5000;     // first retry after a drop
+constexpr int  STA_RETRY_MAX_MS    = 300000;   // backoff ceiling (5 min)
+constexpr int  STA_ARMED_RECHECK_MS = 3000;    // armed → look again this much later
 
 httpd_handle_t     m_server = nullptr;
 esp_timer_handle_t m_sta_retry = nullptr;
+std::atomic<int>   m_sta_backoff_ms{STA_RETRY_MIN_MS};   // delay before the NEXT attempt
 std::atomic<bool>  m_sta_connected{false};
 char               m_sta_ip[16] = "0.0.0.0";
 esp_netif_t*       m_netif_ap = nullptr;
 esp_netif_t*       m_netif_sta = nullptr;
 
 // Timed STA reconnection — the only place that retries (STA_START does the first connect).
+// esp_timer context: never block → statusTrySnapshot; busy status counts as "maybe armed".
 void staRetryCb(void*)
 {
+    KartStatus st;
+    if (!statusTrySnapshot(st) || st.m_arming)
+    {
+        esp_timer_start_once(m_sta_retry, static_cast<int64_t>(STA_ARMED_RECHECK_MS) * 1000);
+        return;
+    }
     esp_wifi_connect();
 }
 
@@ -104,8 +117,15 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
         if (m_sta_retry)
         {
             // One-shot: if a retry is already armed this returns ESP_ERR_INVALID_STATE and we
-            // keep the pending one — either way the next attempt is at least 5 s away.
-            esp_timer_start_once(m_sta_retry, static_cast<int64_t>(STA_RETRY_MS) * 1000);   // 5 s
+            // keep the pending one (and the backoff does not grow for this event).
+            const int delay = m_sta_backoff_ms.load();
+            if (ESP_OK == esp_timer_start_once(m_sta_retry, static_cast<int64_t>(delay) * 1000))
+            {
+                m_sta_backoff_ms.store((delay >= STA_RETRY_MAX_MS / 2) ? STA_RETRY_MAX_MS : delay * 2);
+                const auto* ev = static_cast<const wifi_event_sta_disconnected_t*>(data);
+                ESP_LOGI(TAG, "STA disconnected (reason %d) → next attempt in %d s",
+                         ev ? ev->reason : -1, delay / 1000);
+            }
         }
     }
     else if (IP_EVENT == base && IP_EVENT_STA_GOT_IP == id)
@@ -113,6 +133,7 @@ void wifiEvent(void*, esp_event_base_t base, int32_t id, void* data)
         auto* ev = static_cast<ip_event_got_ip_t*>(data);
         snprintf(m_sta_ip, sizeof(m_sta_ip), IPSTR, IP2STR(&ev->ip_info.ip));
         m_sta_connected = true;
+        m_sta_backoff_ms.store(STA_RETRY_MIN_MS);   // healthy link → a future drop retries fast
         ESP_LOGI(TAG, "STA connected, IP %s", m_sta_ip);
     }
     else if (IP_EVENT == base && IP_EVENT_GOT_IP6 == id)
@@ -595,6 +616,18 @@ size_t buildSysDynPb()
     msg.body.sysdyn.ledc_fix  = board::ledcClkFixCount();
     msg.body.sysdyn.loop_max_us = Controller::loopMaxUs(EspController::PeakSysDyn);
     msg.body.sysdyn.sens_max_us = Controller::sensMaxUs(EspController::PeakSysDyn);
+    uint32_t gh[input::GAP_BUCKETS];
+    input::gapStats(gh, msg.body.sysdyn.pad_gap_max_ms);
+    msg.body.sysdyn.pad_gap_le15  = gh[0];
+    msg.body.sysdyn.pad_gap_le30  = gh[1];
+    msg.body.sysdyn.pad_gap_le60  = gh[2];
+    msg.body.sysdyn.pad_gap_le120 = gh[3];
+    msg.body.sysdyn.pad_gap_le250 = gh[4];
+    msg.body.sysdyn.pad_gap_over  = gh[5];
+    wifi_sta_list_t sl{};
+    if (ESP_OK == esp_wifi_ap_get_sta_list(&sl)) msg.body.sysdyn.ap_sta = sl.num;
+    wifi_ap_record_t ap{};
+    if (m_sta_connected && ESP_OK == esp_wifi_sta_get_ap_info(&ap)) msg.body.sysdyn.sta_rssi = ap.rssi;
     return encodeMsg(msg);
 }
 
