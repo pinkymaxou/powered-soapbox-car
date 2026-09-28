@@ -132,6 +132,9 @@ struct KartConfig
     int32_t use_encoders;   // 1 = speed/brake/fault control via AS5600; 0 = ignore the encoders
     int32_t enc_inv_l;      // 1 = flip the LEFT encoder's sign (convention: +rpm = forward)
     int32_t enc_inv_r;      // 1 = flip the RIGHT encoder's sign
+    int32_t mot_inv_l;      // 1 = flip the LEFT motor output (convention: +PWM = forward)
+    int32_t mot_inv_r;      // 1 = flip the RIGHT motor output
+    int32_t mot_swap_lr;    // 1 = LEFT wheel on driver channel R and vice versa (crossed wiring)
     int32_t enc_rev_chk;    // 1 = runtime reversed-encoder watchdog (ENC_REV); 0 = commissioning-checked
     float   enc_per_wheel;  // encoder-shaft turns per WHEEL turn (mount: gearbox output 1.28, 1:5 shaft 3.41)
     int32_t arm_hold_ms;

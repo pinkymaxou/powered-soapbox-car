@@ -507,6 +507,15 @@ flowchart LR
 | 13 / 16 / 21 / 22 / 23 | unused | — | free — **13** was `POWER_HOLD` (power latch), **22** `MOTOR_PWR_SENSE` (e-stop coil sense), **16** the arming button. **No GPIO input is used at all**: the kart's only controls are the main switch, the mushroom and the gamepad |
 | — | **Power on/off** | (no GPIO) | **hardware only**: main switch + e-stop in the relay coil. The firmware can neither hold nor cut its own supply |
 
+> **Motor wiring corrections in software** (web page → Settings → Behavior), for when the
+> motors are not wired as above: **`mot_inv_l` / `mot_inv_r`** flip one wheel's direction
+> (= swapping that motor's two leads), **`mot_swap_lr`** sends the LEFT wheel's command to the
+> RIGHT channel (GPIO 33/32) and vice versa (= motors on crossed driver channels: forward is
+> right but the steering is mirrored). They only touch the **motors** — the encoders must
+> already read the right wheels. While any of them is set, the **Dashboard** and the
+> **pinout** of the page show an amber banner: the wiring then does NOT match this table.
+> Rewiring to match the table stays the cleaner fix.
+
 **Key wiring points:**
 - **Common ground** ESP32 ↔ driver ↔ I²C sensors: essential.
 - **One rail**: the main relay's contact carries everything (buck → ESP32 + strip, driver VB+ *and* driver logic). Its coil runs through the **main switch** and the **e-stop mushroom** in series, with the **1N4007** across it. No GPIO is involved in powering the kart.

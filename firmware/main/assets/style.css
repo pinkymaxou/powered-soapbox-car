@@ -240,3 +240,4 @@ button.alt{background:var(--card2);color:var(--accent);border:1px solid var(--ac
    convention (--port / --starboard); no skin override so LEFT stays red,
    RIGHT stays green in every theme. */
 
+.motwarn{border:1px solid var(--amber);background:#3a2f10;color:#ffe6a0;border-radius:6px;padding:8px 10px;margin:6px 0;font-size:.9em}

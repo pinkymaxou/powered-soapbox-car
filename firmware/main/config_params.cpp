@@ -115,7 +115,18 @@ extern constexpr ParamDesc PARAMS[] =
      "1 = watch for a wheel measured firmly OPPOSITE to a firm command (encoder or motor wired backwards) and latch a full stop. Can false-trip when plugging-braking on a downhill (reverse stick, speed held by the slope). 0 = trust the commissioning check instead: verify the rpm signs once on the Dashboard after any wiring change. Backstops that remain with 0: erratic-speed fault at 8 m/s, wheel-stuck fault, and the driver.",
      PType::Bool,  {.i = 0}, {.i = 1}, {.i = 1}, {.i = &KartConfig::enc_rev_chk}},
     // (No allow_reverse: reverse is ALWAYS permitted, held by its own limit rev_speed_ms.)
-    // (No motor-output inversion: swapping the two motor leads does that in hardware.)
+    // Motor output SIGN per wheel — the software equivalent of swapping the two motor leads.
+    // Applied at the very output (CtrlOutputs): every check (ENC_REV, stuck) keeps reasoning
+    // in the logical "+ = forward" convention, so a wrong setting still trips ENC_REV.
+    {"mot_inv_l",       "Invert LEFT motor",      "Behavior",
+     "Flips the LEFT motor direction (= swapping its two leads). Set it if the left wheel turns backwards on forward stick (wheels in the air). Fix the motors FIRST, then the encoder signs.",
+     PType::Bool,  {.i = 0}, {.i = 0}, {.i = 1}, {.i = &KartConfig::mot_inv_l}},
+    {"mot_inv_r",       "Invert RIGHT motor",     "Behavior",
+     "Same for the RIGHT motor.",
+     PType::Bool,  {.i = 0}, {.i = 0}, {.i = 1}, {.i = &KartConfig::mot_inv_r}},
+    {"mot_swap_lr",     "Swap LEFT/RIGHT motors", "Behavior",
+     "1 = the motors are on crossed driver channels: forward is right but the steering is mirrored. Motors only - the encoders must already read the right wheels (turn the LEFT wheel by hand: the LEFT rpm moves). The inversions above still name the WHEEL.",
+     PType::Bool,  {.i = 0}, {.i = 0}, {.i = 1}, {.i = &KartConfig::mot_swap_lr}},
     {"arm_hold_ms",     "Arming hold (ms)",     "Behavior",
      "Held press duration on the gamepad's START/Options button to arm, centered stick required. It is the only way to arm the kart.",
      PType::Int,   {.i = 200}, {.i = 1000}, {.i = 5000}, {.i = &KartConfig::arm_hold_ms}},

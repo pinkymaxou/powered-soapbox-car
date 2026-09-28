@@ -357,6 +357,11 @@ Web parameters: **`turn_gain`**, **`turn_full_ms`**, **`turn_alat_vmax`**, **`tu
   **`enc_per_wheel`** web parameter (magnet at the gearbox output = 1.28, on the 1:5
   intermediate shaft = 3.41). **2 AS5600**, **one per I²C bus** (fixed address `0x36` → a
   single sensor per bus). To be **verified on the bench**.
+- **Motor directions**: wheels in the air, forward stick — both wheels must turn forward;
+  fix with `mot_inv_l` / `mot_inv_r` (or swap the motor leads). Then a turn: stick left
+  must speed up the RIGHT wheel — if the steering is mirrored, the motors are on the wrong
+  driver channels: rewire them or set `mot_swap_lr` (motors only — the encoders must
+  already read the right wheels). Do all this BEFORE the encoder signs below.
 - **Encoder signs**: push the kart forward and check both wheel rpm read POSITIVE on the
   Dashboard; fix with `enc_inv_l` / `enc_inv_r` (the two sides are mirrored — one usually
   needs it). Redo this check after ANY motor/sensor rework; it is what lets you disable the

@@ -197,6 +197,12 @@ void testScenarios()
         CHECK(Fault::EncoderDir == r.final_fault);
         CHECK(r.t_first_fault > 0.f && r.t_first_fault < T_DRIVE + 1.5f);
     }
+    // mot_inv_l set wrongly (motor already wired right) → the same watchdog catches it.
+    {
+        const RunResult r = run(get("moteur_inverse_mal_regle"));
+        CHECK(Fault::EncoderDir == r.final_fault);
+        CHECK(r.t_first_fault > 0.f && r.t_first_fault < T_DRIVE + 1.5f);
+    }
     // Watchdog OFF (commissioning-checked config): EncoderDir must not latch, and the
     // STUCK net must still stop the kart (one reversed wheel → mean speed ≈ 0, firm cmd).
     {

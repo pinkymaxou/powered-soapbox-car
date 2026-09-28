@@ -61,8 +61,8 @@ struct CtrlOutputs
 {
     // EITHER the phase short-circuit (dyn_brake), OR the capped signed PWMs.
     bool     dyn_brake = true;       // default state: braking (never coasting)
-    float    out_l = 0.f;            // left wheel PWM [-1..1]
-    float    out_r = 0.f;
+    float    out_l = 0.f;            // driver channel L PWM [-1..1] (after mot_inv_*/mot_swap_lr)
+    float    out_r = 0.f;            // driver channel R
     uint32_t cap = 0;                // duty cap (0..hw::PWM_MAX)
 };
 

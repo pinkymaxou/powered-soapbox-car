@@ -323,6 +323,20 @@ inline std::vector<Scenario> allScenarios()
             c.y = 1.f;
             return c;
         }});
+    // Motor inversion set on a CORRECTLY wired motor: the left wheel drives backwards on
+    // forward stick. The watchdog sees the measured speed opposite to the (logical) command.
+    v.push_back({
+        "moteur_inverse_mal_regle",
+        "mot_inv_l=1 on a correctly wired motor: Fault::EncoderDir in < 1.5 s of driving",
+        8.f,
+        [](KartConfig& c) { c.mot_inv_l = 1; },
+        nullptr,
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = 1.f;
+            return c;
+        }});
     // The emergency stop, as it now IS: the mushroom sits in the main relay's coil loop, so
     // it cuts the ESP32 along with the motors. Nothing is reported, nothing is braked — the
     // kart COASTS. On the flat, rolling resistance alone (~30 N against ~98 kg = 0.31 m/s²)

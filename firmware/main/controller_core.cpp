@@ -343,8 +343,14 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     }
 
     out.dyn_brake = dyn_brake;   // motor short-circuit, otherwise driving / active plugging
-    out.out_l = out_l;
-    out.out_r = out_r;
+    // Motor SIGN (mot_inv_*, per WHEEL) then CHANNEL routing (mot_swap_lr), applied here and
+    // only here: out_l/out_r stay the logical per-wheel "+ = forward" commands for the checks
+    // and telemetry below; CtrlOutputs carries what each driver CHANNEL receives.
+    const float wheel_l = (0 != m_cfg.mot_inv_l) ? -out_l : out_l;
+    const float wheel_r = (0 != m_cfg.mot_inv_r) ? -out_r : out_r;
+    const bool  swap    = (0 != m_cfg.mot_swap_lr);
+    out.out_l = swap ? wheel_r : wheel_l;
+    out.out_r = swap ? wheel_l : wheel_r;
     out.cap = cap;
     if (use_enc)
     {

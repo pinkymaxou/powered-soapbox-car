@@ -19,6 +19,7 @@
 <div class="wrap">
 
  <section id="dash" class="panel" hidden>
+  <div class="motwarn" hidden></div>
   <div class="chart-title">Forward · PWM (%) · Wheel RPM — 10 min</div>
   <canvas id="chart" width="520" height="180"></canvas>
   <div class="chart-title">🏎️ Vehicle speed (m/s, 0 while pivoting) — 1 min</div>
@@ -383,6 +384,9 @@
    <tr><th>GPIO</th><th>Function</th><th>Direction</th></tr>
    <tr><td>26 / 25</td><td>PWM / DIR rear-left motor</td><td>output</td></tr>
    <tr><td>33 / 32</td><td>PWM / DIR rear-right motor</td><td>output</td></tr>
+   <tr><td colspan="3"><div class="motwarn" hidden></div><small>Motor wiring can be corrected in software
+    (Settings → Behavior): <code>mot_inv_l</code> / <code>mot_inv_r</code> flip one wheel's direction,
+    <code>mot_swap_lr</code> sends the LEFT wheel to the RIGHT channel (26/25 ↔ 33/32) and vice versa.</small></td></tr>
    <tr><td>18 / 19</td><td>I²C bus 0 (SDA/SCL) — AS5600 left wheel (0x36)</td><td>I/O</td></tr>
    <tr><td>27 / 14</td><td>I²C bus 1 (SDA/SCL) — AS5600 right wheel (0x36)</td><td>I/O</td></tr>
    <tr><td>4</td><td>WS2812B LED strip (data)</td><td>output</td></tr>
@@ -741,8 +745,20 @@ let dzVal=0.06;   // stick deadzone (thr_deadzone), for the pad display
 const pmv=(p,g)=>{const b=p['b'+g],i=p['i'+g],f=p['f'+g];
   return b!==undefined?(b?1:0):(i!==undefined?i:(f!==undefined?f:0));};
 const pmIsBool=p=>p.bval!==undefined, pmIsInt=p=>p.ival!==undefined;
+// Motor-wiring corrections (mot_inv_*/mot_swap_lr): the software no longer matches the
+// wiring diagram — say so on the Dashboard and the pinout, never silently.
+const motFix={mot_inv_l:0,mot_inv_r:0,mot_swap_lr:0};
+function updateMotWarn(){
+ const t=[];
+ if(motFix.mot_swap_lr)t.push('LEFT/RIGHT motors SWAPPED: left wheel on GPIO 33/32, right wheel on 26/25');
+ if(motFix.mot_inv_l)t.push('LEFT motor direction INVERTED');
+ if(motFix.mot_inv_r)t.push('RIGHT motor direction INVERTED');
+ document.querySelectorAll('.motwarn').forEach(e=>{e.hidden=!t.length;
+  e.innerHTML='⚠️ Motor wiring corrected in software — '+t.join(' · ')+'. The wiring does NOT match the diagram (Settings → Behavior).';});
+}
 function deriveFromCfg(p){
  const v=pmv(p,'val');
+ if(p.name in motFix){motFix[p.name]=(v!=0)?1:0; updateMotWarn();}
  if(p.name==='speed_limit_ms') speedScale=Math.max(0.3,v);
  if(p.name==='thr_deadzone') dzVal=v;
  if(p.name==='use_encoders'){const u=(v!=0); if(u!==useEnc){useEnc=u; lastFaults=-1;}}  // re-render fault severity
