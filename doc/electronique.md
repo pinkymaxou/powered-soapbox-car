@@ -6,12 +6,13 @@ terminal-by-terminal wiring guide. The firmware side of every signal named here 
 in [`../firmware/README.md`](../firmware/README.md).
 
 **Design inputs (fixed):** single **12 V** motorcycle battery — always 12 V, never measured ·
-**5 V rail ≥ 2 A** (it powers everything: ESP32, WS2812 strip, sensors) · **ONE main relay
+**5 V rail ≥ 2 A** (it powers everything: ESP32, WS2812 strip) · **ONE main relay
 carries the whole kart**, its coil in series with the **main switch** and the **e-stop
 mushroom** · **two 1N4007 on that coil**: one **in series** (the coil energizes in ONE
 polarity only — the relay becomes a polarity gate in front of the whole vehicle) and one
-**across** it (flyback for the two switches) · ESP32 and 2× AS5600 confirmed · **no ADC, no
-voltage divider, no power latch, no buttons**: the ESP32 has no GPIO input left at all.
+**across** it (flyback for the two switches) · ESP32 confirmed · **no sensors** (the two AS5600
+wheel encoders, their I²C buses and pull-ups went on 2026-09-29) · **no ADC, no voltage
+divider, no power latch, no buttons**: the ESP32 has no GPIO input left at all.
 
 ![Single-relay power](schematics/power_rails.png)
 
@@ -38,10 +39,10 @@ kart goes dark: motors and brain together**. Consequences, stated plainly:
 
 - **Nothing brakes.** The driver's MOSFETs open, the motors freewheel. Simulated and asserted
   in [`scenarios.hpp`](../firmware/test_host/sim/scenarios.hpp) (`arret_urgence_plat`): hit at
-  full speed on the flat, the kart **coasts about 15 m** on rolling resistance alone before
-  stopping. On a slope it does not stop at all — `coupure_pente8` reaches 4.4 m/s eight
-  seconds after the cut, `coupure_pente16` 12 m/s. **The e-stop is the last resort, not the
-  brake.** The brake is releasing the stick (dynamic or PID braking, both need power).
+  full speed on the flat, the kart **coasts about 11 m** (10.7 m) on rolling resistance alone
+  before stopping. On a slope it does not stop at all — `coupure_pente8` reaches 4.5 m/s eight
+  seconds after the cut, `coupure_pente16` 10.9 m/s. **The e-stop is the last resort, not the
+  brake.** The brake is releasing the gamepad's **A** button (dynamic braking — it needs power).
 - **Nothing is reported.** No `MOTOR POWER` fault, no event-log record, no page notification —
   the firmware that would write them is off. The web page simply loses its connection.
 - **Nothing is remembered.** Power returns on the main switch, the ESP32 boots, and the kart
@@ -80,7 +81,7 @@ This is the real reverse-polarity protection, and it is a consequence of the sin
 layout rather than of any one component: **nothing on this kart is powered until the contact
 closes, and the contact only closes if the coil is energized.** Make the coil energize in one
 polarity only and the whole vehicle is gated — the motor driver (no reverse protection of its
-own, destroyed instantly by reversed VB+), the buck, the ESP32, the sensors, all of it sits
+own, destroyed instantly by reversed VB+), the buck, the ESP32, the LED strip, all of it sits
 behind that one contact.
 
 A relay coil does **not** do that by itself: it is a solenoid, it pulls in whichever way the
@@ -110,7 +111,7 @@ failure mode you want from a protection device.
 
 ⚠️ **What it still does not cover**: a **VB+/VB− swap made downstream of the contact**, at the
 driver's own terminals. That wiring is on the far side of the gate, so only the polarity check
-at step 6 of the wiring guide stands between that mistake and a dead driver.
+at step 5 of the wiring guide stands between that mistake and a dead driver.
 
 ### 5 V rail — the ≥ 2 A budget
 
@@ -118,7 +119,6 @@ at step 6 of the wiring guide stands between that mistake and a dead driver.
 |---|---:|---|
 | WS2812 ×10 | ~0.60 A | 60 mA/LED full white; status colors at brightness 64 draw far less |
 | ESP32-WROOM (via its 3.3 V LDO) | ~0.70 A | Wi-Fi TX bursts; sustained is ~0.24 A |
-| AS5600 ×2 | ~0.02 A | on 3.3 V, through the ESP board's regulator |
 | Motor-driver logic inputs | ~0.02 A | PWM/DIR are 3.3 V signals; board logic is on +12V_SW |
 | Margin / future (buzzer, lights) | ~0.6 A | |
 | **Total** | **≈ 1.9 A** | **buck must sustain 2 A continuous at 11–14.8 V in** |
@@ -164,18 +164,18 @@ schedule rather than on a warning.
 | 6 | Main switch | toggle or key, ≥ 1 A, panel mount | 1 | in the coil loop, on the dash — the on/off of the kart |
 | 7 | Buck converter | 12 V in → **5 V ≥ 2 A cont.** (3 A class) | 1 | 5 V rail |
 | 8 | ESP32-WROOM board | dual-core, 4 MB | 1 | controller |
-| 9 | Motor driver | dual channel, 20 A/ch, 6–30 V, PWM+DIR | 1 | both rear (driven) motors |
-| 10 | AS5600 breakout + diametric magnet | 12-bit angle, I²C 0x36 | 2 | one per wheel, one per bus |
-| 11 | Resistors 4.7 k | ¼ W | 4 | I²C pull-ups (2 per bus) |
-| 12 | Resistor ~330 Ω | ¼ W | 1 | WS2812 DIN series |
-| 13 | Capacitors: ≥ 470 µF (buck in), 470–1000 µF (LED strip) | 16 V+ | 2 | bulk + decoupling |
-| 14 | WS2812B strip | ~10 LEDs, 5 V | 1 | status display (GPIO4) |
-| 15 | Enclosure ~150×100×70, clear lid | ≈ IP65 + cable glands | 1 | ESP32 + perfboard |
-| 16 | Wire: 10 AWG (power), 18–22 AWG (signal) + lugs/ferrules | — | — | power vs signal, crimped |
+| 9 | Motor driver | Cytron MDD20A: dual channel, 20 A/ch, 6–30 V, PWM+DIR | 1 | both rear (driven) motors |
+| 10 | Resistor ~330 Ω | ¼ W | 1 | WS2812 DIN series |
+| 11 | Capacitors: ≥ 470 µF (buck in), 470–1000 µF (LED strip) | 16 V+ | 2 | bulk + decoupling |
+| 12 | WS2812B strip | ~10 LEDs, 5 V | 1 | status display (GPIO4) |
+| 13 | Enclosure ~150×100×70, clear lid | ≈ IP65 + cable glands | 1 | ESP32 + perfboard |
+| 14 | Wire: 10 AWG (power), 18–22 AWG (signal) + lugs/ferrules | — | — | power vs signal, crimped |
 
 *Dropped from the previous build: the opto relay module, the second relay, the coil-sense
 optocoupler, the ADS1115, the 100 k/15 k divider pair, the 100 nF at A0, the hidden FORCE ON
-toggle, the priming/arming momentary button — and with it the last GPIO input on the board.*
+toggle, the priming/arming momentary button — and with it the last GPIO input on the board.
+Dropped on 2026-09-29: the two AS5600 breakouts, their diametric magnets and the four 4.7 k
+I²C pull-ups — nothing on the kart measures the wheels any more.*
 
 ## 3. Wiring guide — terminal by terminal
 
@@ -201,13 +201,14 @@ Work with the battery disconnected; connect it last.
    coil diode cannot save it from a swap made here.**
 6. **Buck**: IN ← +12V_SW (+ ≥ 470 µF bulk at its input), OUT 5 V → ESP32 5V/VIN, WS2812
    strip (with its 470–1000 µF at the strip head), ground to the bus.
-7. **AS5600 L**: SDA/SCL → GPIO18/19 (bus 0), 3.3 V, GND, 4.7 k pull-ups to 3.3 V on both
-   lines. **AS5600 R**: SDA/SCL → GPIO27/14 (bus 1), same recipe.
+7. **Motor driver signals**: PWM_L/DIR_L ← GPIO26/25, PWM_R/DIR_R ← GPIO33/32, driver
+   signal ground to the ESP32 ground.
 8. **WS2812**: DIN ← GPIO4 through ~330 Ω; 5 V and GND from the buck.
-9. Separate runs for power (10 AWG) and signal looms; keep the I²C wires away from the
-   motor cables. **Nothing else connects to the ESP32**: no buttons, no analog inputs, no
-   sense lines — the two I²C buses, the four motor-control pins and the LED data line are the
-   whole harness on the logic side.
+9. Separate runs for power (10 AWG) and signal looms; keep the signal wires away from the
+   motor cables. **Nothing else connects to the ESP32**: no sensors, no buttons, no analog
+   inputs, no sense lines — the four motor-control pins and the LED data line are the whole
+   harness on the logic side. Free: GPIO 13, 14, 16, 18, 19, 21, 22, 23, 27 and the input-only
+   34/35/36/39.
 
 ### Power-up checklist (multimeter, battery just connected)
 
@@ -225,13 +226,21 @@ Work with the battery disconnected; connect it last.
    resume driving on its own. Re-arm with the gamepad's START.
 5. **Coast test (do it once, know the number)**: on a flat open surface, at moderate speed,
    press the mushroom. The kart **keeps rolling** — measure roughly how far. The simulation
-   says ~15 m from full speed; feel it at half speed so the number means something when it
+   says ~11 m from full speed; feel it at half speed so the number means something when it
    matters. **Never test this on a slope.**
 6. **Reboot test**: trigger a reset while powered (flash, or watchdog). The kart must stay
    powered, reboot in ~1 s and come back **disarmed** (this is a change from the old latch,
    where a reset powered the kart off).
 
 ## 4. Decision log
+
+### 2026-09-29 — the wheel sensors go
+
+| Decision | Chosen | Why |
+|---|---|---|
+| AS5600 wheel encoders (2× I²C) | **removed** | the owner's simplification: stick → PWM, bounded by `duty_cap`. Two breakouts, two magnets, four pull-ups and two buses (GPIO 18/19, 27/14 — now free) out of the harness, and no sensor fault can stop the kart any more |
+| Speed limit, braking PID, rollover protection | **removed with them** | all three needed a measured speed. Cost, stated: nothing limits the turn — in simulation a full-speed full turn at `duty_cap` 1.0 tips with an off-centre load (numbers: [README §5](../README.md#5-critical-safety-points-child)) |
+| Braking | **dynamic brake on A released** | the MDD20A grounds both outputs whenever PWM is low (manual, Table 3) — that is the brake, and it is also why a real freewheel is not available: "A held, stick centred" only imitates one |
 
 ### 2026-09-20 review — the simplification
 

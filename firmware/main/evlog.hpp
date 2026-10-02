@@ -1,8 +1,8 @@
 // evlog.hpp — Persistent EVENT LOG: why did the kart disarm, and when.
 //
 // Born from a real question on the bench: "le véhicule se désarme sans que je sache
-// pourquoi". The web page shows the CURRENT fault mask, but a fault that lasts 300 ms
-// (a starved gamepad heartbeat, an I2C glitch) is long gone by the time anyone looks.
+// pourquoi". The web page shows the CURRENT cause, but a cause that lasts 300 ms
+// (a starved gamepad heartbeat, a tap on B) is long gone by the time anyone looks.
 // This keeps the answer: each event is {boot #, T+ms, code, detail}, appended to a
 // dedicated 64 KB flash partition ("evlog") that survives reboots and power cuts.
 //
@@ -26,11 +26,16 @@ enum class Ev : uint8_t
 {
     Boot    = 1,   // data = esp_reset_reason()
     Arm     = 2,   // data = 0
-    Disarm  = 3,   // data = fault mask at that tick (0 = manual / inactivity timeout)
-    Fault   = 4,   // data = fault bits NEWLY RAISED while armed (rising edges only)
-    // 5 (IdleOff) and 6 (LvcOff) are RETIRED with the power latch — the firmware cannot cut
-    // its own supply any more. The codes stay reserved so records written by an older
-    // firmware keep their meaning when the page reads the partition back.
+    Disarm  = 7,   // data = the Stop cause of that tick (Stop::None = manual / inactivity)
+    // RETIRED codes — a partition written by an older firmware is still on the kart, so these
+    // stay reserved and keep their old meaning when the page reads the journal back:
+    //   3 = the old Disarm, whose data was a fault BITMASK (fb:: bits, gone 2026-09-30) —
+    //       which is exactly why the new one took a fresh code instead of quietly changing
+    //       what `data` means: the same number would have decoded as a mask of causes that
+    //       never happened;
+    //   4 = Fault raised mid-run (there are no faults any more);
+    //   5 = IdleOff and 6 = LvcOff, retired with the power latch — the firmware cannot cut
+    //       its own supply.
 };
 
 // One persisted record, 16 bytes, flash-friendly (a blank slot reads 0xFFFFFFFF).

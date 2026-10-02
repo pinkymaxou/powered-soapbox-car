@@ -8,7 +8,7 @@
 </head><body>
 <header>🛞 Electric kart<span class="pill brakemode" id="i_brakemode">—</span><span class="hdr-state" id="hdrstate">…</span></header>
 <nav class="tabs">
- <button class="tab active" data-tab="faults" id="faultstab">Dashboard</button>
+ <button class="tab active" data-tab="board" id="boardtab">Dashboard</button>
  <button class="tab" data-tab="dash">Graph</button>
  <button class="tab" data-tab="cfg">Configuration</button>
  <button class="tab" data-tab="pad">Gamepad</button>
@@ -20,10 +20,8 @@
 
  <section id="dash" class="panel" hidden>
   <div class="motwarn" hidden></div>
-  <div class="chart-title">Forward · PWM (%) · Wheel RPM — 10 min</div>
+  <div class="chart-title">Forward · PWM (%) — 10 min</div>
   <canvas id="chart" width="520" height="180"></canvas>
-  <div class="chart-title">🏎️ Vehicle speed (m/s, 0 while pivoting) — 1 min</div>
-  <canvas id="spdchart" width="520" height="90"></canvas>
   <div class="chart-title">⏱️ Worst control tick (ms) — 10 min · budget 2 ms</div>
   <canvas id="loopchart" width="520" height="90"></canvas>
   <div id="bars"></div>
@@ -40,10 +38,10 @@
   <p class="note locknote" hidden>🔒 <b>Kart armed</b> — disarm to change these settings.</p>
  </section>
 
- <section id="faults" class="panel">
-  <div class="chart-title">🚨 Currently active faults</div>
+ <section id="board" class="panel">
+  <div class="chart-title">🛞 The kart right now</div>
   <div class="hudcard">
-  <svg id="faultdiag" viewBox="0 0 300 392" role="img" aria-label="Fault location on the vehicle (top view)">
+  <svg id="kartdiag" viewBox="0 0 300 392" role="img" aria-label="The vehicle, seen from above">
    <text class="diagfront" x="150" y="13" text-anchor="middle">▲ FRONT</text>
    <!-- free 10" caster: front centre, on a beam ahead of the deck -->
    <rect class="casterw" x="139" y="26" width="22" height="12" rx="5" transform="rotate(22 150 32)"/>
@@ -51,17 +49,14 @@
    <!-- chassis deck: nose tapers to the caster, square at the rear -->
    <path class="body" d="M124 62 Q150 46 176 62 Q214 90 214 126 V300 Q214 344 188 344 H112 Q86 344 86 300 V126 Q86 90 124 62 Z"/>
    <!-- 12 V battery in the nose, over the caster (counterweight) — not measured:
-        nothing to report here, so it is drawn as plain structure, not as a fault zone -->
+        nothing to report here, so it is drawn as plain structure, not as a live zone -->
    <rect class="zsh" x="118" y="68" width="64" height="32" rx="6"/>
    <text class="zsub" x="150" y="88" text-anchor="middle">12 V pack</text>
-   <!-- live readouts (from status): per-wheel encoder rpm + final vehicle speed -->
-   <text class="ctxlab" x="150" y="126" text-anchor="middle">vehicle speed</text>
-   <g><title>Final vehicle speed — gear ratio applied (m/s)</title><text class="fdms"  id="fd-ms"   x="150" y="145" text-anchor="middle">— m/s</text></g>
-   <g><title>Drive command: forward/reverse/stop + turn (after mixing)</title><text class="fdmix" id="fd-mix" x="150" y="172" text-anchor="middle">—</text></g>
-   <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpml" x="69"  y="186" text-anchor="middle">— rpm</text></g>
-   <g><title>Raw encoder-shaft speed — no gear ratio applied</title><text class="fdrpm" id="fd-rpmr" x="231" y="186" text-anchor="middle">— rpm</text></g>
-   <g><title>5 s sliding median of the encoder rpm</title><text class="fdrpm5" id="fd-rpml5" x="69"  y="202" text-anchor="middle">—</text></g>
-   <g><title>5 s sliding median of the encoder rpm</title><text class="fdrpm5" id="fd-rpmr5" x="231" y="202" text-anchor="middle">—</text></g>
+   <!-- live readouts (from status): what the motors are told + the A (hold-to-drive) state.
+        Nothing measures speed any more, so there is no m/s or rpm to show. -->
+   <text class="ctxlab" x="150" y="150" text-anchor="middle">drive command</text>
+   <g><title>Drive command (after mixing), dynamic brake, or freewheel run-down (remaining PWM)</title><text class="fdmix" id="fd-mix" x="150" y="172" text-anchor="middle">—</text></g>
+   <g><title>A = hold to drive: released, the kart brakes whatever the stick says</title><text class="fdhint" id="fd-drv" x="150" y="190" text-anchor="middle">—</text></g>
    <g><title>Motor PWM (signed): ▲ forward, ▼ reverse</title><text class="fdpwm fdpwml" id="fd-pwml" x="69"  y="218" text-anchor="middle">PWM —</text></g>
    <g><title>Motor PWM (signed): ▲ forward, ▼ reverse</title><text class="fdpwm fdpwmr" id="fd-pwmr" x="231" y="218" text-anchor="middle">PWM —</text></g>
    <text class="ctxlab" x="150" y="234" text-anchor="middle">bench, 6″ ahead of the driven axle</text>
@@ -101,13 +96,14 @@
     <text class="zlab" x="150" y="370" text-anchor="middle">Gamepad</text>
    </g>
   </svg>
-  <div class="diagcap">Red highlights the area affected by an active fault.</div>
+  <div class="diagcap">Red highlights whatever is keeping the kart from driving.</div>
   </div>
   <div id="ind"></div>
-  <div id="faultlist" class="faultlist"></div>
-  <p class="note">A fault <b>disarms</b> the kart and engages dynamic braking. Encoder
-  faults (stuck / reversed / erratic) stay <b>locked until reboot</b>; the
-  others clear once their cause is resolved (you must then rearm with START).</p>
+  <div id="stoplist" class="stoplist"></div>
+  <p class="note">Whatever is listed there <b>disarms</b> the kart and engages dynamic braking.
+  It clears as soon as its cause is gone (B released, gamepad back, calibration done); you then
+  rearm with START. None of these is a breakage — nothing on the kart is measured any more, so
+  there is nothing left that can report itself broken.</p>
  </section>
 
  <section id="pad" class="panel" hidden>
@@ -161,61 +157,69 @@
  <section id="doc" class="panel" hidden>
   <div class="chart-title">💡 LED strip — what the colors mean</div>
   <p class="note">
-   <b>Moving rainbow</b> = armed &amp; ready (driving allowed) ·
+   <b>Moving rainbow</b> = armed &amp; ready (hold A to drive) ·
    <b>yellow</b> = healthy but disarmed (pulses while the START hold is in progress) ·
-   <b>blinking red</b> = fault stop (2 s rapid burst, then 1 Hz until cleared — never solid) ·
+   <b>blinking red</b> = gamepad connected but <b>not calibrated</b>, so START does nothing
+   (2 s rapid burst, then 1 Hz until it is done — never solid) ·
    <b>blue</b> = gamepad calibration in progress.
   </p>
 
-  <div class="chart-title">🎓 Control modes</div>
-  <p class="note">The kart turns the stick into a left/right motor command (arcade mixing:
-   forward drives both wheels, turn adds a left/right difference). What sits <b>between the
-   stick and the motors</b> is what changes between the two modes.</p>
-
-  <div class="dochead">🔒 Closed loop <span class="docsub">— normal driving</span></div>
-  <p class="note">Every safety and comfort layer is active; the encoders measure wheel speed.</p>
+  <div class="chart-title">🎓 How it drives</div>
+  <p class="note">Nothing on the kart measures speed. The stick is mixed (arcade: forward drives
+   both wheels, turn adds a left/right difference) and goes <b>straight to the motors</b>: no speed
+   loop, no turn limiter, no smoothing. <code>duty_cap</code> is the only bound.</p>
   <div class="pipe">
    <span class="blk in">Stick</span><span class="arr">→</span>
    <span class="blk">Deadzone</span><span class="arr">→</span>
-   <span class="blk">Turn slew</span><span class="arr">→</span>
-   <span class="blk">Rollover limit</span><span class="arr">→</span>
-   <span class="blk">Arcade mix</span><span class="arr">→</span>
-   <span class="blk">Speed PID <small>(enc)</small></span><span class="arr">→</span>
+   <span class="blk">Mix <small>(linear / expo)</small></span><span class="arr">→</span>
+   <span class="blk">Accel / decel <small>(%/s)</small></span><span class="arr">→</span>
    <span class="blk">PWM cap</span><span class="arr">→</span>
    <span class="blk out">Motors</span>
   </div>
-
-  <div class="dochead">🔧 Open loop <span class="docsub">— bench / stand testing</span></div>
-  <p class="note">Raw passthrough: only the PWM cap and the safety gates remain — no speed
-   limit, no rollover protection, no smoothing, no PID braking.</p>
-  <div class="pipe">
-   <span class="blk in">Stick</span><span class="arr">→</span>
-   <span class="blk">Deadzone</span><span class="arr">→</span>
-   <span class="blk">Arcade mix</span><span class="arr">→</span>
-   <span class="blk">PWM cap</span><span class="arr">→</span>
-   <span class="blk out">Motors</span>
-  </div>
-
-  <div class="dochead">🕹️ What the stick does</div>
   <table class="doctbl">
-   <tr><th>Stick</th><th>Closed loop</th><th>Open loop</th></tr>
-   <tr><td>▲ / ▼ pushed</td>
-       <td>Drives; speed held at the limit by the PID (separate forward &amp; reverse limits).</td>
-       <td>Raw duty straight to the motors, bounded only by the PWM cap.</td></tr>
-   <tr><td>◀ / ▶ turn</td>
-       <td>Differential steering, tightened as speed rises (rollover protection).</td>
-       <td>Raw differential — no rollover limit.</td></tr>
-   <tr><td>■ centered<br>(released)</td>
-       <td>Active PID brake if enabled, else dynamic brake, else freewheel.</td>
-       <td>Dynamic brake, else freewheel. (No PID braking.)</td></tr>
+   <tr><th>Gamepad</th><th>What the kart does</th></tr>
+   <tr><td>START held ~1 s<br><small>stick centred</small></td><td>Arms. Arming alone moves nothing.</td></tr>
+   <tr><td>A released</td><td><b>Dynamic brake</b> (motor windings shorted), whatever the stick says.</td></tr>
+   <tr><td>A held + stick</td><td>The mixed stick drives the motors, bounded by <code>duty_cap</code>, rising no faster than <code>accel_pct_s</code> and falling no faster than <code>decel_pct_s</code>.</td></tr>
+   <tr><td>A held, stick centred</td><td><b>Pseudo-freewheel</b>: the command simply targets 0 and slides there at <code>decel_pct_s</code> (0 = straight to the brake).</td></tr>
+   <tr><td>B</td><td><b>E-stop</b>: disarm + dynamic brake. Release it, rearm with START.</td></tr>
   </table>
+  <p class="note"><b>Two slopes, one idea.</b> The stick sets a <i>target</i>;
+   <code>accel_pct_s</code> caps how fast the PWM may <b>rise</b> toward it and
+   <code>decel_pct_s</code> how fast it may <b>fall</b> back, both in % of full duty per second.
+   200 %/s = half a second from standstill to full power; 100 %/s = one second to come back down.
+   The rise is there for the <b>motor drivers</b>: a stick slammed open is a step from 0 to full
+   duty, and a brushed motor answers that with its stall current. 0 disables either side.</p>
+  <p class="note"><b>Why "pseudo"-freewheel.</b> The Cytron MDD20A has no coast state: PWM low
+   grounds both motor outputs, and that <i>is</i> the brake. So a real freewheel cannot be had —
+   it is imitated by the <b>fall</b> slope: with A held and the stick centred the target is simply
+   0, and the command slides there at <code>decel_pct_s</code> instead of dropping, so the motor
+   neither pushes nor brakes much on the way. That is why there is no separate run-down setting
+   any more: a run-down <i>is</i> a deceleration rate. Once at 0 it is electrically the brake, and
+   the readout says DYNAMIC rather than pretending to still coast. Flat ground only: nothing
+   measures a slope.</p>
+  <p class="note"><b>Neither slope delays the brake.</b> Releasing A, disarming, B, a lost or
+   silent gamepad: all of those ground the windings on the tick they happen, whatever the ramps
+   are doing. The slopes only shape a command the driver is still asking for.</p>
+  <p class="note"><b>Simulated</b>, from full speed on the flat: A released → ~1.6 m/s half a
+   second later, then stopped · freewheel → still ~1.9 m/s at that same half second, stopped
+   once the run-down ends · e-stop mushroom (power cut, true freewheel) → coasts ~10.7 m. With A
+   released on a slope the kart creeps at ~0.2 m/s (8 %) or ~0.5 m/s (16 %); a power cut on a
+   slope runs away.</p>
 
-  <div class="dochead">🛑 Always on — every mode</div>
-  <p class="note"><b>Disarmed, fault, e-stop or gamepad lost → dynamic braking</b> (motor
-   windings shorted): the safe resting state, independent of every setting above.<br>
-   On release, <b>Dynamic brake</b> shorts the windings to hold the kart; <b>Freewheel</b>
-   (dynamic brake turned off) lets the wheels spin free. The Dashboard centre readout shows
-   which one is active right now.</p>
+  <div class="dochead">🛑 Limits &amp; safeties</div>
+  <p class="note"><b>Always on:</b> disarmed, B, gamepad lost or silent for 750 ms, gamepad
+   not calibrated → disarm + dynamic brake. Driving needs a calibrated gamepad; the kart disarms itself after
+   <code>disarm_s</code> without driving. The gamepad buzzes when the stick is pushed while
+   <b>not</b> armed — not when armed with A released, which is the normal way to brake — and
+   gives a soft pulse on arming and a strong one on B.</p>
+  <p class="note"><b>No rollover protection</b> — it went with the encoders, by the owner's
+   decision; <code>duty_cap</code> is the only lever. Simulation, full-speed full turn (18T
+   gearing): two children centred stay planted at 1.0; one child sitting off-centre, or an adult
+   + a child, <b>tip at 1.0</b> and stay upright at 0.9; 0.8 gives about the margin the old
+   protection had. The default stays 1.0. On the flat with 40 lb pellet bags aboard the owner could
+   not tip it — the bags sit lower than a seated child, and the model has never been checked
+   against a real tip test.</p>
 
   <div class="dochead">⚙️ Gear &amp; sprocket ratios <span class="docsub">— motor to wheel, per side</span></div>
   <p class="note">Each rear (driven) wheel has its own drivetrain: a printed <b>two-stage gearbox</b>, then
@@ -225,11 +229,11 @@
    at the real centre distances, only the chain run is shortened to fit:</p>
 
   <svg class="gears" viewBox="0 0 340 196" role="img"
-       aria-label="Drivetrain: 16T motor pinion into 80T, compound 30T into 80T output, 25T sprocket driving a 32T sprocket on the 10 inch wheel through a number 35 roller chain">
+       aria-label="Drivetrain: 16T motor pinion into 80T, compound 30T into 80T output, 18T sprocket driving a 32T sprocket on the 10 inch wheel through a number 35 roller chain">
    <!-- wheel + chain (drawn first: everything else sits on top) -->
    <circle class="tyre" cx="250" cy="105" r="78.7"/>
    <circle cx="250" cy="105" r="66" fill="none" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 5"/>
-   <path class="chain" d="M98.2 63.6 L253.5 75.1 M92.8 110.5 L246.5 134.9"/>
+   <path class="chain" d="M96.0 70.0 L251.0 74.9 M92.1 103.7 L244.0 134.5"/>
    <!-- motor + stage 1: pinion 16T -> 80T (24 DP, module 1.058) -->
    <rect x="6" y="50" width="24" height="24" rx="4" class="body"/>
    <path class="wire" d="M30 62 H33"/>
@@ -241,7 +245,7 @@
     <circle class="body" cx="69.5" cy="62" r="9.8"/><circle class="teeth" cx="69.5" cy="62" r="9.8"/>
    </g>
    <!-- #35 sprockets: 3/8″ pitch, so they dwarf a toothed pulley of the same tooth count -->
-   <circle class="spr" cx="95.5" cy="87" r="23.6"/>
+   <circle class="spr" cx="95.5" cy="87" r="17.0"/>
    <circle class="spr" cx="250" cy="105" r="30.1"/>
    <!-- labels -->
    <text x="18" y="66" text-anchor="middle">M</text>
@@ -249,7 +253,7 @@
    <text x="56" y="44" text-anchor="middle">80T</text>
    <text x="69.5" y="66" text-anchor="middle">30T</text>
    <text x="112" y="108" text-anchor="middle">80T</text>
-   <text x="95.5" y="91" text-anchor="middle">25T</text>
+   <text x="95.5" y="91" text-anchor="middle">18T</text>
    <text x="250" y="109" text-anchor="middle">32T</text>
    <text class="dim" x="150" y="95" text-anchor="middle">#35 chain</text>
    <text class="dim" x="250" y="160" text-anchor="middle">wheel 10″</text>
@@ -260,21 +264,21 @@
   <p class="note">Two things the drawing is telling you. The <b>two 80T overlap</b> because they
    really do overlap seen from above — they live in <b>different tooth planes</b>, one above the
    other, which is what sets the depth of the housing and why nothing may stick out into the
-   neighbouring plane. And the <b>25T sprocket is nearly as big as the 80T gear</b> next to it:
-   #35 chain has a 3/8″ (9.53 mm) pitch against the gearbox's 1.06 mm module, so a sprocket tooth
-   is roughly nine times the pitch of a gear tooth.</p>
+   neighbouring plane. And the <b>18T sprocket is two-thirds the size of the 80T gear</b> next to
+   it: #35 chain has a 3/8″ (9.53 mm) pitch against the gearbox's 1.06 mm module, so a sprocket
+   tooth is roughly nine times the pitch of a gear tooth.</p>
 
   <table class="doctbl">
    <tr><th>Stage</th><th>Teeth</th><th>Ratio</th><th>Cumulative</th></tr>
    <tr><td>1 — pinion → gear</td><td>16T → 80T <small>(24 DP, metal pinion)</small></td><td>5.000 : 1</td><td>5.00</td></tr>
    <tr><td>2 — compound → output</td><td>30T → 80T <small>(30T is one part with the stage-1 80T)</small></td><td>2.667 : 1</td><td>13.33</td></tr>
-   <tr><td>3 — #35 roller chain</td><td>25T → 32T <small>(coprime: every tooth meets every link, wear spreads)</small></td><td>1.280 : 1</td><td><b>17.07</b></td></tr>
+   <tr><td>3 — #35 roller chain</td><td>18T → 32T</td><td>1.778 : 1</td><td><b>23.70</b></td></tr>
   </table>
 
-  <p class="note"><b>Speed</b>: 4615 rpm ÷ 17.07 ≈ 270 rpm at the wheel, × π × 0.254 m ≈
-   <b>3.6 m/s</b> unloaded at 12 V (~3.4 m/s in practice) — well above what the firmware allows,
-   the real cap is <code>speed_limit_ms</code>. <b>Torque</b> multiplies the same way in reverse:
-   ~0.36 N·m at the motor becomes ~6 N·m at the wheel, which is why stage 2 is the thick one.</p>
+  <p class="note"><b>Speed</b>: 4615 rpm ÷ 23.70 ≈ 195 rpm at the wheel, × π × 0.254 m ≈
+   <b>2.6 m/s</b> unloaded at 12 V (~2.5 m/s loaded, in simulation). Nothing in the firmware caps
+   it but <code>duty_cap</code>. <b>Torque</b> multiplies the same way in reverse: ~0.36 N·m at the
+   motor becomes ~8.5 N·m at the wheel, which is why stage 2 is the thick one.</p>
 
   <p class="note"><b>Why a chain and not a belt.</b> A chain is <b>cut to whatever length you
    need</b> — add or drop links, close it with a master link — so the gearbox-to-wheel centre
@@ -283,17 +287,6 @@
    that settles it. The counterpart: unlike a belt a chain does <b>not damp shocks</b> (they go
    straight into the gear teeth) and it wants <b>lubrication, alignment and re-tensioning</b> — a
    slack chain climbs the sprocket flank and is thrown.</p>
-
-  <div class="dochead">🧲 Where the AS5600 sits <span class="docsub">— sets <code>enc_per_wheel</code></span></div>
-  <p class="note">The sensor measures <b>the shaft it is bolted to</b>, not the wheel, so the
-   firmware has to be told where in the drivetrain it is. A wrong value scales every speed reading
-   and trips false <i>encoder</i> faults.</p>
-  <table class="doctbl">
-   <tr><th>Magnet mounted on</th><th>Sensor turns per wheel turn</th><th><code>enc_per_wheel</code></th></tr>
-   <tr><td>Gearbox output shaft <small>(current build)</small></td><td>chain only → 1.28</td><td><b>1.28</b></td></tr>
-   <tr><td>Intermediate shaft <small>(after the ×5 stage)</small></td><td>2.667 × 1.28</td><td>3.41</td></tr>
-   <tr><td>Wheel hub</td><td>direct drive → 1</td><td>1.00</td></tr>
-  </table>
 
   <div class="dochead">⚡ Power <span class="docsub">— one relay, the e-stop, and a diode that earns its keep</span></div>
   <p class="note">The whole kart hangs off <b>one relay</b>. Its coil is fed through the
@@ -348,7 +341,7 @@
    <b>1N4007 in series</b> in the coil loop decides for it: with the battery backwards the diode
    blocks, the coil sees nothing, the contact stays open, and <b>no current reaches anything</b> —
    not the motor driver (no reverse protection of its own, destroyed instantly by reversed VB+),
-   not the buck, not the ESP32, not the sensors. Nothing blows and nothing is stressed; put the
+   not the buck, not the ESP32. Nothing blows and nothing is stressed; put the
    battery back the right way and the kart starts. Fit it <b>band toward the relay</b> — backwards,
    the relay simply never closes, which is a loud and harmless way to fail.</p>
 
@@ -363,15 +356,15 @@
 
   <p class="note"><b>The firmware has no say in any of this.</b> There is no power latch and no
    coil sense: the ESP32 cannot hold its own supply and cannot cut it. Press the mushroom and the
-   brain dies with the motors — which is why there is no "emergency stop engaged" fault on this
+   brain dies with the motors — which is why nothing on this page ever reports "emergency stop engaged" on this
    page any more, and no self power-off after an idle period. The kart is switched off the way a
    lawnmower is: by hand.</p>
 
   <p class="note"><b>No buttons either.</b> The arming button on GPIO16 is gone with the rest of
    the GPIO inputs: arming is a ~1 s hold on the <b>gamepad's START/Options</b> button, stick
    centred — which is what the driver had in hand anyway, and which nobody standing beside the
-   kart can press. The ESP32 now uses <b>no input pin at all</b>: two I²C buses in, four motor
-   pins and one LED data line out.</p>
+   kart can press. The ESP32 now uses <b>no input pin at all</b>: four motor pins and one LED
+   data line, all outputs.</p>
 
   <p class="note"><b>Always 12 V, never measured.</b> One 12 V motorcycle battery, which is also
    the motors' nominal voltage — so there is nothing to scale down and nothing to cap. The ADS1115
@@ -387,15 +380,13 @@
    <tr><td colspan="3"><div class="motwarn" hidden></div><small>Motor wiring can be corrected in software
     (Settings → Behavior): <code>mot_inv_l</code> / <code>mot_inv_r</code> flip one wheel's direction,
     <code>mot_swap_lr</code> sends the LEFT wheel to the RIGHT channel (26/25 ↔ 33/32) and vice versa.</small></td></tr>
-   <tr><td>18 / 19</td><td>I²C bus 0 (SDA/SCL) — AS5600 left wheel (0x36)</td><td>I/O</td></tr>
-   <tr><td>27 / 14</td><td>I²C bus 1 (SDA/SCL) — AS5600 right wheel (0x36)</td><td>I/O</td></tr>
    <tr><td>4</td><td>WS2812B LED strip (data)</td><td>output</td></tr>
    <tr><td>2</td><td>Status LED (onboard)</td><td>output</td></tr>
    <tr><th colspan="3">Free</th></tr>
-   <tr><td>13 / 16 / 21 / 22 / 23</td><td>unused <small>(13 = power latch, 22 = e-stop sense, 16 = arming button — all three gone)</small></td><td>—</td></tr>
+   <tr><td>13 / 14 / 16 / 18 / 19 / 21 / 22 / 23 / 27</td><td>unused <small>(13 = power latch, 22 = e-stop sense, 16 = arming button, 18/19 and 27/14 = the wheel-encoder I²C buses — all gone)</small></td><td>—</td></tr>
    <tr><td>34 / 35 / 36 / 39</td><td>unused</td><td>input-only, no internal pulls</td></tr>
   </table>
-  <p class="note">Control = <b>Bluetooth gamepad</b> (Gamepad tab). Reversed tricycle: 2 driven wheels at the REAR (6″ behind the bench) + 1 free 10″ caster at the front centre. a_tip ≈ 0.53 g — the turn limiter is what keeps it upright, never disable it with a child aboard.<br>
+  <p class="note">Control = <b>Bluetooth gamepad</b> (Gamepad tab). Reversed tricycle: 2 driven wheels at the REAR (6″ behind the bench) + 1 free 10″ caster at the front centre. Nothing limits the turn at speed: see <i>Limits &amp; safeties</i> above for what <code>duty_cap</code> does to a full turn.<br>
   Disconnected or uncalibrated gamepad → <b>braking / refuses to drive</b>. Emergency stop = mushroom
   in the main relay's coil loop: it cuts the whole kart, brain included, so the firmware never sees it.
   Power comes back on the main switch, and the kart always wakes up <b>disarmed</b>.</p>
@@ -406,8 +397,8 @@
   <table class="pins" id="systbl"><tr><td>Loading…</td></tr></table>
   <hr>
   <h3>🪵 Event log</h3>
-  <p class="note">"Why did it disarm?" — every arm/disarm (with the fault mask of that very tick),
-   fault raised mid-run, boot and power-off is journaled to a dedicated flash partition: it
+  <p class="note">"Why did it disarm?" — every arm and disarm (with the cause of that very
+   tick), boot and power-off is journaled to a dedicated flash partition: it
    survives reboots and power cuts. Events raised <b>while driving</b> wait in RAM and land on
    flash at the disarm (flash writes are never allowed to freeze the control loop mid-run).</p>
   <div class="row">
@@ -429,13 +420,13 @@
 
 </div>
 <script>
-// Mirror the C++ State / Fault enums (config.hpp) — index = value.
-const STATE={LOCKOUT:0,CALIBRATE:1,RUN:2,FAULT:3};
-const FAULT={NONE:0,ESTOP:1,NOT_CALIBRATED:3,ENCODER:4,ENCODER_DIR:5,ENCODER_MAD:6,ENCODER_ABSENT:7};
-const ST=["IDLE","CALIBRATION","ARMED","FAULT"];                       // labels per STATE
-// Labels per FAULT. Index 2 (was LOW BATTERY) is retired with the voltage sensor: the slot
-// stays so every other label keeps its number, matching Fault:: on the firmware side.
-const FA=["—","E-STOP","—","NOT CALIBRATED","ENCODER STUCK","ENCODER REVERSED","ENCODER ERRATIC","ENCODER ABSENT","MAGNET OUT OF RANGE"];
+// Mirror the C++ State / Stop enums (control_types.hpp) — index = value.
+const STATE={LOCKOUT:0,CALIBRATE:1,RUN:2};
+const ST=["IDLE","CALIBRATION","ARMED"];                               // labels per STATE
+// WHY the kart will not drive — one cause, mirrors enum class Stop. There is no fault enum
+// and no fault mask any more (2026-09-30): see STOP_DESC below for the texts.
+const STOP={NONE:0,PAD_LOST:1,PAD_STALE:2,ESTOP:3,NOT_CALIBRATED:4};
+const SL=["—","NO GAMEPAD","GAMEPAD SILENT","E-STOP","NOT CALIBRATED"];
 // ── BINARY protocol (Protocol Buffers) ──
 // Descriptor = exact mirror of firmware/main/proto/kart.proto (same names, same numbers).
 // Decoded by the protobuf.js runtime (/pb.js, embedded). The frames are ~3× smaller
@@ -445,15 +436,15 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
   bval:{type:"bool",id:2},ival:{type:"int32",id:3},fval:{type:"float",id:4}}},
  Req:{fields:{type:{type:"string",id:1},ssid:{type:"string",id:2},pass:{type:"string",id:3},
       enabled:{type:"bool",id:4},set:{rule:"repeated",type:"ParamVal",id:5}}},
- Status:{fields:{state:{type:"int32",id:1},fault:{type:"int32",id:2},faults:{type:"uint32",id:3},
-  speed_ms:{type:"float",id:8},rpm_l:{type:"float",id:9},
-  rpm_r:{type:"float",id:10},fwd:{type:"float",id:11},turn:{type:"float",id:12},
+ Status:{fields:{state:{type:"int32",id:1},
+  fwd:{type:"float",id:11},turn:{type:"float",id:12},
   out_l:{type:"float",id:13},out_r:{type:"float",id:14},brake_mode:{type:"int32",id:15},
   arming:{type:"bool",id:16},btn_start:{type:"bool",id:17},pad_conn:{type:"bool",id:18},
   pad_batt:{type:"int32",id:19},pad_x:{type:"float",id:20},pad_y:{type:"float",id:21},
   pad_cx:{type:"float",id:22},pad_cy:{type:"float",id:23},pad_zl:{type:"float",id:24},
   pad_zr:{type:"float",id:25},pad_rx2:{type:"float",id:26},pad_ry2:{type:"float",id:27},
-  pad_btns:{type:"uint32",id:28},pad_age_ms:{type:"int32",id:29},
+  pad_btns:{type:"uint32",id:28},pad_age_ms:{type:"int32",id:29},btn_drive:{type:"bool",id:31},
+  stop:{type:"int32",id:32}
   }},
  ParamMeta:{oneofs:{value:{oneof:["bval","ival","fval"]},minv:{oneof:["bmin","imin","fmin"]},
    maxv:{oneof:["bmax","imax","fmax"]},defv:{oneof:["bdef","idef","fdef"]}},
@@ -464,9 +455,8 @@ const PB_ROOT=protobuf.Root.fromJSON({nested:{
    bdef:{type:"bool",id:17},idef:{type:"int32",id:18},fdef:{type:"float",id:19}}},
  Config:{fields:{params:{rule:"repeated",type:"ParamMeta",id:1}}},
  Vals:{fields:{params:{rule:"repeated",type:"ParamVal",id:1}}},
- Hist:{fields:{dt_fast:{type:"uint32",id:1},dt_spd:{type:"uint32",id:2},
+ Hist:{fields:{dt_fast:{type:"uint32",id:1},
   accel:{type:"bytes",id:4},pwml:{type:"bytes",id:5},pwmr:{type:"bytes",id:6},
-  rpml:{type:"bytes",id:7},rpmr:{type:"bytes",id:8},spd:{type:"bytes",id:9},
   loop:{type:"bytes",id:11}}},
  Pad:{fields:{conn:{type:"bool",id:1},name:{type:"string",id:2},batt:{type:"int32",id:3},
   calibrated:{type:"bool",id:4},calstate:{type:"int32",id:5},pairing:{type:"bool",id:6}}},
@@ -507,53 +497,34 @@ function pbDecode(buf){
  const which=env.body; if(!which)return null;
  const m=PB_MSG.toObject(env,{defaults:true,longs:Number})[which];
  m.type=which;
- if(which==='hist')for(const k of['accel','pwml','pwmr','rpml','rpmr','spd'])
+ if(which==='hist')for(const k of['accel','pwml','pwmr','loop'])
    m[k]=m[k]?Array.from(m[k]):[];
  if(which==='config'||which==='vals')m.params=m.params||[];
  if(which==='evlog')m.ev=m.ev||[];
  return m;
 }
 let ws,timer,histTimer,built=false;
-let speedScale=3.3;  // m/s ≙ 100 % (speed bars), set from the config
-let useEnc=1;   // use_encoders (from config): when 0, encoder-sensor faults are warnings, not errors
-// MEDIAN over a sliding time window, for the noisy readouts. A median is the right tool
-// here and an average is not: the encoder produces aliasing BURSTS and the pack sags in
-// DIPS under load — outliers, which a mean would smear across the whole window while the
-// median simply ignores them. Windows are in seconds of wall clock, not in samples, so a
-// throttled background tab widens nothing.
-const MED_RPM_S=5;
-let med={l:[],r:[]};
-function medianWindow(buf,v,now,win_s){
- buf.push({t:now,v:v});
- const cut=now-win_s*1000;
- while(buf.length&&buf[0].t<cut)buf.shift();
- const a=buf.map(o=>o.v).sort((x,y)=>x-y), n=a.length;
- if(!n)return null;
- return (n&1)?a[(n-1)>>1]:(a[n/2-1]+a[n/2])/2;
-}
 
 // Tabs
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
  t.classList.add('active');
  document.querySelectorAll('.panel').forEach(p=>p.hidden=(p.id!==t.dataset.tab));
- if(t.dataset.tab==='dash'){[chMain,chSpd].forEach(c=>{if(c){c.resize();c.update('none');}});}  // was hidden → size now
+ if(t.dataset.tab==='dash'){[chMain,chLoop].forEach(c=>{if(c){c.resize();c.update('none');}});}  // was hidden → size now
  if(t.dataset.tab==='wifi') loadWifi();
  if(t.dataset.tab==='sys') loadSys();
  if(t.dataset.tab==='pad') loadPad();
 });
 
 // ── Charts (Chart.js, embedded/served by the ESP32; data kept in RAM) ──
-// Main: accel + PWM in % over 10 min. Vehicle speed: m/s (0–5) over 1 min.
-let chMain, chSpd, chLoop;
+// Main: forward + PWM in % over 10 min. Loop: worst control tick over 10 min.
+let chMain, chLoop;
 const dset=(label,color,yID)=>({label,borderColor:color,backgroundColor:color,data:[],borderWidth:1.5,fill:false,tension:.15,yAxisID:yID||'y'});
-function mkChart(id,datasets,ymin,ymax,unit,dec,aspect,legend,y2){
+function mkChart(id,datasets,ymin,ymax,unit,dec,aspect,legend){
  const scales={
    x:{type:'linear',min:0,max:1,grid:{color:'#262626'},border:{color:'#444'},ticks:{display:false}},
    y:{min:ymin,max:ymax,grid:{color:'#262626'},border:{color:'#444'},
       ticks:{color:'#888',stepSize:(ymax-ymin)/4,callback:v=>v.toFixed(dec)+unit}}};
- if(y2){scales.y2={position:'right',min:0,max:y2.max,grid:{display:false},border:{color:'#444'},
-      ticks:{color:'#888',stepSize:y2.max/4,callback:v=>v.toFixed(0)+y2.unit}};}
  return new Chart(document.getElementById(id),{
   type:'line', data:{datasets},
   options:{responsive:true,maintainAspectRatio:true,aspectRatio:aspect,animation:false,parsing:false,normalized:true,
@@ -563,12 +534,10 @@ function mkChart(id,datasets,ymin,ymax,unit,dec,aspect,legend,y2){
  });
 }
 function initCharts(){
- // LEFT = reds (port), RIGHT = greens (starboard); two shades so PWM vs RPM stay distinct.
- chMain=mkChart('chart',[dset('Forward %','#3cf'),dset('PWM L','#ff5252'),dset('PWM R','#3ddc84'),
-   dset('RPM L','#ff9a9a','y2'),dset('RPM R','#9ff0be','y2')],0,100,'%',0,2.9,true,{max:1100,unit:' rpm'});
- chSpd =mkChart('spdchart',[dset('Speed','#f6f')],0,5,' m/s',1,5.8,false);
- // Worst tick per 5 s slot. The 2 ms budget is the reference: above it the 500 Hz loop
- // really did run slower, which is how a sensor that stops answering shows itself.
+ // LEFT = red (port), RIGHT = green (starboard).
+ chMain=mkChart('chart',[dset('Forward %','#3cf'),dset('PWM L','#ff5252'),dset('PWM R','#3ddc84')],0,100,'%',0,2.9,true);
+ // Worst tick per slot. The 2 ms budget is the reference: above it the 500 Hz loop
+ // really did run slower.
  chLoop=mkChart('loopchart',[dset('Worst tick','#f5a')],0,6,' ms',1,5.8,false);
 }
 function setSeries(ch,idx,arr){
@@ -580,10 +549,7 @@ function applyHist(m){
  if(Array.isArray(m.accel))setSeries(chMain,0,m.accel);   // %
  if(Array.isArray(m.pwml)) setSeries(chMain,1,m.pwml);
  if(Array.isArray(m.pwmr)) setSeries(chMain,2,m.pwmr);
- if(Array.isArray(m.rpml)) setSeries(chMain,3,m.rpml.map(v=>v*5));   // ÷5 encoded → rpm (right axis)
- if(Array.isArray(m.rpmr)) setSeries(chMain,4,m.rpmr.map(v=>v*5));   // ÷5 encoded → rpm (right axis)
  chMain.update('none');
- if(Array.isArray(m.spd)){ setSeries(chSpd,0,m.spd.map(v=>v/10)); chSpd.update('none'); }   // ×10 → m/s
  if(Array.isArray(m.loop)){ setSeries(chLoop,0,m.loop.map(v=>v*50/1000)); chLoop.update('none'); } // 50 µs → ms
 }
 
@@ -598,9 +564,6 @@ const BARS=[
  {id:'turn', label:'Turn',          color:'#8cf', bip:1, sv:s=>s.turn*100,       t:s=>(s.turn*100).toFixed(0)+'% '+(s.turn>.001?'▶ right':(s.turn<-.001?'◀ left':'–'))},
  {id:'pwml', label:'PWM motor L',   color:'#ff5252', bip:1, sv:s=>s.out_l*100,   t:s=>(s.out_l*100).toFixed(0)+'% '+dirTxt(s.out_l)},
  {id:'pwmr', label:'PWM motor R',   color:'#3ddc84', bip:1, sv:s=>s.out_r*100,   t:s=>(s.out_r*100).toFixed(0)+'% '+dirTxt(s.out_r)},
- {id:'spdv', label:'Vehicle speed', color:'#f6f', bip:1, sv:s=>s.speed_ms/5*100, t:s=>s.speed_ms.toFixed(2)+' m/s '+dirTxt(s.speed_ms)},
- {id:'spdl', label:'Left encoder (rpm)', tip:'Raw encoder-shaft speed — no gear ratio applied', color:'#ff9a9a', bip:1, sv:s=>s.rpm_l/1100*100, t:s=>s.rpm_l.toFixed(0)+' rpm '+dirTxt(s.rpm_l)},
- {id:'spdr', label:'Right encoder (rpm)', tip:'Raw encoder-shaft speed — no gear ratio applied', color:'#9ff0be', bip:1, sv:s=>s.rpm_r/1100*100, t:s=>s.rpm_r.toFixed(0)+' rpm '+dirTxt(s.rpm_r)},
 ];
 function buildBars(){
  document.getElementById('bars').innerHTML=BARS.map(b=>
@@ -609,11 +572,12 @@ function buildBars(){
 }
 // Indicators (pills): buttons + boolean outputs
 const INDS=[
- {k:'pad_conn',l:'GAMEPAD'},{k:'arming',l:'ARMED'},{k:'btn_start',l:'START'}
+ {k:'pad_conn',l:'GAMEPAD'},{k:'arming',l:'ARMED'},{k:'btn_start',l:'START'},{k:'btn_drive',l:'A · DRIVE'}
 ];
-// EFFECTIVE braking mode — displayed AT ALL TIMES (source: firmware, brake_mode):
-// 2 = ACTIVE (PID + encoders) · 1 = DYNAMIC (phase short-circuit) · 0 = traction.
-const BRAKE_MODES=['⚪ TRACTION','🟠 DYNAMIC BRAKING (short-circuit)','🟢 ACTIVE BRAKING (PID)'];
+// EFFECTIVE output mode — displayed AT ALL TIMES (source: firmware, brake_mode):
+// 0 = driving (A held + stick) · 1 = DYNAMIC (short-circuit: A released, disarmed, blocked)
+// · 2 = COAST (A held, stick centred: pseudo-freewheel, the PWM slides down at decel_pct_s).
+const BRAKE_MODES=['⚪ DRIVING','🟠 DYNAMIC BRAKE (short-circuit)','🔵 FREEWHEEL (run-down)'];
 function buildInds(){
  document.getElementById('ind').innerHTML=
   INDS.map(i=>`<span class="pill" id="i_${i.k}">${i.l}</span>`).join('');
@@ -621,9 +585,7 @@ function buildInds(){
 function updateInds(s){
  INDS.forEach(i=>document.getElementById('i_'+i.k).classList.toggle('on', !!s[i.k]));
  const b=document.getElementById('i_brakemode'), m=s.brake_mode||0;
- // brake_mode 0 = no brake: TRACTION while driving, FREEWHEEL while coasting (stick centered).
- const coasting = (m===0 && Math.abs(s.fwd)<0.02 && Math.abs(s.turn)<0.02);
- b.textContent = coasting ? '⚪ FREEWHEEL' : (BRAKE_MODES[m]||m);
+ b.textContent=BRAKE_MODES[m]||m;
  b.className='pill brakemode bm'+m;
 }
 function updateBars(s){
@@ -674,7 +636,7 @@ function drawPad(s){
  g.strokeStyle='#777'; g.beginPath(); g.moveTo(X(s.pad_x),Y(s.pad_y)); g.lineTo(X(s.pad_cx),Y(s.pad_cy)); g.stroke();
  const dot=(x,y,col,rad)=>{g.beginPath(); g.arc(X(x),Y(y),rad,0,7); g.fillStyle=col; g.fill();};
  dot(s.pad_cx,s.pad_cy,'#fa0',6);   // compensated command (square)
- dot(s.pad_x,s.pad_y,(s.faults&1)?'#f55':(s.pad_conn?'#3cf':'#666'),5);   // physical; red if e-stop (bit 0)
+ dot(s.pad_x,s.pad_y,(s.stop===STOP.ESTOP)?'#f55':(s.pad_conn?'#3cf':'#666'),5);   // physical; red on e-stop
 }
 // Right stick: simple display (1 dot, circle, no compensation or calibration).
 function drawStick2(s){
@@ -702,40 +664,46 @@ function drawDpad(s){
 }
 function showStatus(s){
  const st=ST[s.state]||s.state;
- const hs=document.getElementById('hdrstate'); hs.textContent=st; hs.className='hdr-state s'+s.state;
+ // Armed but A released = braking, not driving: say it where the arming state is shown.
+ const holdA=!!s.arming&&!s.btn_drive;
+ const hs=document.getElementById('hdrstate'); hs.textContent=holdA?st+' · HOLD A':st;
+ hs.className='hdr-state s'+s.state+(holdA?' holda':'');
  updateBars(s);
  updateInds(s);
- drawPad(s);
- drawStick2(s);
- drawDpad(s);
- updatePadBtns(s.pad_btns);
- const zl=document.getElementById('zlf'); if(zl) zl.style.width=((s.pad_zl||0)*100).toFixed(0)+'%';
- const zr=document.getElementById('zrf'); if(zr) zr.style.width=((s.pad_zr||0)*100).toFixed(0)+'%';
- const pr=document.getElementById('padraw'); if(pr) pr.textContent='btns 0x'+((s.pad_btns||0)>>>0).toString(16).padStart(5,'0');
+ // The gamepad panel is three canvas redraws and a row of pills per frame, for a tab that is
+ // hidden most of the time. Drawing into a hidden panel is work nobody can see: skip it, and
+ // let the next status (≤ 50 ms away) fill it in when the tab is opened.
+ if(!document.getElementById('pad').hidden){
+   drawPad(s);
+   drawStick2(s);
+   drawDpad(s);
+   updatePadBtns(s.pad_btns);
+   const zl=document.getElementById('zlf'); if(zl) zl.style.width=((s.pad_zl||0)*100).toFixed(0)+'%';
+   const zr=document.getElementById('zrf'); if(zr) zr.style.width=((s.pad_zr||0)*100).toFixed(0)+'%';
+   const pr=document.getElementById('padraw'); if(pr) pr.textContent='btns 0x'+((s.pad_btns||0)>>>0).toString(16).padStart(5,'0');
+ }
  const nowArmed=!!s.arming;
  if(nowArmed!==armedLock){armedLock=nowArmed;updateLocks();}
- showFaults(s.faults>>>0);
- const _rl=document.getElementById('fd-rpml'); if(_rl)_rl.textContent=s.rpm_l.toFixed(0)+' rpm';
- const _rr=document.getElementById('fd-rpmr'); if(_rr)_rr.textContent=s.rpm_r.toFixed(0)+' rpm';
- const _vm=document.getElementById('fd-ms');   if(_vm)_vm.textContent=s.speed_ms.toFixed(2)+' m/s';
- const _now=performance.now();
- const _ml=medianWindow(med.l,s.rpm_l,_now,MED_RPM_S);
- const _mr=medianWindow(med.r,s.rpm_r,_now,MED_RPM_S);
- const _l5=document.getElementById('fd-rpml5'); if(_l5)_l5.textContent='5 s: '+_ml.toFixed(0);
- const _r5=document.getElementById('fd-rpmr5'); if(_r5)_r5.textContent='5 s: '+_mr.toFixed(0);
+ showStop(s.stop|0);
  // Mix outputs on the schematic: drive (fwd/rev/stop) + turn, and per-motor PWM.
  const _sv=(id,t)=>{const e=document.getElementById(id); if(e)e.textContent=t;};
  const _pct=v=>(Math.abs(v)*100).toFixed(0), _arw=v=>v>0.02?'▲':(v<-0.02?'▼':'■');
  const _drv=s.fwd>0.02?('▲ FWD '+_pct(s.fwd)+'%'):(s.fwd<-0.02?('▼ REV '+_pct(s.fwd)+'%'):'■ STOP');
  const _trn=s.turn>0.02?(' · ▶ '+_pct(s.turn)+'%'):(s.turn<-0.02?(' · ◀ '+_pct(s.turn)+'%'):'');
- // Centre readout: brake mode when a brake is engaged (2 = active PID, 1 = dynamic
- // short-circuit), otherwise the drive command. Coasting (open-loop centred) = STOP, no brake.
+ // Centre readout, straight from brake_mode: 1 = dynamic brake (short-circuit), 2 = freewheel
+ // run-down (remaining PWM shown: at 0 it is electrically the brake), 0 = the drive command.
  const _fm=document.getElementById('fd-mix'), _bm=s.brake_mode||0;
  if(_fm){
-   if(_bm===2){ _fm.textContent='⏹ ACTIVE BRAKE';  _fm.setAttribute('class','fdmix act'); }
-   else if(_bm===1){ _fm.textContent='⏹ DYNAMIC BRAKE'; _fm.setAttribute('class','fdmix dyn'); }
-   else if(Math.abs(s.fwd)<0.02 && Math.abs(s.turn)<0.02){ _fm.textContent='○ FREEWHEEL'; _fm.setAttribute('class','fdmix free'); }
+   if(_bm===1){ _fm.textContent='⏹ DYNAMIC BRAKE'; _fm.setAttribute('class','fdmix dyn'); }
+   else if(_bm===2){ _fm.textContent='○ FREEWHEEL ↘'+_pct(Math.max(Math.abs(s.out_l),Math.abs(s.out_r)))+'%'; _fm.setAttribute('class','fdmix free'); }
    else { _fm.textContent=_drv+_trn; _fm.setAttribute('class','fdmix'); }
+ }
+ // A (hold to drive) under it: the dead man, the reason an armed kart may still be braking.
+ const _fd=document.getElementById('fd-drv');
+ if(_fd){
+   if(!s.arming){ _fd.textContent='START to arm'; _fd.setAttribute('class','fdhint'); }
+   else if(holdA){ _fd.textContent='hold A to drive'; _fd.setAttribute('class','fdhint warn'); }
+   else { _fd.textContent='A held'; _fd.setAttribute('class','fdhint on'); }
  }
  // PWM gauge: 33 px = half of the 66 px track; fill grows up (forward) or down (reverse)
  // from the zero line, which sits on the driven axle, behind the bench.
@@ -747,7 +715,8 @@ function showStatus(s){
  _sv('fd-pwml','PWM '+_arw(s.out_l)+_pct(s.out_l)+'%');
  _sv('fd-pwmr','PWM '+_arw(s.out_r)+_pct(s.out_r)+'%');
  document.getElementById('status').textContent=
-  `State: ${st}${s.fault?('  ·  fault: '+(FA[s.fault]||s.fault)):''}\n`+
+  `State: ${st}${s.arming?(holdA?'  ·  A released → braking, hold A to drive':'  ·  A held'):''}`+
+  `${s.stop?('  ·  blocked: '+(SL[s.stop]||s.stop)):''}\n`+
   `Gamepad: ${s.pad_conn?'connected':'disconnected'}${s.pad_batt>=0?(' ('+s.pad_batt+'%)'):''}`;
 }
 
@@ -772,48 +741,35 @@ function updateMotWarn(){
 function deriveFromCfg(p){
  const v=pmv(p,'val');
  if(p.name in motFix){motFix[p.name]=(v!=0)?1:0; updateMotWarn();}
- if(p.name==='speed_limit_ms') speedScale=Math.max(0.3,v);
  if(p.name==='thr_deadzone') dzVal=v;
- if(p.name==='use_encoders'){const u=(v!=0); if(u!==useEnc){useEnc=u; lastFaults=-1;}}  // re-render fault severity
 }
-// Bits of the "faults" mask (see controller.cpp): all conditions ACTIVE at the same time.
-// z = area(s) highlighted on the vehicle diagram (see updateFaultDiag).
-const FAULTS_DESC=[
- {b:0, t:'Gamepad emergency stop (button B)', d:'Button B is/was pressed. Release it, then rearm with START.', grave:true, z:['pad']},
- {b:2, t:'Gamepad not calibrated',               d:'Start the stick calibration (Gamepad tab).', grave:true, z:['pad']},
- {b:3, t:'Encoder: wheel stuck',                 d:'PWM applied but no rotation measured. Jammed wheel, thrown/broken chain or AS5600 sensor unplugged. Locked until reboot.', grave:true, z:['wl','wr']},
- {b:4, t:'Gamepad disconnected',                 d:'No Bluetooth gamepad connected. Turn on/pair the gamepad.', grave:true, z:['pad']},
- {b:6, t:'Encoder: direction reversed',          d:'The wheel turns clearly opposite to the command: sensor or motor wired backwards. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
- {b:8, t:'LEFT encoder absent (AS5600)',         d:'No response from the left sensor on the I2C bus (chip unplugged/miswired). Shown regardless of use_encoders; blocks driving only when use_encoders=1.', grave:true, z:['wl'], cond:true},
- {b:9, t:'RIGHT encoder absent (AS5600)',        d:'No response from the right sensor on the I2C bus (chip unplugged/miswired). Shown regardless of use_encoders; blocks driving only when use_encoders=1.', grave:true, z:['wr'], cond:true},
- {b:10,t:'Stalled gamepad (heartbeat)',          d:'Bluetooth link "connected" but no report received for more than 750 ms: communication lost. Immediate disarm and braking.', grave:true, z:['pad']},
- {b:7, t:'Encoder: erratic reading',             d:'Measured speed physically impossible for the kart. Faulty sensor or magnet. FULL STOP, locked until reboot.', grave:true, z:['wl','wr']},
- {b:11,t:'LEFT encoder: magnet out of range',    d:'The left AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wl'], cond:true},
- {b:12,t:'RIGHT encoder: magnet out of range',   d:'The right AS5600 responds but its magnet is out of the sensor field (absent, too far, or too close). Re-center the diametric magnet over the sensor, gap ~0.5–3 mm. Blocks driving only when use_encoders=1.', grave:true, z:['wr'], cond:true},
+// WHY the kart will not drive (enum class Stop, control_types.hpp) — index = the code.
+// z = area(s) highlighted on the vehicle diagram (see updateStopDiag). All four are on the
+// gamepad now: the wheel zones stay in the drawing, but nothing points at them any more since
+// the kart lost its last sensor.
+const STOP_DESC=[
+ null,
+ {t:'Gamepad disconnected',            d:'No Bluetooth gamepad connected. Turn on/pair the gamepad.', z:['pad']},
+ {t:'Gamepad silent (heartbeat)',      d:'Bluetooth link "connected" but no report received for more than 750 ms: communication lost. Immediate disarm and braking.', z:['pad']},
+ {t:'Gamepad emergency stop (button B)', d:'Button B is/was pressed. Release it, then rearm with START.', z:['pad']},
+ {t:'Gamepad not calibrated',          d:'Start the stick calibration (Gamepad tab).', z:['pad']},
 ];
-// cond:true faults (encoder sensor) are only GRAVE when the encoders are actually used;
-// with use_encoders=0 they are informational WARNINGS (amber), not blocking errors.
-const isGrave=f=>f.grave&&(useEnc||!f.cond);
-// Light up the vehicle-diagram zones concerned by the active faults (left/right wheel,
-// gamepad). Side-specific encoder faults (bits 8/9) hit one wheel; the
-// non-sided ones (stuck/reversed/erratic) light up both.
-function updateFaultDiag(mask){
- const lvl={wl:0,wr:0,pad:0};   // 0 none · 1 warning (amber) · 2 grave (red)
- FAULTS_DESC.forEach(f=>{ if(mask>>>f.b&1){const l=isGrave(f)?2:1; (f.z||[]).forEach(z=>{if(l>lvl[z])lvl[z]=l;});} });
- for(const z in lvl){const g=document.getElementById('fz-'+z); if(g){g.classList.toggle('on',lvl[z]===2);g.classList.toggle('warn',lvl[z]===1);}}
+// Light up the vehicle-diagram zone concerned by the current cause.
+function updateStopDiag(code){
+ const on=new Set((STOP_DESC[code]||{}).z||[]);
+ document.querySelectorAll('#kartdiag .fz').forEach(g=>g.classList.toggle('on',on.has(g.id.slice(3))));
 }
-let lastFaults=-1;
-function showFaults(mask){
- if(mask===lastFaults)return; lastFaults=mask;
- updateFaultDiag(mask);
- const n=FAULTS_DESC.filter(f=>mask>>>f.b&1).length;
- const tab=document.getElementById('faultstab');
- tab.textContent=n?`Dashboard (${n})`:'Dashboard';
- tab.classList.toggle('tabalert',!!FAULTS_DESC.some(f=>isGrave(f)&&(mask>>>f.b&1)));
- const el=document.getElementById('faultlist');
- if(!n){el.innerHTML='<div class="faultok">✅ No active fault</div>';return;}
- el.innerHTML=FAULTS_DESC.filter(f=>mask>>>f.b&1)
-  .map(f=>`<div class="faultcard${isGrave(f)?'':' info'}"><b>${isGrave(f)?'⛔':'ℹ️'} ${f.t}</b><br>${f.d}</div>`).join('');
+let lastStop=-1;
+function showStop(code){
+ if(code===lastStop)return; lastStop=code;
+ updateStopDiag(code);
+ const d=STOP_DESC[code];
+ const tab=document.getElementById('boardtab');
+ tab.textContent=d?'Dashboard ⛔':'Dashboard';
+ tab.classList.toggle('tabalert',!!d);
+ const el=document.getElementById('stoplist');
+ el.innerHTML=d?`<div class="stopcard"><b>⛔ ${d.t}</b><br>${d.d}</div>`
+                :'<div class="stopok">✅ Nothing in the way</div>';
 }
 
 function buildForm(params){
@@ -845,20 +801,35 @@ function fillForm(params){
    deriveFromCfg(p);});
 }
 
+// Live state, SELF-CLOCKED: the next status goes out only once the previous one has come
+// back. A bare 20 Hz setInterval kept firing while the radio was busy — a Wi-Fi station retry
+// stalls it for about a second, since each attempt scans every channel — so the requests piled
+// up in the socket and the page got the whole backlog at once, then nothing. That reads as
+// values jumping in bursts. Self-clocked, the page simply cannot outrun the kart: it drops to
+// whatever rate the kart can serve instead of building a queue. The 1 s guard is there for the
+// reply that never arrives (a dropped frame must not freeze the page forever).
+let statusSentAt=0;
+function pollStatus(){
+ if(!ws||ws.readyState!==1)return;
+ if(statusSentAt&&(Date.now()-statusSentAt)<1000)return;   // one still in flight, still fresh
+ statusSentAt=Date.now();
+ sendReq({type:'status'});
+}
 function connect(){
  ws=new WebSocket('ws://'+location.host+'/ws');
  ws.onopen=()=>{
    // once per connection: config metadata, system info (immutable) and charts.
    sendReq({type:'get'}); sendReq({type:'sysinfo'}); sendReq({type:'hist'});
    clearInterval(timer); clearInterval(histTimer);
-   timer=setInterval(()=>{sendReq({type:'status'});},50);       // live state 20 Hz (~150 binary bytes)
+   statusSentAt=0;
+   timer=setInterval(pollStatus,50);                            // live state up to 20 Hz (~150 B)
    histTimer=setInterval(()=>{sendReq({type:'hist'});},5000);   // charts: slow (server RAM)
  };
  ws.binaryType='arraybuffer';
  ws.onmessage=e=>{const m=pbDecode(e.data); if(!m)return;
    if(m.type==='config')fillForm(m.params);
    else if(m.type==='vals'){if(built)fillForm(m.params);}
-   else if(m.type==='status')showStatus(m);
+   else if(m.type==='status'){statusSentAt=0;showStatus(m);}
    else if(m.type==='hist')applyHist(m);
    else if(m.type==='wifi')showWifi(m);
    else if(m.type==='sysinfo')showSys(m);
@@ -930,15 +901,32 @@ let sysBuilt=false,evLoaded=false;
 function loadSys(){sendReq({type:sysBuilt?'sysdyn':'sysinfo'});
  if(!evLoaded){evLoaded=true;loadEvlog();}}   // event log: once on first open, then manual
 // ── Event log ("why did it disarm") — codes mirror evlog::Ev (evlog.hpp) ──
-// 5 and 6 are retired codes (idle / LVC power-off) — kept so records written by an older
-// firmware still read as something other than a number.
-const EV_DESC={1:'BOOT',2:'ARM',3:'DISARM',4:'FAULT RAISED',5:'IDLE POWER-OFF (retired)',6:'LVC POWER-OFF (retired)'};
+// 7 is the live DISARM, whose data is a Stop cause. 3 is the OLD disarm, whose data was a
+// fault bitmask; 4 (fault raised), 5 and 6 (idle / LVC power-off) are retired too. The kart's
+// flash still holds records written by those firmwares, so they all keep a decoder here —
+// which is exactly why the new disarm took a fresh code instead of redefining 3's data.
+const EV_DESC={1:'BOOT',2:'ARM',3:'DISARM (old format)',4:'FAULT RAISED (retired)',
+ 5:'IDLE POWER-OFF (retired)',6:'LVC POWER-OFF (retired)',7:'DISARM'};
+// Bits of the retired fault mask (fb:: in control_types.hpp before 2026-09-30) — for reading
+// OLD records only. The kart never raises them any more.
+const EV_MASK_DESC=[[0,'Gamepad emergency stop (B)'],[1,'(retired) Low battery'],
+ [2,'Gamepad not calibrated'],[3,'(retired) Encoder: wheel stuck'],[4,'Gamepad disconnected'],
+ [5,'(retired) Battery sensor absent'],[6,'(retired) Encoder: direction reversed'],
+ [7,'(retired) Encoder: erratic reading'],[8,'(retired) LEFT encoder absent'],
+ [9,'(retired) RIGHT encoder absent'],[10,'Stalled gamepad (heartbeat)'],
+ [11,'(retired) LEFT encoder: magnet out of range'],[12,'(retired) RIGHT encoder: magnet out of range'],
+ [13,'(retired) Motor power absent']];
 // esp_reset_reason_t values (esp_system.h)
 const RESET_DESC={0:'unknown',1:'power-on',2:'external',3:'software',4:'panic',5:'interrupt watchdog',
  6:'task watchdog',7:'other watchdog',8:'deep-sleep',9:'brownout',10:'SDIO'};
 function evMaskTxt(mask){
- const n=FAULTS_DESC.filter(f=>mask>>>f.b&1).map(f=>f.t);
+ const n=EV_MASK_DESC.filter(f=>mask>>>f[0]&1).map(f=>f[1]);
  return n.length?(' — '+n.join(' · ')):(' — mask 0x'+(mask>>>0).toString(16));
+}
+// Live DISARM record: data is the Stop cause, 0 = a manual disarm or the inactivity timeout.
+function evStopTxt(code){
+ const d=STOP_DESC[code];
+ return code?(' — '+(d?d.t:('cause '+code))):' — manual or inactivity timeout';
 }
 function showEvlog(m){
  const el=document.getElementById('evlog');
@@ -948,6 +936,7 @@ function showEvlog(m){
  const rows=m.ev.map(e=>{
   let txt=EV_DESC[e.code]||('code '+e.code);
   if(e.code===1)txt+=' — reset: '+(RESET_DESC[e.data]||e.data);
+  else if(e.code===7)txt+=evStopTxt(e.data);
   else if(e.code===3)txt+=(e.data?evMaskTxt(e.data):' — manual or inactivity timeout');
   else if(e.code===4||e.code===6)txt+=evMaskTxt(e.data);
   else if(e.code===5)txt+=' — after '+e.data+' min disarmed';
@@ -969,8 +958,7 @@ function clearEvlog(){if(confirm('Erase the whole event log?'))sendReq({type:'ev
 function upt(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
  return (d?d+'d ':'')+h+'h '+m+'m '+(s%60)+'s';}
 const heapTxt=m=>`${(m.heap_free/1024).toFixed(1)} KB (min ${(m.heap_min/1024).toFixed(1)} KB)`;
-// Worst 500 Hz tick since the last look. Budget is 2000 µs; a sensor that stops answering
-// costs one I²C timeout, so this is where that shows up.
+// Worst 500 Hz tick since the last look. Budget is 2000 µs.
 const loopTxt=us=>{const pct=(us/2000*100).toFixed(0);
  const col=us>2000?'var(--red)':us>1200?'var(--amber)':'var(--green)';
  return `<b style="color:${col}">${us} µs</b> <small>(${pct} % of the 2000 µs budget)</small>`;};

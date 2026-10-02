@@ -1,7 +1,7 @@
 // input_bp32.c — Bluetooth gamepad backend via Bluepad32/BTstack (a "custom" platform).
 // Runs in a dedicated task (the BTstack run loop). Gamepad data is handed to the rest of the
 // firmware through C hooks (implemented in input.cpp): inputbp_on_data(x, y, estop, start,
-// buttons, zl, zr, rx2, ry2) and inputbp_on_conn(connected, name, batt).
+// drive, buttons, zl, zr, rx2, ry2) and inputbp_on_conn(connected, name, batt).
 // Pairing / unpairing are exposed via inputbp_pair() / inputbp_unpair().
 #include <string.h>
 
@@ -14,7 +14,7 @@
 #include "freertos/task.h"
 
 // Hooks implemented on the C++ side (input.cpp).
-void inputbp_on_data(float x, float y, int estop, int start, uint32_t buttons, float zl, float zr,
+void inputbp_on_data(float x, float y, int estop, int start, int drive, uint32_t buttons, float zl, float zr,
                      float rx2, float ry2);
 void inputbp_on_conn(int connected, const char* name, int batt);
 int  inputbp_take_rumble(uint8_t* strong, uint8_t* weak, uint16_t* dur);   // rumble pending?
@@ -73,6 +73,9 @@ static void plat_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl)
     const float y = -gp->axis_y / 512.0f;    // inverted: push = forward
     const int estop = (gp->buttons & BUTTON_B) ? 1 : 0;
     const int start = (gp->misc_buttons & MISC_BUTTON_START) ? 1 : 0;
+    // A = hold to drive (dead man). Bluepad32's A is the one the page's Gamepad tab lights
+    // as "A" (same mask bit 0x01), whatever the label printed on the pad.
+    const int drive = (gp->buttons & BUTTON_A) ? 1 : 0;
     // Display mask: buttons (bits 0-15) | misc (bits 16-19) | dpad (bits 24-27).
     const uint32_t mask = (uint32_t)gp->buttons | ((uint32_t)gp->misc_buttons << 16)
                           | ((uint32_t)gp->dpad << 24);
@@ -85,7 +88,7 @@ static void plat_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl)
     if (zl < 0.01f && (gp->buttons & BUTTON_TRIGGER_L)) zl = 1.0f;
     if (zr < 0.01f && (gp->buttons & BUTTON_TRIGGER_R)) zr = 1.0f;
     const int batt = (ctl->battery == 255) ? -1 : (ctl->battery * 100 / 254);
-    inputbp_on_data(x, y, estop, start, mask, zl, zr, rx2, ry2);
+    inputbp_on_data(x, y, estop, start, drive, mask, zl, zr, rx2, ry2);
     inputbp_on_conn(1, d->name, batt);
 
     // Haptics: if a rumble is pending, play it (BT thread = safe context).

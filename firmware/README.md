@@ -3,8 +3,8 @@
 **ESP-IDF 6.1** firmware (C++) driving **2 independent rear motors** (one per wheel):
 **steering is done by the speed difference** between the two wheels (*differential /
 skid steer*). The **front wheel is idle**: one free-pivoting 10″ caster, centred. Controlled by a
-**Bluetooth gamepad**, speed feedback from **2 AS5600 angle sensors** (one per wheel,
-on 2 I²C buses), safety features, a **WS2812B strip** and **Wi-Fi configuration**.
+**Bluetooth gamepad** (START arms, **A held to drive**), **no sensor on the wheels** (stick →
+PWM, bounded by `duty_cap`), safety features, a **WS2812B strip** and **Wi-Fi configuration**.
 
 ## Mechanical architecture (recap)
 
@@ -15,7 +15,7 @@ on 2 I²C buses), safety features, a **WS2812B strip** and **Wi-Fi configuration
       /    \             steering = L/R speed differential
      /      \            (pivots in place if forward ≈ 0)
      [bench]             ← 2 kids, 6″ AHEAD of the driven axle since 2026-08-10
-   🛞 L      🛞 R       ← 2 DRIVE wheels, each its own motor + its own AS5600
+   🛞 L      🛞 R       ← 2 DRIVE wheels, each its own motor + gearbox + 18T→32T chain
         REAR              (the CG sits 61 % of the way back from the caster; it
                            was 80 % when the bench sat ON the axle — that move
                            cost a quarter of the rollover margin)
@@ -24,13 +24,13 @@ on 2 I²C buses), safety features, a **WS2812B strip** and **Wi-Fi configuration
 - **"Arcade" mixing**: `left = forward + turn·gain`, `right = forward − turn·gain` (stick to
   the left → right wheel faster → the kart turns left). The stick→motor mapping is
   **pluggable** (`mix_type`, Drive feel group): **0 linear**, **1 expo** (gentle around
-  center, full authority at the stops — recommended for a child), **2 expo + speed-soft**
-  (the accelerating throttle also tapers with measured speed; braking never does).
-- **Rollover protection** (a_tip ≈ 0.53 g — ⚠️ NOT a second layer any more, this is what
-  keeps the kart upright: with it off the simulation rolls it over): the
-  **turn limit follows the measured speed** (iso-lateral-acceleration 1/v curve, ±100% at low speed down to
-  `turn_alat_vmax` at the limit) and **reverse is capped**.
-  See [Rollover protection](#rollover-protection-turn-too-sharp).
+  center, full authority at the stops — recommended for a child).
+- **Hold A to drive**: once armed, **A released = dynamic brake** whatever the stick says,
+  **A held + stick = drive**, **A held + stick centred = pseudo-freewheel**. See
+  [Driving](#driving-a-button-brake-and-pseudo-freewheel).
+- ⚠️ **No rollover protection** (a_tip ≈ 0.53 g): nothing measures the speed, so nothing limits
+  the turn — `duty_cap` is the only lever. At the default 1.0 the simulation tips the kart in a
+  full-speed full turn with an off-centre load. See [Rollover](#rollover-no-protection-the-numbers).
 
 ## Build / flash
 
@@ -96,17 +96,20 @@ The backend ([`input_bp32.c`](main/input_bp32.c)) implements a **custom Bluepad3
 platform** and runs the **BTstack** loop in a dedicated task (core 0). Gamepad frames
 are passed to the firmware through C hooks (`inputbp_on_data` / `inputbp_on_conn`)
 consumed by [`input.cpp`](main/input.cpp), which exposes the neutral interface
-[`input.hpp`](main/input.hpp) (`input::get()` → `{x, y, connected, estop}`).
+[`input.hpp`](main/input.hpp) (`input::get()` → `{x, y, connected, estop, start, drive}`).
 
 - **Left stick**: `Y` = forward/reverse, `X` = turn (arcade mixing in the controller).
+- **A button** = **hold to drive** (`drive`): Bluepad32's `BUTTON_A`, mask 0x01 — the button
+  the page's Gamepad tab lights as "A", whatever is printed on the pad. Released = dynamic brake.
+- **START/Options** = arming (held `arm_hold_ms`, stick centred).
 - **Circle→square compensation**: the stick is mechanically bounded by a **circle**
   (`x²+y²≤1`) → at full diagonal each axis would cap at ~0.71. `input::get()` **radially
   stretches** the command (factor `|v|/max(|x|,|y|)`, =√2 on the diagonal) so that the
   **corners of the square become reachable**: full forward **and** full turn simultaneously.
 - **B button** = **emergency stop** (immediate braking).
 - **Haptic feedback** (`input::rumble`): a **soft** vibration on arming, a **strong** one on
-  a sudden error / e-stop, and a **strong (repeated)** one if you push the stick while the
-  vehicle is blocked (not armed, etc.). The request is posted by the control loop and
+  the e-stop, and a **strong (repeated)** one if you push the stick while the kart is **not
+  armed** — only then: releasing A while armed is the normal way to brake and does not buzz. The request is posted by the control loop and
   played in the BT thread (`play_dual_rumble`).
 - **Pairing / unpairing** driven from the web page (**Gamepad** tab).
 
@@ -128,12 +131,12 @@ If the gamepad **disconnects** (out of range, dead battery, unpairing), `connect
 goes to `false`, **every axis and button reads neutral** (a stick frozen mid-deflection or
 a latched e-stop bit must not outlive its gamepad), and the controller **immediately puts
 both motors into braking mode**. Same if not armed, not calibrated, gamepad emergency stop,
-or encoder fault. On top of the BT-level disconnect there is a **heartbeat**: a link still
+or A released. On top of the BT-level disconnect there is a **heartbeat**: a link still
 "connected" but silent for **750 ms** (Wi-Fi/BT coexistence can starve the HID stream for a
 few hundred ms — 250 ms false-tripped mid-run) disarms and brakes without waiting for the
 multi-second Bluetooth supervision timeout.
 
-### Safety: electrical fault = braking (dead-man)
+### Safety: anything wrong = braking (dead-man)
 
 - **2 s task watchdog with PANIC** (`sdkconfig.defaults`): a frozen control loop → reboot
   (not just a warning); on restart the motors come back up in dynamic braking.
@@ -148,7 +151,7 @@ multi-second Bluetooth supervision timeout.
   instead of powering it off. The **emergency stop** costs the same coasting, and for the same
   reason — it opens the main relay and drops the whole kart, ESP32 included (see
   [`../doc/electronique.md`](../doc/electronique.md)). Flat ground use, as the
-  `coupure_pente*` and `arret_urgence_plat` simulation scenarios quantify (~15 m of coasting
+  `coupure_pente*` and `arret_urgence_plat` simulation scenarios quantify (~11 m of coasting
   from full speed on the flat).
 
 ## No analog measurements at all
@@ -171,12 +174,20 @@ The design provides for a **physical joystick** as an alternative to the gamepad
 behind it, but the two ADS1115 channels that used to be reserved for it went away with the
 converter — a physical joystick would now need an ADC of its own.
 
-### Wheel encoders
+### No wheel sensors
 
-The **2× AS5600** are the whole story — quadrature encoders were once penciled in as a
-fallback, but the magnetic sensors do the job and the reservation is gone. GPIO 13, 21, 22,
-23 and the input-only 34/35/36/39 are free — 13 and 22 were the power latch and the e-stop
-coil sense, both removed with the single-relay wiring.
+The **2× AS5600** encoders and their two I²C buses were removed on **2026-09-29**. Nothing
+measures the wheels: no speed, no rpm, no encoder conditions (stuck / reversed / erratic /
+absent / magnet — their bits and protobuf values are **retired, not reused**, so older
+event-log records still decode to what they meant). Gone with them: the speed-limiter and braking PIDs
+(`pid.hpp`), the rollover protection, the turn slew-rate, the speed-soft mixer (`mix_type` 2),
+the reverse speed limit, and the settings `use_encoders`, `open_loop`, `mix_soft_hi`, `enc_per_wheel`,
+`enc_inv_l/r`, `enc_rev_chk`, `speed_limit_ms`, `rev_speed_ms`, `brk_*`, `vlim_*`,
+`turn_limit_en`, `turn_full_ms`, `turn_alat_vmax`, `turn_rate`, `dyn_brake_en`.
+
+Free GPIOs: **13, 14, 16, 18, 19, 21, 22, 23, 27** and the input-only 34/35/36/39 — 13 and 22
+were the power latch and the e-stop coil sense, 16 the arming button, 18/19 and 27/14 the two
+I²C buses.
 
 ## Wireless configuration (SoftAP + WebSocket)
 
@@ -221,17 +232,21 @@ descriptor in the page). Frames are ~3–10× smaller than the old JSON (status 
 config metadata ("get"), system info ("sysinfo"). After that: "vals" (values
 only) after save/reload, "sysdyn" (uptime/heap/worst-tick) when the tab is shown,
 charts ("hist") every 5 s, and the **persistent event log** ("evlog", System tab):
-every arm, disarm (with the fault mask of that very tick — the answer to "why did it
-stop"), fault raised mid-run and boot, journaled to the dedicated flash partition,
+every arm, disarm (with the `Stop` cause of that very tick — the answer to "why did it
+stop") and boot, journaled to the dedicated flash partition,
 surviving reboots and power cuts. (The two power-off codes are retired with the power latch:
 the firmware cannot cut its own supply any more, so a power loss now leaves no record —
-the next Boot entry is what marks it.) Live state at 20 Hz (status badge, bars,
-I/O dots) + **graduated Chart.js charts** fed by an **in-RAM history**
+the next Boot entry is what marks it.) Live state at **up to** 20 Hz — the page asks for the
+next status only once the previous one has arrived, so a busy radio (a station retry scans
+every channel) slows the refresh down instead of filling the socket with a backlog the page
+then replays in one burst. Status badge, bars and I/O dots, plus **graduated Chart.js
+charts** fed by an **in-RAM history**
 on the ESP32 side. ⚠️ **While the kart is armed, everything that writes flash is
 refused** — Save (config), Save & reboot (Wi-Fi), pairing/unpairing, calibration — a
 flash write suspends the cache and would freeze the control loop mid-drive; the page
-greys those buttons out with an amber "Kart armed" notice. The **Forward · PWM** chart additionally shows the **speed (rpm) of each wheel
-on a 2nd axis** (right). The **Gamepad** tab gathers: a **pairing button**, **gamepad
+greys those buttons out with an amber "Kart armed" notice. The charts show the forward
+command, the PWM of each wheel and the worst control tick — no speed or rpm, nothing measures
+them. The **Gamepad** tab gathers: a **pairing button**, **gamepad
 info** (name, battery, connection), an **unpairing button**, the **calibration mode**,
 and a **real-time visualization**: a 2D pad showing **two points** — the **physical
 position** of the left stick (blue, on the circle) and the **compensated command** circle→square
@@ -244,19 +259,18 @@ identify the specific buttons of a gamepad).
 
 | File | Role |
 |---|---|
-| `pinout.hpp` | **Hardware pinout** (2 motors, 2 I²C buses, joystick/future reserves) |
-| `control_types.hpp` | **PURE types shared host/target**: `KartConfig`, state/fault enums, `hw::` constants, `ParamDesc` |
+| `pinout.hpp` | **Hardware pinout** (2 motors PWM/DIR, board LED, WS2812 — and the list of free GPIOs) |
+| `control_types.hpp` | **PURE types shared host/target**: `KartConfig`, the `State`/`Stop`/`BrakeMode` enums, `hw::` constants, `ParamDesc` |
 | `config_params.cpp` | **`PARAMS[]` table** (defaults/bounds/help) — PURE, also compiled by the simulation |
 | `config.hpp` / `.cpp` | **NVS** persistence (write-if-changed; every save verb is **refused while armed**) + `KartStatus` telemetry + mutex |
-| `hardware.hpp` / `.cpp` | Low-level hardware (`board::` — **2× PWM/DIR**, **2× AS5600** on 2 I²C buses, LED, boot-time I²C scan). No inputs: nothing is wired to a GPIO but the two sensors, the motors and the strip |
+| `hardware.hpp` / `.cpp` | Low-level hardware (`board::` — **2× PWM/DIR**, dynamic brake, LED). No inputs and no sensors: nothing is wired to a GPIO but the motors and the strip |
 | `input.hpp` / `.cpp` | **Gamepad input** (neutral interface) + **mandatory calibration** (NVS); calibration/pairing refused while armed, collection forces a disarm |
 | `input_bp32.c` | **Bluepad32/BTstack backend** (custom platform + BT loop task) |
-| `controller_core.hpp` / `.cpp` | **Control CORE (`KartController`, PURE, host-compilable)**: mixing, rollover protection, arming, faults — I/O through injected callbacks (`setCallbacks`), identical on ESP and in the simulator |
-| `controller.hpp` / `.cpp` | `EspController`: wires the callbacks onto `board::`/`input::`, host advisors (rumble, power-off), event-log edges, loop-timing telemetry, 500 Hz task |
-| `mixer.hpp` | **Pluggable stick→motor mixing** (abstract `Mixer`): linear / expo / expo+speed-soft — safety limits stay outside the mixers |
+| `controller_core.hpp` / `.cpp` | **Control CORE (`KartController`, PURE, host-compilable)**: A-button gate, mixing, accel ramp, pseudo-freewheel, arming, the `Stop` cause — output through an injected callback (`setCallbacks`), identical on ESP and in the simulator |
+| `controller.hpp` / `.cpp` | `EspController`: wires the callback onto `board::`/`input::`, host advisor (rumble), event-log edges, loop-timing telemetry, 500 Hz task |
+| `mixer.hpp` | **Pluggable stick→motor mixing** (abstract `Mixer`): linear / expo — `duty_cap` stays outside the mixers |
 | `advisors.hpp` | **Host decision** from telemetry (PURE, shared with the sim): gamepad rumble |
 | `evlog.hpp` / `.cpp` | **Persistent event log**: RAM ring pushed by the control task, drained to the `evlog` partition by the LED task **only while disarmed** |
-| `pid.hpp` | Reusable **PID** controller with **anti-windup** |
 | `ringbuffer.hpp` | Header-only ring buffer (history series) |
 | `leds.hpp` / `.cpp` · `ws2812.*` | Status task (WS2812B strip, RMT driver) + event-log drain |
 | `mdns_svc.hpp` / `.cpp` | **mDNS** responder (`kart.local`, `_http._tcp`) |
@@ -267,13 +281,17 @@ identify the specific buttons of a gamepad).
 ### Physics simulation + 3D visualizer
 
 The SAME logic (`controller_core.cpp`) drives a **physics model of the vehicle**
-(`test_host/sim/vehicle.hpp`: differential dynamics, DC motors with back-EMF, battery
-with internal resistance, simulated sensors, slope, **rollover criterion for 3 OR 4 wheels**
+(`test_host/sim/vehicle.hpp`: differential dynamics, DC motors with back-EMF, the 1:23.70
+drivetrain, battery with internal resistance, slope, **rollover criterion for 3 OR 4 wheels**
 (`VehicleParams::wheels` — the abandoned tricycle is kept so the scenarios can still show why)
-through **extreme and realistic scenarios** (`test_host/sim/scenarios.hpp`): full turn
-at full speed (with AND without rollover protection — the counter-test tips over), slalom, erratic
-driving, stick braking, gamepad loss (heartbeat), encoder failures, e-stop coasting, descent…
-plus a **parameter sweep** (`turn_hi × turn_full_ms × speed_limit_ms`).
+through **20 extreme and realistic scenarios** (list: `test_host/sim/scenarios.hpp`): full turn
+at full speed (no protection — off-centre loads tip at `duty_cap` 1.0), the old layout, pivot,
+slalom, erratic driving, plugging, reverse, the A button (`sans_bouton_A`, `relache_A`,
+`roue_libre_A`), gamepad loss (heartbeat), e-stop coasting, worn battery, descents on the
+dynamic brake, power cut on a slope… plus a **`duty_cap` sweep** (full-speed full turn × three
+loads) and the core output tests. The rollover runs are **measurements pinned as asserts**: they
+document the danger and keep the README's numbers honest (a change that moves them fails the
+build) — they do not block the tipping default.
 
 - **Automated tests**: `test_host/run_tests.sh` (run by CI). CSV trace:
   `KART_SIM_TRACE=trace.csv ./sim`.
@@ -291,118 +309,144 @@ Priorities / cores / stacks: [`main/rtos.hpp`](main/rtos.hpp) · [`../doc/firmwa
 
 ## Control loop (500 Hz)
 
-1. Reads the gamepad (`input::get()` → `x`, `y`, `connected`, `estop`, `start`).
-2. Reads the **2 wheel speeds** (each AS5600, signed 12-bit angle derivative → **m/s**).
-   **Vehicle speed = signed average of the two wheels**: two equal wheels in opposite directions
-   (pivot in place) → **0 m/s**. This is what feeds the limiter and the telemetry.
-3. **Slope limiter on the turn** (`turn_rate` — smooths abrupt steering; the forward command
-   is deliberately NOT slewed: acceleration shaping belongs to the mixing curve and the
-   control layer), **rollover-protection capping** (can be disabled: `turn_limit_en`, for
-   testing), then the selected **mixer** (`mix_type`: linear / expo / expo+speed-soft) maps
-   `(forward y, turn x, measured v)` → left / right wheel commands.
-4. Per wheel: **braking PID** (brings back to 0 when the command is zero, can be disabled:
-   `brk_pid_enable` → dynamic-braking fallback) + **speed-limiter
-   PID** (caps the vehicle speed at `speed_limit_ms`, in m/s; can be disabled:
-   `vlim_enable`), output **capped** by the manual `duty_cap` — the single power ceiling now
-   that nothing measures the battery (the pack is always 12 V, the motors' own nominal).
-5. **Independent PWM + DIR** to the driver's 2 channels.
+1. Reads the gamepad (`input::get()` → `x`, `y`, `connected`, `estop`, `start`, `drive`).
+   That is the only input: **no sensor is read** — no I²C, no ADC.
+2. **Safety gate**: disconnected, silent for 750 ms (heartbeat), B pressed or not calibrated →
+   disarm + dynamic brake. START held `arm_hold_ms` with the stick centred arms.
+3. Armed: **A released** → dynamic brake, whatever the stick says. **A held + stick** (outside
+   `thr_deadzone`) → the selected **mixer** (`mix_type`: 0 linear / 1 expo) maps
+   `(forward y, turn x)` → left / right wheel commands. **A held + stick centred** →
+   pseudo-freewheel: the last command runs down toward 0 (see [Driving](#driving-a-button-brake-and-pseudo-freewheel)).
+4. Output **capped** by the manual `duty_cap` — the single ceiling on everything — then
+   `mot_inv_l` / `mot_inv_r` / `mot_swap_lr` applied, and **independent PWM + DIR** to the
+   driver's 2 channels.
 
-`can_drive` requires: gamepad **connected**, **calibrated**, **armed**, no emergency stop,
-no fault. Otherwise → **braking of both wheels** (the **default** state, from boot). The
-web page shows a **banner clearly listing every blocking reason** (disconnected, not
-armed, not calibrated, gamepad e-stop, sensor fault).
+`can_drive` requires: gamepad **connected**, **calibrated**, **armed**, no emergency stop —
+and the kart only moves while **A is held**. Otherwise → **braking of both wheels** (the
+**default** state, from boot). The web page **names the reason** it will not drive
+(disconnected, silent, gamepad e-stop, not calibrated) — one at a time, highest priority first.
 
 Safety features: **arming** by a ~1 s press on the gamepad's **START/Options button** — the
 only arming input there is, now that the board has no GPIO inputs left (centered stick +
 connected, calibrated gamepad required; starts **disarmed**),
-**any fault forces disarming** (you must rearm once it is resolved), **auto disarm**
-after inactivity, **gamepad emergency stop** (B button → immediate braking), **encoder
-sanity** — **stalled** wheel (PWM without rotation), **reversed** direction (wheel measured
-opposite to a clear command — OPTIONAL via `enc_rev_chk`, default on: it can false-trip when
-plugging-braking on a downhill, and an owner who verifies the rpm signs at commissioning may
-prefer to disable it; the stuck and aberrant nets remain) and **aberrant** measurement
-(physically impossible speed) ⇒ **total stop latched until restart** (a lying sensor
-would make active (PID) braking and the limiter dangerous), **gamepad heartbeat 750 ms**,
+**anything in the way forces disarming** (you must rearm once it is resolved), **hold-to-drive A**
+(released = brake), **auto disarm** after `disarm_s` without driving (A held + stick),
+**gamepad emergency stop** (B button → immediate braking), **gamepad heartbeat 750 ms**,
 **2 s watchdog with PANIC**, and the **persistent event log** so a disarm that nobody saw
 still has its cause on record.
 
 The **hardware emergency stop is not in that list, by construction**: the mushroom sits in
 the main relay's coil loop and cuts the ESP32 along with the motors, so the firmware never
-sees it, reports nothing and brakes nothing — the kart coasts (~15 m from full speed on the
+sees it, reports nothing and brakes nothing — the kart coasts (~11 m from full speed on the
 flat, measured in simulation). Power returns on the main switch and the kart boots
 **disarmed**, which is what the old "re-arm after an e-stop" rule enforced in software.
 
-The web page's **Dashboard** tab lists **all active conditions** simultaneously
-(the `faults` mask, bits named `fb::` in `control_types.hpp`), with explanation and remedy —
-the tab turns red as soon as a serious fault is present. For faults that are already GONE
-by the time anyone looks, the **System** tab's event log holds the history.
+The web page's **Dashboard** tab names **why the kart will not drive** (`enum class Stop` in
+`control_types.hpp` — one cause, highest priority first), with explanation and remedy, and the
+tab turns red while there is one. For a cause already GONE by the time anyone looks, the
+**System** tab's event log holds the history.
 
-> **`use_encoders` option (0/1)**: at **0**, the firmware ignores the AS5600s — no speed
-> control and no active (PID) braking (it relies on the PWM caps), and **no "stalled
-> sensor" fault**. Essential for **testing on the bench without wired encoders** (otherwise the sensor
-> fault triggers as soon as you command PWM without measured rotation).
+There is no **fault** layer any more (removed 2026-09-30): no mask, no `Fault` enum, no
+`State::Fault`, no red "fault" state on the page. Every sensor that could report a breakage
+left one after the other — the battery ADC, the relay-coil sense, the encoders — and what
+remained were four ordinary gamepad conditions, none of which is a failure. They still disarm
+and brake; they are simply named for what they are.
 
-### Rollover protection (turn too sharp)
+### Driving: A button, brake and pseudo-freewheel
+
+Once armed, the A button decides the output mode (`BrakeMode` in `control_types.hpp`, shown
+permanently on the page):
+
+| Input | Mode | What the driver's outputs do |
+|---|---|---|
+| **A released** (any stick) | `DYNAMIC` | PWM 0 + DIR low on both channels → both motor terminals grounded: **short-circuit brake** |
+| **A held + stick** | `NONE` | the mixed stick, capped by `duty_cap`, rising no faster than `accel_pct_s` and falling no faster than `decel_pct_s` |
+| **A held + stick centred** | `COAST` | the target becomes 0 and the command **slides there at `decel_pct_s`** (100 %/s by default = one second from full). Once it arrives, the mode becomes `DYNAMIC` — at 0 the windings are grounded, so calling it a coast would be a lie |
+
+Disarmed, not calibrated, gamepad lost or silent, B pressed → `DYNAMIC` too; that is the
+default state from boot.
+
+**Why "pseudo".** The Cytron MDD20A has **no coast / high-impedance state** in PWM/DIR mode:
+its truth table ([manual](../doc/datasheet/motor-driver-20A-manual.pdf), Table 3, printed
+p. 3) has PWM low → MxA and MxB both low → **Brake**, whatever DIR. So a real freewheel is not
+available, and the firmware imitates one: a centred stick targets 0 and the command **slides**
+there rather than dropping, so the motor neither pushes nor brakes much on the way.
+
+That slide has no setting of its own — it is simply `decel_pct_s`, the falling half of the
+ramp pair. It used to be a duration (`coast_s`, then `coast_ms`), until the obvious was pointed
+out on the bench: a run-down *is* a deceleration rate, and having one slope in %/s and the other
+in milliseconds was the same idea told twice. At the 100 %/s default (one second from full
+PWM) ~1.88 m/s is left half a second after centring the stick, against ~1.57 m/s half a second
+after releasing A (`relache_A`) — the numbers the old 1000 ms produced, unchanged. The earlier
+10 s, the pace of a true coast measured against `arret_urgence_plat`, was far longer than any
+driver expects between centring the stick and stopping. Once at 0 it is electrically the brake
+and the mode says `DYNAMIC`. Tuned for the flat: nothing measures a slope. ⚠️ The old
+`dyn_brake_en = 0` "freewheel" option **never freewheeled on this driver** — duty 0 is the same
+PWM-low state, i.e. it braked.
+
+### Rollover: no protection, the numbers
 
 A tricycle tips about the line from its SINGLE wheel to one of the paired wheels, so the
 usable half-track is `(distance CG→single wheel)/wheelbase`. This kart puts the bench 6″
 ahead of the PAIRED (driven) axle, which keeps 61 % of it — 254 mm of a 416 mm half-track,
-a_tip 5.16 m/s². ⚠️ Since 2026-08-10 that is NOT enough on its own: the counter-test
-`virage_sans_protection` (limiter off, full-speed turn) **rolls the kart over** at
-−0.60 m/s², where the same run stayed planted at +0.92 while the bench sat on the axle.
-`turn_limit_en` is safety-critical firmware now. The turn is shaped on **two fronts**:
+a_tip 5.16 m/s² (0.53 g). **Nothing in the firmware limits the turn** since 2026-09-29 — the
+owner's decision, taken when the wheel sensors went (a speed-dependent turn limit needs a
+measured speed). `duty_cap` is the only lever. Full-speed full turn, 18T gearing, minimum tip
+margin in m/s² (`testCapSweep` in [`test_host/sim_main.cpp`](test_host/sim_main.cpp)):
 
-1. **Speed→turn ISO-a_lat limit** (`ctl::turnLimit`, tested on the host) — the limit
-   follows the **MEASURED vehicle speed** (m/s, signed average of the 2 wheels):
-   - `|v| ≤ turn_full_ms` (default 0.5 m/s) — and everywhere the 1/v curve exceeds 100% —
-     turn **±100%**: **full-power pivot in place** (`turn_gain` default 1.0)
-     stays allowed;
-   - beyond that, the limit decreases as **1/v** (same lateral acceleration at any speed)
-     down to **`turn_alat_vmax`** (±20%, which is now also its MAXIMUM) at `speed_limit_ms`, then **keeps
-     tightening** in case of runaway. Calibrated by simulation: the old linear ramp
-     tipped over offset loads as soon as `turn_gain = 1`.
-   ⚠️ Relies on the measured speed: with `use_encoders = 0`, v = 0 → no capping.
-2. **Sharpness (slope limiter / slew-rate)** — the turn command cannot change
-   by more than `turn_rate` units/s: an instantaneous stick jab is **smoothed**. The forward
-   command is deliberately **not** slewed — softening the throttle is the job of the
-   **expo mixing curves** (`mix_type` 1/2, Drive feel group), which soften the mid-stick
-   without robbing the stops, and of the speed limiter.
+| `duty_cap` | 2 children centred | 1 child off-centre (33 kg) | adult + child |
+|---|---:|---:|---:|
+| **1.0** (default) | +1.62 | **−0.24 TIPS** | **−0.07 TIPS** |
+| 0.9 | +2.29 | +0.44 | +0.59 |
+| 0.8 | +2.88 | +1.07 | +1.19 |
+| 0.7 | +3.42 | +1.61 | +1.73 |
+| 0.6 | +3.89 | +2.08 | +2.20 |
 
-In addition, **reverse** has **its own speed limit** (`rev_speed_ms`,
-default 1 m/s): same PID limiter as forward (`speed_limit_ms`), the target is chosen according
-to the **measured direction** — during plugging (stick back, kart still moving forward) the braking
-authority stays full. No more dedicated PWM cap. Rollover protection works on |v|:
-it bounds the turn in reverse as in forward (the caster simply swivels round).
+The default stays 1.0 (the owner's call). A flat-ground test with 40 lb pellet bags could not
+tip it — the bags sit lower than a seated child, and the model has never been calibrated
+against a real tip test. The sweep asserts that 0.9 and below keep every load upright with
+more than +0.3 m/s² to spare; it does not stop anyone from driving at 1.0. **Reverse** is as fast as forward
+(`marche_arriere`: −2.56 m/s) — there is no separate reverse limit any more.
 
-Web parameters: **`turn_gain`**, **`turn_full_ms`**, **`turn_alat_vmax`**, **`turn_rate`**
-(and the Drive feel group: **`mix_type`**, **`mix_expo_fwd`**, **`mix_expo_turn`**,
-**`mix_soft_hi`**).
+Web parameters: **`duty_cap`**, **`turn_gain`** (and the Drive feel group: **`mix_type`**,
+**`mix_expo_fwd`**, **`mix_expo_turn`**, **`accel_pct_s`**, **`decel_pct_s`**).
+
+### The two ramps (`accel_pct_s`, `decel_pct_s`)
+
+The stick sets a **target**; the ramps bound how fast the command may travel to it, both in
+**% of full duty per second** (`ctl::ramp`, control_math.hpp):
+
+| | Default | What it is for |
+|---|---|---|
+| `accel_pct_s` — **rise**, away from 0 | 200 %/s (half a second to full power) | the **motor drivers**: a stick slammed open is a step from 0 to full duty, and a brushed motor answers a step like that with its stall current |
+| `decel_pct_s` — **fall**, back toward 0 | 100 %/s (one second from full power) | the **pseudo-freewheel**, and smoothing a stick pulled back |
+
+0 disables either side — the command then jumps straight to the target that way. A **reversal**
+is the two in sequence: down to 0 at the fall rate, then up the other way at the rise rate (a
+tick that finishes the fall spends what is left of itself building the other way, so plugging
+never stalls at zero).
+
+Both rates are in **real duty**, hence the division by `duty_cap` in the core: lowering the cap
+makes the kart slower without secretly retuning the ramps, so "one second from full power"
+stays one second.
+
+⚠️ Neither ramp can delay the **brake**. Releasing A, disarming, B, a lost or silent gamepad —
+every one of those grounds the windings on the tick it happens, whatever the ramps are doing.
+The ramps only shape a command the driver is still asking for.
 
 ## ⚠️ To adjust before first startup
 
-- **Speed sensors**: kinematics **hardcoded** in `control_types.hpp` (`namespace hw`) —
-  `AS5600_CPR = 4096`, `WHEEL_DIAM_M = 0.254` (10″ wheel); the mount-dependent ratio is the
-  **`enc_per_wheel`** web parameter (magnet at the gearbox output = 1.28, on the 1:5
-  intermediate shaft = 3.41). **2 AS5600**, **one per I²C bus** (fixed address `0x36` → a
-  single sensor per bus). To be **verified on the bench**.
-- **Motor directions**: wheels in the air, forward stick — both wheels must turn forward;
-  fix with `mot_inv_l` / `mot_inv_r` (or swap the motor leads). Then a turn: stick left
-  must speed up the RIGHT wheel — if the steering is mirrored, the motors are on the wrong
-  driver channels: rewire them or set `mot_swap_lr` (motors only — the encoders must
-  already read the right wheels). Do all this BEFORE the encoder signs below.
-- **Encoder signs**: push the kart forward and check both wheel rpm read POSITIVE on the
-  Dashboard; fix with `enc_inv_l` / `enc_inv_r` (the two sides are mirrored — one usually
-  needs it). Redo this check after ANY motor/sensor rework; it is what lets you disable the
-  runtime reversed-encoder watchdog (`enc_rev_chk`) if its downhill-plugging false trip
-  bothers you.
+- **Motor directions**: wheels in the air, **A held**, forward stick — both wheels must turn
+  forward; fix with `mot_inv_l` / `mot_inv_r` (or swap the motor leads). Then a turn: stick
+  left must speed up the RIGHT wheel — if the steering is mirrored, the motors are on the
+  wrong driver channels: rewire them or set `mot_swap_lr`. Then release A: both wheels brake.
 - **Battery**: nothing to set up — always 12 V, never measured. Charge it on a schedule;
   the kart will not warn you.
-- **Gamepad**: pair (Gamepad tab) then **calibrate** — mandatory to drive.
-- **Web settings**: `speed_limit_ms` (m/s), `duty_cap` (manual PWM cap), `turn_gain` /
-  `turn_alat_vmax` (rollover protection), `mix_type` (1 or 2 for a child driver). Start
-  **wheels up**, low speed.
-- **PID**: `vlim_*` (speed limiter) and `brk_*` (braking) — preset
-  (limiter ≈ 0.54/0.50, braking ≈ 0.43/0.29/0.011, in m/s), to be **fine-tuned on the bench**.
+- **Gamepad**: pair (Gamepad tab) then **calibrate** — mandatory to drive. Check which button
+  the tab lights as **A**.
+- **Web settings**: `duty_cap` (the only limit — read the [rollover table](#rollover-no-protection-the-numbers)
+  first), `turn_gain`, `mix_type` (1 for a child driver), `accel_pct_s`, `decel_pct_s`. Start **wheels up**, low
+  `duty_cap`.
 
 > Check the **direction of each wheel** (swap the motor wires if needed) and the **direction of the
 > differential** (pushing the stick to the right must turn right) **before touching the ground**.

@@ -59,13 +59,13 @@ header{background:linear-gradient(90deg,#1a1400,#0b0d0a);border-bottom:2px solid
 .chart-title{text-transform:uppercase;letter-spacing:2px;color:var(--accent);
  border-left:3px solid var(--accent);padding-left:8px}
 .cfgcat{color:var(--accent);text-transform:uppercase;letter-spacing:2px}
-.hudcard,form,.status,#bars,.faultok{box-shadow:inset 0 0 0 1px rgba(255,176,0,.06)}
+.hudcard,form,.status,#bars,.stopok{box-shadow:inset 0 0 0 1px rgba(255,176,0,.06)}
 .pill{text-transform:uppercase;letter-spacing:1px}
 .pill.on{background:var(--accent);color:#1a1200}
 button{background:var(--accent);color:#1a1200;text-transform:uppercase;letter-spacing:1px}
 button.alt{background:var(--card2);color:var(--accent);border:1px solid var(--accent)}
-#faultdiag .fdms{fill:var(--accent);font:800 16px ui-monospace,monospace}
-#faultdiag .fdmix{fill:var(--green)}
+#kartdiag .fdms{fill:var(--accent);font:800 16px ui-monospace,monospace}
+#kartdiag .fdmix{fill:var(--green)}
 ```
 
 ---
@@ -95,14 +95,14 @@ header::after{content:"";position:absolute;left:0;right:0;bottom:-2px;height:5px
  color:var(--txt);border-left:4px solid var(--accent);padding-left:10px}
 .cfgcat{color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;font-style:italic}
 .hudcard{background:linear-gradient(180deg,#15171c,#101216);border:1px solid #33383f}
-.hudcard,form,.status,#bars,.faultok{
+.hudcard,form,.status,#bars,.stopok{
  clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
 .pill{border-radius:4px;text-transform:uppercase;letter-spacing:1px}
 .hdr-state{border-radius:4px}
 button{border-radius:4px;text-transform:uppercase;letter-spacing:1px;font-style:italic}
 input{border-radius:3px}
-#faultdiag .fdms{fill:#ff5a5a;font:800 18px ui-monospace,monospace;filter:drop-shadow(0 0 5px rgba(255,45,45,.9))}
-#faultdiag .fdmix{fill:#ff9a9a}
+#kartdiag .fdms{fill:#ff5a5a;font:800 18px ui-monospace,monospace;filter:drop-shadow(0 0 5px rgba(255,45,45,.9))}
+#kartdiag .fdmix{fill:#ff9a9a}
 ```
 
 ---
@@ -126,9 +126,9 @@ header{background:linear-gradient(90deg,#04141c,#05060a);border-bottom:1px solid
  text-shadow:0 0 8px rgba(0,229,255,.7)}
 .chart-title{color:var(--accent);text-shadow:0 0 6px rgba(0,229,255,.6);letter-spacing:1.5px}
 .cfgcat{color:var(--red);text-shadow:0 0 6px rgba(255,61,110,.6);background:#0f1626}
-.hudcard,form,.status,#bars,.faultok{border:1px solid var(--accent);
+.hudcard,form,.status,#bars,.stopok{border:1px solid var(--accent);
  box-shadow:0 0 14px rgba(0,229,255,.12),inset 0 0 14px rgba(0,229,255,.05)}
-.faultok{border-color:var(--green);box-shadow:0 0 14px rgba(57,255,176,.2)}
+.stopok{border-color:var(--green);box-shadow:0 0 14px rgba(57,255,176,.2)}
 .pill.on{background:transparent;color:var(--accent);border:1px solid var(--accent);
  box-shadow:0 0 10px rgba(0,229,255,.5);text-shadow:0 0 6px rgba(0,229,255,.7)}
 .hdr-state.s2{background:transparent;color:var(--accent);border:1px solid var(--accent);
@@ -139,9 +139,9 @@ button{background:var(--accent);color:#04121a;box-shadow:0 0 16px rgba(0,229,255
 button.alt{background:transparent;color:var(--accent);border:1px solid var(--accent);
  box-shadow:0 0 10px rgba(0,229,255,.3)}
 input:focus{border-color:var(--accent);box-shadow:0 0 8px rgba(0,229,255,.5)}
-#faultdiag .fdms{fill:#00e5ff;font:800 17px ui-monospace,monospace;filter:drop-shadow(0 0 7px rgba(0,229,255,1))}
-#faultdiag .fdmix{fill:#ff2bd6;filter:drop-shadow(0 0 4px rgba(255,43,214,.8))}
-#faultdiag .body{stroke:var(--accent);stroke-opacity:.55}
+#kartdiag .fdms{fill:#00e5ff;font:800 17px ui-monospace,monospace;filter:drop-shadow(0 0 7px rgba(0,229,255,1))}
+#kartdiag .fdmix{fill:#ff2bd6;filter:drop-shadow(0 0 4px rgba(255,43,214,.8))}
+#kartdiag .body{stroke:var(--accent);stroke-opacity:.55}
 ```
 
 ---
@@ -152,9 +152,9 @@ input:focus{border-color:var(--accent);box-shadow:0 0 8px rgba(0,229,255,.5)}
   component overrides. Because it sits **after** the structural rules in
   `style.css`, it wins on the cascade; the `*{border-radius:0}` in the tactical
   block needs `!important` only because the pill/button radii are more specific.
-- The fault-diagram wheel/gamepad **highlight** colours (red = fault,
-  amber = warning) are intentionally left in the structural section — they mean
-  the same thing in every skin.
+- The vehicle-diagram wheel/gamepad **highlight** colours (red = what is keeping
+  the kart from driving, amber = warning) are intentionally left in the
+  structural section — they mean the same thing in every skin.
 - Same for the **left/right convention** (nautical port/starboard): LEFT = red
   (`--port`), RIGHT = green (`--starboard`) — used by the per-wheel PWM
   gauges/labels and the chart traces. Kept structural so it never changes per

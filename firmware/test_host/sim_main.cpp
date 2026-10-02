@@ -20,6 +20,8 @@
 
 static int g_failures = 0;
 
+static bool near(float a, float b, float eps = 1e-4f) { return std::fabs(a - b) <= eps; }
+
 #define CHECK(cond)                                                        \
     do {                                                                   \
         if (!(cond)) {                                                     \
@@ -39,11 +41,11 @@ void traceHook(const char* scen, const Vehicle& v, const SimController& c, const
 {
     static int decim = 0;
     if (0 != (decim++ % 8)) return;   // ~60 Hz is enough for inspection
-    std::fprintf(g_trace, "%s,%.3f,%.3f,%.3f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%u\n",
+    std::fprintf(g_trace, "%s,%.3f,%.3f,%.3f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d\n",
                  scen, v.t(), v.v(), v.yawRate(), v.aLat(), v.tipMargin(),
                  c.lastOutL(), c.lastOutR(), t.fwd, t.turn,
-                 static_cast<int>(t.state), static_cast<int>(primaryFault(t.faults)),
-                 static_cast<int>(t.brake_mode), t.faults);
+                 static_cast<int>(t.state), static_cast<int>(t.stop),
+                 static_cast<int>(t.brake_mode));
 }
 
 RunResult run(const Scenario& sc)
@@ -55,6 +57,119 @@ RunResult run(const Scenario& sc)
 }
 
 // ─────────────────────────── Tests (asserts) ───────────────────────────
+// Speed of the kart at simulation time `at` in a scenario (via the frame hook).
+float speedAt(const Scenario& sc, float at)
+{
+    float v_at = 0.f;
+    runScenario(sc, [&](const Vehicle& v, const SimController&, const CtrlTelemetry&) {
+        if (v.t() <= at) v_at = v.v();
+    });
+    return v_at;
+}
+
+Scenario withCap(Scenario sc, float cap)
+{
+    sc.cfg = [cap](KartConfig& c) { c.duty_cap_frac = cap; };
+    return sc;
+}
+
+// The core's OUTPUT contract, tick by tick, without the physics: what reaches the driver for
+// each A / stick combination, the accel ramp, the freewheel run-down pace (and both of their
+// "disabled" settings), and the mot_inv/mot_swap routing.
+void testCoreOutputs()
+{
+    KartController k;
+    KartConfig cfg;
+    cfg.setDefaults();
+    k.setConfig(cfg);
+    int64_t now = 0;
+    PadInputs p;
+    p.connected = true;
+    p.calibrated = true;
+    auto tick = [&](int n) {
+        CtrlOutputs o;
+        for (int i = 0; i < n; ++i) { now += 2000; p.last_report_us = now; k.setPad(p); o = k.tick(now); }
+        return o;
+    };
+    p.start = true;
+    tick(static_cast<int>(cfg.arm_hold_ms / 2 + 10));   // START held past arm_hold_ms
+    p.start = false;
+    CHECK(tick(1).dyn_brake);
+    CHECK(k.telemetry().armed);
+
+    p.y = 1.f;                                  // stick pushed, A released → brake
+    CHECK(tick(5).dyn_brake);
+
+    // ACCEL RAMP (accel_pct_s = 200 %/s by default): full stick does NOT reach the driver at
+    // once — the command climbs at 2.0 per second, so half a second to go from 0 to full.
+    p.drive = true;
+    CtrlOutputs o = tick(1);
+    CHECK(!o.dyn_brake && near(o.out_l, 0.004f, 1e-3f));   // one 2 ms tick of ramp
+    CHECK(BrakeMode::None == k.telemetry().brake_mode);
+    o = tick(125);                              // 0.25 s later: half way up
+    CHECK(near(o.out_l, 0.5f, 5e-3f) && near(o.out_r, 0.5f, 5e-3f));
+    o = tick(125);                              // 0.5 s: full command, and it stops there
+    CHECK(near(o.out_l, 1.f) && near(o.out_r, 1.f));
+
+    // Pulled back to half stick, the command comes DOWN at the decel rate (100 %/s → 0.2 per
+    // 0.2 s), not instantly: one tick barely moves it. The real brake never waits for this,
+    // though — that is A, tested below.
+    p.y = 0.5f;                                 // (0.5 through the deadzone remap ≈ 0.47)
+    o = tick(1);
+    CHECK(o.out_l > 0.99f);                     // one 2 ms tick of decel: still essentially full
+    o = tick(250);                              // half a second later it has reached the target
+    CHECK(o.out_l < 0.5f && o.out_l > 0.4f);
+    p.y = 1.f;
+
+    // FREEWHEEL (decel_pct_s = 100 %/s by default): the stick centred simply targets 0, and
+    // the command SLIDES there at the decel rate — half a second leaves half of it.
+    o = tick(250);                              // back to full first (accel ramp)
+    p.y = 0.f;                                  // stick released, A held → pseudo-freewheel
+    o = tick(250);                              // 0.5 s at cap 1.0, 100 %/s → 0.5 left
+    CHECK(!o.dyn_brake);
+    CHECK(near(o.out_l, 0.5f, 5e-3f) && near(o.out_r, 0.5f, 5e-3f));
+    CHECK(BrakeMode::Coast == k.telemetry().brake_mode);
+    o = tick(static_cast<int>(1.f * hw::CTRL_HZ));   // the rest of the slide
+    CHECK(near(o.out_l, 0.f) && near(o.out_r, 0.f));
+    // Arrived at 0 with the stick still centred, the mode tells the truth: a command of 0 IS
+    // the short-circuit on this driver, so it reports DYNAMIC, not a coast that is over.
+    CHECK(o.dyn_brake && BrakeMode::Dynamic == k.telemetry().brake_mode);
+
+    // At cap 0.5 the pace in COMMAND units doubles (both rates are set in REAL duty): a quarter
+    // of a second of slide is now what half a second was.
+    cfg.duty_cap_frac = 0.5f; cfg.accel_pct_s = 0; k.setConfig(cfg);   // accel off: full at once
+    p.y = 1.f; o = tick(1);
+    CHECK(near(o.out_l, 1.f));                  // accel_pct_s = 0 → no rise limit at all
+    p.y = 0.f;
+    o = tick(125);
+    CHECK(near(o.out_l, 0.5f, 5e-3f));
+    p.drive = false;                            // A released mid-slide → brake at once
+    CHECK(tick(1).dyn_brake);
+    p.drive = true;                             // …and the next slide restarts from nothing
+    o = tick(1);
+    CHECK(near(o.out_l, 0.f));
+
+    // decel_pct_s = 0 → no fall limit: releasing the stick with A held brakes on the spot.
+    cfg.duty_cap_frac = 1.f; cfg.accel_pct_s = 200; cfg.decel_pct_s = 0; k.setConfig(cfg);
+    p.y = 1.f; tick(250);
+    p.y = 0.f;
+    CHECK(tick(1).dyn_brake);
+    CHECK(BrakeMode::Dynamic == k.telemetry().brake_mode);
+
+    cfg.decel_pct_s = 100; cfg.accel_pct_s = 0;   // routing: sign per WHEEL, then the channel swap
+    cfg.mot_inv_l = 1; cfg.mot_swap_lr = 1; k.setConfig(cfg);
+    p.y = 1.f; p.x = 1.f;                       // logical: left 1.0 (clamped), right 0.0
+    o = tick(1);
+    CHECK(near(k.telemetry().out_l, 1.f) && near(k.telemetry().out_r, 0.f));
+    CHECK(near(o.out_l, 0.f) && near(o.out_r, -1.f));   // inverted left wheel, on channel R
+
+    p.estop = true;                             // B → disarm + brake
+    CHECK(tick(1).dyn_brake);
+    CHECK(!k.telemetry().armed);
+    CHECK(Stop::EStop == k.telemetry().stop);
+    std::printf("  core outputs : A released=brake, accel/decel ramps, A+centre=freewheel, routing OK\n");
+}
+
 void testScenarios()
 {
     const auto all = allScenarios();
@@ -64,58 +179,39 @@ void testScenarios()
         return *s;
     };
 
-    // THE project test: rollover protection holds at full speed, hard turn.
+    // ⚠️ NO ROLLOVER PROTECTION (2026-09-29, the owner's call — no encoders, so nothing
+    // measures the speed a turn limit would need). These are MEASUREMENTS pinned as asserts,
+    // so that the README's warning can never drift from what the model says. With the slower
+    // 18T→32T chain stage (1:23.70), two children sitting centred stay planted through a
+    // full-speed full turn at duty_cap 1.0 — it is the OFF-CENTRE loads below that tip.
     {
         const RunResult r = run(get("virage_pleine_vitesse"));
-        std::printf("  virage_pleine_vitesse : vmax=%.2f m/s  a_lat max=%.2f  min margin=%.2f m/s²\n",
-                    r.max_v, r.max_alat, r.min_tip_margin);
+        std::printf("  virage_pleine_vitesse (duty_cap 1.0, no protection) : vmax=%.2f m/s  "
+                    "min margin=%.2f m/s² — %s\n", r.max_v, r.min_tip_margin,
+                    r.tipped ? "TIPPED" : (r.wheel_lifted ? "wheel lifted" : "planted"));
         CHECK(r.ever_armed);
-        CHECK(r.max_v > 2.0f);              // we really did go fast
-        CHECK(r.min_tip_margin > 0.5f);     // safety margin never eaten into
-        CHECK(!r.ever_fault);
-        CHECK(!r.wheel_lifted && !r.tipped);   // all 3 wheels stay on the ground
+        CHECK(r.max_v > 2.0f);
+        CHECK(!r.wheel_lifted && !r.tipped);
     }
-
-    // Counter-test on the OLD layout (same three wheels, mass at the wrong end): protection
-    // off → it tips. Recorded justification for reversing the tricycle, and it keeps the tip
+    {
+        const RunResult r = runScenario(withCap(get("virage_pleine_vitesse"), 0.6f));
+        std::printf("  virage_pleine_vitesse (duty_cap 0.6) : vmax=%.2f m/s  min margin=%.2f m/s²\n",
+                    r.max_v, r.min_tip_margin);
+        CHECK(!r.wheel_lifted && !r.tipped);
+        CHECK(r.min_tip_margin > 1.f);
+    }
+    // The old layout (mass far from the driven axle), with the faster gearing it was measured
+    // with: it tips. The record of why the tricycle was reversed, and it keeps the tip
     // measurement honest (a model that never tips would prove nothing).
     {
         const RunResult r = run(get("ancienne_disposition"));
         std::printf("  ancienne_disposition : min margin=%.2f m/s² — %s\n",
-                    r.min_tip_margin,
-                    r.tipped ? "TIPPED (physics)" : (r.wheel_lifted ? "wheel lifted" : "?"));
-        CHECK(r.min_tip_margin < 0.f);
-        CHECK(r.wheel_lifted);              // the inner wheel physically leaves the ground
-        CHECK(r.tipped);                    // …and the CG crosses the edge: real rollover
-    }
-    // ⚠️ THE SAME MANOEUVRE ON THE BUILT LAYOUT, PROTECTION OFF — and this is the assertion
-    // that changed on 2026-08-10. Until then the reversed geometry carried it alone (+0.92 of
-    // margin, wheels planted) and the limiter was redundancy. Moving the bench 6" forward and
-    // the axle 6" back took w_eff from 332 to 254 mm, and the same run now goes ALL THE WAY
-    // OVER at −0.60 — not a lifted wheel, a rollover, exactly like the abandoned layout above.
-    // The turn limiter is load-bearing safety on this chassis, not a comfort feature:
-    // turn_limit_en must never ship at 0. Pinned here so it cannot be forgotten.
-    {
-        const RunResult r = run(get("virage_sans_protection"));
-        std::printf("  virage_sans_protection (built, limiter OFF) : min margin=%.2f m/s² — %s\n",
-                    r.min_tip_margin,
-                    r.tipped ? "TIPPED (physics)" : (r.wheel_lifted ? "wheel lifted" : "planted"));
-        CHECK(r.min_tip_margin < 0.f);
-        CHECK(r.wheel_lifted);
-        CHECK(r.tipped);            // and the CG crosses the edge: a real rollover
-    }
-    // …and the same speed and stick WITH the shipped defaults: comfortably planted. The gap
-    // between these two numbers IS the safety the firmware is now providing.
-    {
-        const RunResult r = run(get("virage_pleine_vitesse"));
-        std::printf("  virage_pleine_vitesse  (limiter ON, defaults) : min margin=%.2f m/s² — %s\n",
-                    r.min_tip_margin, r.wheel_lifted ? "WHEEL LIFTED" : "planted");
-        CHECK(r.min_tip_margin > 1.f);
-        CHECK(!r.wheel_lifted && !r.tipped);
+                    r.min_tip_margin, r.tipped ? "TIPPED" : "?");
+        CHECK(r.tipped);
     }
     // What the un-built two-caster variant would have bought, measured on the same run.
     {
-        Scenario sc = get("virage_sans_protection");
+        Scenario sc = get("virage_pleine_vitesse");
         sc.veh = [](Vehicle& veh) { veh.params().wheels = 4; };
         std::printf("  …the 4-wheel variant would give : %.2f m/s² (not built)\n",
                     runScenario(sc).min_tip_margin);
@@ -127,59 +223,70 @@ void testScenarios()
         CHECK(r.ever_armed);
         CHECK(std::fabs(r.max_v) < 0.6f);
         CHECK(r.min_tip_margin > 2.f);
-        CHECK(!r.ever_fault);
+        CHECK(!r.ever_blocked);
     }
 
-    // Realistic: slalom and erratic driving — never a tip, never a fault.
+    // Realistic driving, without the protection: measured and printed. They must at least
+    // stay on their wheels — these are the manoeuvres a child actually makes.
+    for (const char* n : {"slalom", "conduite_enfant"})
     {
-        const RunResult r = run(get("slalom"));
-        CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(r.min_tip_margin > 0.5f);
-        CHECK(!r.wheel_lifted);
-    }
-    {
-        const RunResult r = run(get("conduite_enfant"));
-        CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(r.min_tip_margin > 0.5f);
+        const RunResult r = run(get(n));
+        std::printf("  %s : min margin=%.2f m/s²%s\n", n, r.min_tip_margin,
+                    r.wheel_lifted ? " — WHEEL LIFTED" : "");
+        CHECK(r.ever_armed && !r.ever_blocked);
+        CHECK(!r.tipped);
     }
 
-    // Stick braking (plugging): NO false "encoder reversal".
+    // Stick braking (plugging, A held): nothing in the way, and it really went fast first.
     {
         const RunResult r = run(get("freinage_stick"));
         CHECK(r.ever_armed);
-        CHECK(!r.ever_fault);               // in particular no EncoderDir
+        CHECK(!r.ever_blocked);
         CHECK(r.max_v > 2.0f);
     }
-
-    // Reverse: no more PWM cap — the TOTAL speed limit holds in both directions.
+    // Reverse: nothing holds it back but duty_cap — as fast as forward.
     {
         const RunResult r = run(get("marche_arriere"));
-        CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(std::fabs(r.final_v) > 1.7f);          // genuinely rolling in reverse (not re-capped)
-        CHECK(std::fabs(r.final_v) < 2.f * 1.05f);   // CONVERGED on the total limit (±5%)
-        CHECK(r.max_v < 2.f * 1.25f);                // bounded PID transient overshoot
-        std::printf("  marche_arriere : final v=%.2f m/s, peak %.2f (limit 2.0)\n",
-                    r.final_v, r.max_v);
+        CHECK(r.ever_armed && !r.ever_blocked);
+        CHECK(r.final_v < -2.f);   // ≈ the forward top speed
+        std::printf("  marche_arriere : final v=%.2f m/s (no reverse limit any more)\n", r.final_v);
     }
-
-    // Active (PID) braking: active stop after release, without setting off in the opposite direction.
-    {
-        const RunResult r = run(get("frein_pid_arret"));
-        CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(std::fabs(r.final_v) < 0.2f);   // stopped by the end of the scenario
-    }
-
-    // Pluggable mixing: the feel curves must cost neither the top end nor the brake.
+    // Expo mixing must not cost the top end.
     {
         const RunResult r = run(get("mix_expo"));
-        CHECK(r.ever_armed && !r.ever_fault);
+        CHECK(r.ever_armed && !r.ever_blocked);
         CHECK(r.max_v > 2.0f);              // expo(±1) = ±1: full stick keeps the top end
     }
+
+    // ── The A button ──
+    // Armed, full stick, A never held: the kart does not move — and the pad does NOT buzz
+    // (only "not armed" buzzes; A released is the normal way to brake).
     {
-        const RunResult r = run(get("mix_soft"));
-        CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(r.max_v > 1.8f);              // tapered, yet it still properly drives
-        CHECK(r.final_v < 0.f);             // the plugging brake kept FULL authority through zero
+        const RunResult r = run(get("sans_bouton_A"));
+        CHECK(r.ever_armed);
+        CHECK(r.max_v < 0.05f);
+        CHECK(1 == r.rumbles);              // the soft arming buzz, nothing else
+    }
+    // A released at full speed: dynamic brake — well slowed 1 s later, stopped at the end.
+    // A held with the stick released: pseudo-freewheel — still rolling clearly faster half a
+    // second in, and down to a stop on its own. Sampled at HALF a second, because at the
+    // default decel of 100 %/s the slide is over one second after the stick is centred: any
+    // later and this would compare two brakes rather than a brake against a freewheel.
+    {
+        const float v_brake = speedAt(get("relache_A"), 5.5f);     // released at 5 s
+        const float v_coast = speedAt(get("roue_libre_A"), 6.5f);  // released at 6 s
+        KartConfig dflt; dflt.setDefaults();
+        const RunResult rb = run(get("relache_A"));
+        const RunResult rc = run(get("roue_libre_A"));
+        std::printf("  relache_A : v=%.2f m/s 0.5 s after releasing A (dynamic brake)\n", v_brake);
+        std::printf("  roue_libre_A : v=%.2f m/s 0.5 s after releasing the stick (decel "
+                    "%d %%/s), final %.2f\n", v_coast, dflt.decel_pct_s, rc.final_v);
+        CHECK(rb.ever_armed && !rb.ever_blocked);
+        CHECK(v_brake < 1.8f);                    // the dynamic brake bit, hard, from 2.5 m/s
+        CHECK(std::fabs(rb.final_v) < 0.2f);
+        CHECK(rc.ever_armed && !rc.ever_blocked);
+        CHECK(v_coast > v_brake + 0.2f);          // …and the run-down let it roll on further
+        CHECK(std::fabs(rc.final_v) < 0.1f);      // both end stopped: at 0 the run-down IS the brake
     }
 
     // Heartbeat: loss of reports at full speed → disarmed quickly, kart stops.
@@ -189,206 +296,105 @@ void testScenarios()
         // Reports cut at t=5 s; disarm within PAD_HB_TIMEOUT_US (750 ms) + margin.
         CHECK(r.t_disarmed_after >= 5.f && r.t_disarmed_after < 5.f + hw::PAD_HB_TIMEOUT_US * 1e-6f + 0.1f);
         CHECK(std::fabs(r.final_v) < 0.3f);                               // braked (dynamic)
-    }
-
-    // Encoder failures → the RIGHT fault, and a stop.
-    {
-        const RunResult r = run(get("encodeur_inverse"));
-        CHECK(Fault::EncoderDir == r.final_fault);
-        CHECK(r.t_first_fault > 0.f && r.t_first_fault < T_DRIVE + 1.5f);
-    }
-    // mot_inv_l set wrongly (motor already wired right) → the same watchdog catches it.
-    {
-        const RunResult r = run(get("moteur_inverse_mal_regle"));
-        CHECK(Fault::EncoderDir == r.final_fault);
-        CHECK(r.t_first_fault > 0.f && r.t_first_fault < T_DRIVE + 1.5f);
-    }
-    // Watchdog OFF (commissioning-checked config): EncoderDir must not latch, and the
-    // STUCK net must still stop the kart (one reversed wheel → mean speed ≈ 0, firm cmd).
-    {
-        const RunResult r = run(get("encodeur_inverse_sans_garde"));
-        CHECK(Fault::EncoderDir != r.final_fault);
-        CHECK(Fault::Encoder == r.final_fault);
-        CHECK(r.t_first_fault > 0.f);
+        CHECK(Stop::PadStale == r.final_stop);   // …and the kart can SAY why it stopped
     }
     // The emergency stop as it now behaves: the mushroom opens the main relay's coil, so the
-    // ESP32 dies with the motors. No fault is reported (nobody is left to report it) and
-    // NOTHING brakes — the kart coasts. On the flat it still comes to a stop within a few
-    // metres on rolling resistance alone; that is the honest measurement, printed here.
+    // ESP32 dies with the motors. Nothing is reported (nobody is left to report it) and
+    // NOTHING brakes — the kart coasts. That is the honest measurement, printed here.
     {
         const RunResult r = run(get("arret_urgence_plat"));
         CHECK(r.ever_armed);
-        CHECK(!r.ever_fault);                       // the firmware never sees the e-stop
+        CHECK(!r.ever_blocked);                       // the firmware never sees the e-stop
         CHECK(std::fabs(r.final_v) < 0.05f);        // it does stop — eventually, on rolling drag
         CHECK(r.coast_dist > 10.f);                 // …after more than ten metres of coasting
-        std::printf("  arret_urgence_plat : e-stop at 3 m/s → coasts %.1f m before stopping "
+        std::printf("  arret_urgence_plat : e-stop at full speed → coasts %.1f m before stopping "
                     "(no braking left at all)\n", r.coast_dist);
     }
-    {
-        const RunResult r = run(get("encodeur_absent"));
-        CHECK(Fault::EncoderAbsent == r.final_fault);
-        CHECK(!r.ever_armed);               // fault present from boot → arming refused
-    }
-    {
-        const RunResult r = run(get("encodeur_fou"));
-        CHECK(Fault::EncoderMad == r.final_fault);
-    }
-    {
-        const RunResult r = run(get("roue_bloquee"));
-        CHECK(Fault::Encoder == r.final_fault);
-    }
-
-    // A worn pack is no longer a fault of any kind — it is just less voltage at the motors.
-    // The kart drives, slower. This is the trade-off of dropping the LVC, measured.
+    // A worn pack is not reported anywhere — it is just less voltage at the motors.
     {
         const RunResult r = run(get("batterie_usee"));
-        CHECK(!r.ever_fault);
-        CHECK(Fault::None == r.final_fault);
-        CHECK(r.max_v > 1.0f);              // it really drove on the sagging pack
-        std::printf("  batterie_usee : no fault (nothing measures it), max v=%.2f m/s\n", r.max_v);
+        CHECK(!r.ever_blocked);
+        CHECK(Stop::None == r.final_stop);
+        CHECK(r.max_v > 1.0f);
+        std::printf("  batterie_usee : nothing reported (nothing measures it), max v=%.2f m/s\n", r.max_v);
     }
 
-    // ASYMMETRIC LOAD — it is THIS result that lowered the turn_hi default
-    // (defaults: gain 1.0 + iso-a_lat 0.2); with the old linear ramp an offset CG would tip.
-    // The DEFAULT now protects these cases; the old setting stays tested as proof.
+    // ASYMMETRIC LOADS, full-speed turns both ways: at duty_cap 1.0 both TIP — the reason the
+    // duty_cap help text names 0.9 as the ceiling for these loads. Checked below at 0.6.
+    for (const char* n : {"enfant_seul_cote", "adulte_enfant"})
     {
-        const RunResult r = run(get("enfant_seul_cote"));
-        std::printf("  enfant_seul_cote (defaults) : min margin=%.2f m/s²\n", r.min_tip_margin);
-        CHECK(r.min_tip_margin > 0.3f);   // the SAFE default protects the offset load
-        CHECK(!r.ever_fault);
-        CHECK(!r.wheel_lifted && !r.tipped);
-    }
-    {
-        // The offset load at the old aggressive turn_hi = 0.5: still the sharpest test of the
-        // limiter, and still the reason the default is 0.2 — one child on one side, hard turn
-        // toward the loaded edge, lifts a wheel even on the reversed layout.
-        Scenario sc = get("enfant_seul_cote");   // copy (the original is used by the viewer)
-        sc.cfg = [](KartConfig& c) { c.turn_hi = 0.5f; };
-        const RunResult r = runScenario(sc);
-        std::printf("  enfant_seul_cote (old 0.50) : min margin=%.2f m/s² — %s\n",
-                    r.min_tip_margin, r.wheel_lifted ? "WHEEL LIFTED" : "?");
-        CHECK(r.min_tip_margin < 0.f);
-        CHECK(r.wheel_lifted);
-    }
-    {
-        const RunResult r = run(get("adulte_enfant"));
-        std::printf("  adulte_enfant (defaults) : min margin=%.2f m/s²\n", r.min_tip_margin);
-        CHECK(r.min_tip_margin > 0.25f);
-        CHECK(!r.ever_fault);
-    }
-    {
-        // Heaviest, highest, most offset load the kart can see, at the old turn_hi: the
-        // margin must go negative — this is what pins the 0.2 default in place.
-        Scenario sc = get("adulte_enfant");
-        sc.cfg = [](KartConfig& c) { c.turn_hi = 0.5f; };
-        CHECK(runScenario(sc).min_tip_margin < 0.f);
+        const RunResult r = run(get(n));
+        const RunResult r6 = runScenario(withCap(get(n), 0.6f));
+        std::printf("  %s : duty_cap 1.0 → %s (%.2f) · duty_cap 0.6 → margin %.2f m/s²\n", n,
+                    r.tipped ? "TIPPED" : (r.wheel_lifted ? "wheel lifted" : "planted"),
+                    r.min_tip_margin, r6.min_tip_margin);
+        CHECK(r.tipped);
+        CHECK(!r6.wheel_lifted && !r6.tipped);
+        CHECK(r6.min_tip_margin > 1.f);
     }
 
-    // Downhill 8%: active braking holds the kart (77 N of gravity < ~134 N of capacity).
-    {
-        const RunResult r = run(get("descente_frein"));
-        CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(std::fabs(r.final_v) < 0.5f);   // held — within the motor capacity
-    }
-
-    // POWER CUT ON A SLOPE (main relay open → coasting): the quantified demonstration of
-    // the README warning — with no power there is NO electric braking left AT ALL, and
-    // the kart RUNS AWAY down the slope. Now that the E-STOP opens that same relay, this is
-    // also what pressing the mushroom on a hill costs. Hardware fix if wanted: NC relay
-    // shorting the motor phases when power goes away.
+    // POWER CUT ON A SLOPE (main relay open → coasting): with no power there is NO electric
+    // braking left AT ALL, and the kart RUNS AWAY down the slope. The E-STOP opens that same
+    // relay, so this is also what pressing the mushroom on a hill costs.
     {
         const RunResult r = run(get("coupure_pente8"));
         std::printf("  coupure_pente8 : v(+8 s after the power cut)=%.1f m/s — RUNAWAY\n",
                     std::fabs(r.final_v));
-        CHECK(std::fabs(r.final_v) > 3.f);    // coasting: ~4 m/s after 8 s on 8%
+        CHECK(std::fabs(r.final_v) > 3.f);
     }
     {
         const RunResult r = run(get("coupure_pente16"));
         std::printf("  coupure_pente16 : v(+8 s after the power cut)=%.1f m/s — RUNAWAY\n",
                     std::fabs(r.final_v));
-        CHECK(std::fabs(r.final_v) > 8.f);    // ~10 m/s (36 km/h) after 8 s on 16%
+        CHECK(std::fabs(r.final_v) > 8.f);
     }
-
-    // Slope 16%: BEYOND THE MOTORS' CAPACITY (19.6 A → ~52 N/wheel, i.e. ~134 N of
-    // total holding force with rolling resistance, against 152 N of gravity). Active (PID) braking as
-    // dynamic braking converge toward the same slip: above ~0.9 m/s both modes
-    // are clamped at max current — the kart descends, slowly but inexorably.
-    // Lesson: max holdable slope ≈ 11% at full load; 16% demands a MECHANICAL
-    // brake (or avoiding the slope).
-    {
-        const RunResult r = run(get("descente16_frein_actif"));
-        std::printf("  descente16 active (PID) brake : final v=%.2f m/s — motor capacity EXCEEDED\n",
-                    std::fabs(r.final_v));
-        CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(std::fabs(r.final_v) > 3.f);    // does NOT hold: documents the limit
-    }
-    {
-        const RunResult r = run(get("descente16_frein_dynamique"));
-        std::printf("  descente16 dynamic brake : final v=%.2f m/s — same (clamped)\n",
-                    std::fabs(r.final_v));
-        CHECK(r.ever_armed && !r.ever_fault);
-        CHECK(std::fabs(r.final_v) > 3.f);
-    }
-
-    // Slope 8%, dynamic braking only: cannot stop (force ∝ v) but must
-    // CAP the descent at a crawling terminal speed — no runaway.
+    // A released on a slope → dynamic braking only: it cannot stop (force ∝ v) but caps the
+    // descent. The 18T→32T stage gives ×1.39 of wheel torque, which brought the 16 % slope
+    // within reach: it used to run away at 3.6 m/s (1:17.07), it now creeps at ~0.5.
     {
         const RunResult r = run(get("descente_frein_dynamique"));
-        std::printf("  descente_frein_dynamique (8 %%, short-circuit only) : final v=%.2f m/s\n",
+        std::printf("  descente_frein_dynamique (8 %%, A released) : final v=%.2f m/s\n",
                     std::fabs(r.final_v));
-        CHECK(r.ever_armed && !r.ever_fault);
+        CHECK(r.ever_armed && !r.ever_blocked);
         CHECK(std::fabs(r.final_v) < 0.7f);   // crawling terminal speed ("it holds")
         CHECK(std::fabs(r.final_v) > 0.05f);  // …but does NOT STOP: documented limit
     }
+    {
+        const RunResult r = run(get("descente16_frein_dynamique"));
+        std::printf("  descente16_frein_dynamique (16 %%, A released) : final v=%.2f m/s\n",
+                    std::fabs(r.final_v));
+        CHECK(r.ever_armed && !r.ever_blocked);
+        CHECK(std::fabs(r.final_v) < 1.f);    // creeps down…
+        CHECK(std::fabs(r.final_v) > 0.1f);   // …but does not stop
+    }
 }
 
-// Parameter sweep: the entire USEFUL range of web settings must remain tip-free.
-// (This is the original request: "test a set of parameters".)
-// ⚠️ It sweeps THREE load cases, not just the headline manoeuvre. Sweeping only
-// virage_pleine_vitesse used to pass turn_hi = 0.5 with +0.91 m/s² while the same setting
-// lifted a wheel under an off-centre child (−1.12): full throttle in a straight line is the
-// FORGIVING case, and a sweep that only runs it validates nothing about the hard ones.
-void testParamSweep()
+// duty_cap sweep over the three hard load cases: the ONLY safety lever left, so its table is
+// printed at every run and the ceiling quoted in the duty_cap help text (0.9) is pinned.
+// Full throttle in a straight line then a full turn is the forgiving case; the off-centre
+// child and the adult aboard are what set the number.
+void testCapSweep()
 {
     static const char* CASES[] = {"virage_pleine_vitesse", "enfant_seul_cote", "adulte_enfant"};
-    int runs = 0;
-    float worst = 1e9f;
-    float worst_hi = 0, worst_full = 0, worst_lim = 0;
-    const char* worst_case = "";
-    // The sweep validates the WHOLE web-settable range, so this list tracks the param's
-    // min..max. Its history is the history of the chassis: 0.4 went when the battery moved,
-    // 0.3 went when the bench went to the back of the deck, the whole range reopened on the
-    // reversed layout (bench over the driven axle) — and then 2026-08-10 the bench moved 6"
-    // forward and the axle 6" back, w_eff fell from 332 to 254 mm, and 0.3 started LIFTING a
-    // wheel: −0.27 with one child off-centre, −0.13 with an adult aboard. Measured here at
-    // 0.25 the margin is only +0.31, thinner than anything this project has shipped, so the
-    // ceiling is 0.2 — the default. The setting can now only be made GENTLER, never sharper.
-    for (const char* name : CASES)
-        for (float turn_hi : {0.1f, 0.15f, 0.2f})      // the param's min..max
-            for (float turn_full : {0.3f, 0.5f, 0.8f})
-                for (float vlim : {2.0f, 3.3f})
-                {
-                    Scenario sc = *findScenario(allScenarios(), name);
-                    sc.cfg = [=](KartConfig& c) {
-                        c.turn_hi = turn_hi;
-                        c.turn_full_ms = turn_full;
-                        c.speed_limit_ms = vlim;
-                    };
-                    const RunResult r = runScenario(sc);
-                    ++runs;
-                    if (r.min_tip_margin < worst)
-                    {
-                        worst = r.min_tip_margin;
-                        worst_hi = turn_hi; worst_full = turn_full; worst_lim = vlim;
-                        worst_case = name;
-                    }
-                    CHECK(r.min_tip_margin > 0.f);
-                    CHECK(!r.wheel_lifted);
-                }
-    std::printf("  sweep : %d combinations over %d load cases, worst margin %.2f m/s² "
-                "(%s, turn_hi=%.1f turn_full=%.1f vlim=%.1f)\n",
-                runs, static_cast<int>(sizeof(CASES) / sizeof(CASES[0])), worst, worst_case,
-                worst_hi, worst_full, worst_lim);
+    const auto all = allScenarios();
+    std::printf("  duty_cap sweep — min tip margin (m/s², < 0 = tips):\n      cap");
+    for (const char* n : CASES) std::printf("  %22s", n);
+    std::printf("\n");
+    for (float cap : {1.0f, 0.9f, 0.8f, 0.7f, 0.6f, 0.5f})
+    {
+        std::printf("     %.1f ", cap);
+        for (const char* n : CASES)
+        {
+            const RunResult r = runScenario(withCap(*findScenario(all, n), cap));
+            std::printf("  %15.2f %-6s", r.min_tip_margin, r.tipped ? "TIPS" : r.wheel_lifted ? "lifts" : "");
+            if (cap <= 0.9f + 1e-3f)
+            {
+                CHECK(!r.wheel_lifted && !r.tipped);
+                CHECK(r.min_tip_margin > 0.3f);
+            }
+        }
+        std::printf("\n");
+    }
 }
 
 // ─────────────────────────── JSON stream (viewer) ───────────────────────────
@@ -396,25 +402,24 @@ void testParamSweep()
 void printFrame(const Vehicle& v, const SimController& c, const CtrlTelemetry& t,
                 bool backrooms = false)
 {
-    const float mps2rpm = 60.f * hw::GEAR_RATIO / (PI_F * hw::WHEEL_DIAM_M);
+    const float mps2rpm = 60.f / (2.f * PI_F * v.params().wheel_r_m);   // wheel rpm
     std::printf("{\"t\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,\"h\":%.4f,\"v\":%.3f,\"w\":%.3f,"
                 "\"alat\":%.3f,\"margin\":%.3f,\"roll\":%.4f,\"pitch\":%.4f,\"lift\":%d,\"tipped\":%s,\"air\":%s,"
                 "\"outl\":%.3f,\"outr\":%.3f,"
-                "\"encl\":%.2f,\"encr\":%.2f,\"encl_vrai\":%.2f,\"encr_vrai\":%.2f,"
+                "\"rpml\":%.2f,\"rpmr\":%.2f,"
                 "\"p_w\":%.1f,\"e_wh\":%.3f,"
                 "\"stickx\":%.2f,\"sticky\":%.2f,"
-                "\"padx\":%.2f,\"pady\":%.2f,\"state\":%d,\"fault\":%d,\"faults\":%u,"
+                "\"padx\":%.2f,\"pady\":%.2f,\"state\":%d,\"stop\":%d,"
                 "\"brake\":%d,\"armed\":%s,\"power\":%s,\"backrooms\":%s}\n",
                 v.t(), v.x(), v.y(), v.z(), v.heading(), v.v(), v.yawRate(),
                 v.aLat(), v.tipMargin(), v.roll(), v.pitch(), v.liftSide(),
                 v.tipped() ? "true" : "false", v.airborne() ? "true" : "false",
                 c.lastOutL(), c.lastOutR(),
-                t.speed_l * mps2rpm, t.speed_r * mps2rpm,
                 v.wheelV(true) * mps2rpm, v.wheelV(false) * mps2rpm,
                 v.powerW(), v.energyWh(),
                 c.padX(), c.padY(),
-                t.turn, t.fwd, static_cast<int>(t.state), static_cast<int>(primaryFault(t.faults)),
-                t.faults, static_cast<int>(t.brake_mode), t.armed ? "true" : "false",
+                t.turn, t.fwd, static_cast<int>(t.state), static_cast<int>(t.stop),
+                static_cast<int>(t.brake_mode), t.armed ? "true" : "false",
                 c.powered() ? "true" : "false", backrooms ? "true" : "false");
     std::fflush(stdout);
 }
@@ -435,15 +440,15 @@ int streamScenario(const std::string& name, bool realtime)
     if (sc->veh) sc->veh(vmeta);
     const VehicleParams& p = vmeta.params();
     std::printf("{\"meta\":true,\"name\":\"%s\",\"desc\":\"%s\",\"duration\":%.1f,"
-                "\"atip\":%.3f,\"vlim\":%.2f,\"params\":{"
+                "\"atip\":%.3f,\"cap\":%.2f,\"params\":{"
                 "\"masse_totale_kg\":%.0f,\"masse_kart_kg\":%.0f,\"masse_passagers_kg\":%.0f,"
                 "\"voie_m\":%.2f,\"empattement_m\":%.3f,"
                 "\"iz_kgm2\":%.1f,\"xcg_m\":%.2f,\"hcg_m\":%.2f,\"ycg_m\":%.3f,"
-                "\"ke_vsrad\":%.4f,\"ra_ohm\":%.2f,\"i_max_a\":%.0f,\"reduction\":%.0f,\"rendement\":%.2f,"
+                "\"ke_vsrad\":%.4f,\"ra_ohm\":%.2f,\"i_max_a\":%.0f,\"reduction\":%.2f,\"rendement\":%.2f,"
                 "\"roulement_n\":%.0f,\"amort_lacet\":%.1f,"
                 "\"batt_v0\":%.1f,\"batt_rint\":%.2f,\"pente_deg\":%.1f}}\n",
                 sc->name.c_str(), sc->desc.c_str(), sc->duration_s,
-                vmeta.aTip(), [&]{ KartConfig c; c.setDefaults(); if (sc->cfg) sc->cfg(c); return c.speed_limit_ms; }(),
+                vmeta.aTip(), [&]{ KartConfig c; c.setDefaults(); if (sc->cfg) sc->cfg(c); return c.duty_cap_frac; }(),
                 p.mass(), p.mass_kart_kg, p.mass_pass_kg,
                 p.track_m, p.wb_m, p.iz_kgm2, p.xcg_m, p.hcg_m, p.ycg_m,
                 p.ke, p.ra_ohm, p.i_max_a, p.gear, p.eta, p.roll_n, p.yaw_damp,
@@ -466,7 +471,7 @@ int streamScenario(const std::string& name, bool realtime)
 } // namespace
 
 // ─────────────────────────── MANUAL driving (keyboard via the viewer) ───────────────────────────
-// Reads commands (JSON lines {"x":..,"y":..,"start":..,"estop":..}) on stdin, drives
+// Reads commands (JSON lines {"x":..,"y":..,"start":..,"estop":..,"a":..}) on stdin, drives
 // the kart in real time on the HILLY TERRAIN (terrain.hpp): the slope under the kart feeds
 // the physics at each step. Ends when stdin closes (the browser is gone).
 void parseCmd(const std::string& line, PadCmd& cmd)
@@ -479,6 +484,7 @@ void parseCmd(const std::string& line, PadCmd& cmd)
     cmd.y = std::fmax(-1.f, std::fmin(1.f, num("\"y\":", 0.f)));
     cmd.start = num("\"start\":", 0.f) != 0.f;
     cmd.estop = num("\"estop\":", 0.f) != 0.f;
+    cmd.drive = num("\"a\":", 0.f) != 0.f;   // A = hold to drive (the viewer's key)
 }
 
 int driveInteractive()
@@ -504,14 +510,14 @@ int driveInteractive()
     const VehicleParams& p = veh.params();
     std::printf("{\"meta\":true,\"name\":\"conduite_manuelle\","
                 "\"desc\":\"Keyboard driving on hilly terrain (slopes up to ~13 %%)\","
-                "\"duration\":0,\"terrain\":true,\"atip\":%.3f,\"vlim\":%.2f,\"params\":{"
+                "\"duration\":0,\"terrain\":true,\"atip\":%.3f,\"cap\":%.2f,\"params\":{"
                 "\"masse_totale_kg\":%.0f,\"masse_kart_kg\":%.0f,\"masse_passagers_kg\":%.0f,"
                 "\"voie_m\":%.2f,\"empattement_m\":%.3f,\"iz_kgm2\":%.1f,"
                 "\"xcg_m\":%.2f,\"hcg_m\":%.2f,\"ycg_m\":%.3f,"
-                "\"ke_vsrad\":%.4f,\"ra_ohm\":%.2f,\"i_max_a\":%.0f,\"reduction\":%.0f,"
+                "\"ke_vsrad\":%.4f,\"ra_ohm\":%.2f,\"i_max_a\":%.0f,\"reduction\":%.2f,"
                 "\"rendement\":%.2f,\"roulement_n\":%.0f,\"amort_lacet\":%.1f,"
                 "\"batt_v0\":%.1f,\"batt_rint\":%.2f,\"pente_deg\":0}}\n",
-                veh.aTip(), cfg.speed_limit_ms,
+                veh.aTip(), cfg.duty_cap_frac,
                 p.mass(), p.mass_kart_kg, p.mass_pass_kg,
                 p.track_m, p.wb_m, p.iz_kgm2, p.xcg_m, p.hcg_m, p.ycg_m,
                 p.ke, p.ra_ohm, p.i_max_a, p.gear, p.eta, p.roll_n, p.yaw_damp,
@@ -531,28 +537,14 @@ int driveInteractive()
         {
             const std::string line = acc.substr(0, nl);
             parseCmd(line, cmd);
-            // Rollover protection switch (viewer checkbox): same
-            // parameter as on the real kart (turn_limit_en), applied on the fly.
-            const size_t p = line.find("\"tl\":");
-            if (p != std::string::npos)
-            {
-                cfg.turn_limit_en = (std::atof(line.c_str() + p + 5) != 0.0) ? 1 : 0;
-            }
-            // Open-loop test mode switch (viewer checkbox): same parameter as on the
-            // real kart (open_loop) — mixed stick straight to the motors, no control loops.
-            const size_t po = line.find("\"ol\":");
-            if (po != std::string::npos)
-            {
-                cfg.open_loop = (std::atof(line.c_str() + po + 5) != 0.0) ? 1 : 0;
-            }
             // Mixing selector (viewer dropdown): same parameter as the real kart
-            // (mix_type) — 0 linear, 1 expo, 2 expo + speed-soft. Applied on the fly,
-            // so the feel difference can be compared mid-drive.
+            // (mix_type) — 0 linear, 1 expo. Applied on the fly, so the feel difference can
+            // be compared mid-drive.
             const size_t pm = line.find("\"mx\":");
             if (pm != std::string::npos)
             {
                 const int mx = static_cast<int>(std::atof(line.c_str() + pm + 5));
-                cfg.mix_type = (mx >= 0 && mx <= 2) ? mx : 0;
+                cfg.mix_type = (mx >= 0 && mx <= 1) ? mx : 0;
             }
             acc.erase(0, nl + 1);
         }
@@ -598,12 +590,13 @@ int main(int argc, char** argv)
     {
         g_trace = std::fopen(trace, "w");
         if (g_trace)
-            std::fprintf(g_trace, "scenario,t,v,w,alat,margin,outl,outr,fwd,turn,state,fault,brake,faults\n");
+            std::fprintf(g_trace, "scenario,t,v,w,alat,margin,outl,outr,fwd,turn,state,stop,brake\n");
     }
 
     std::printf("Physics simulation (real controller + vehicle model):\n");
+    testCoreOutputs();
     testScenarios();
-    testParamSweep();
+    testCapSweep();
     if (g_trace) std::fclose(g_trace);
 
     if (0 == g_failures)

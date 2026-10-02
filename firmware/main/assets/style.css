@@ -3,7 +3,7 @@
  --txt:#e7ecf3; --muted:#9aa7b8; --accent:#3da9fc; --green:#34d399;
  --amber:#f59e0b; --red:#ef4444;
  /* Left/right convention (nautical port/starboard): LEFT = red, RIGHT = green.
-    Semantic + theme-agnostic, like the fault red/amber — kept out of the skins. */
+    Semantic + theme-agnostic, like the alert red/amber — kept out of the skins. */
  --port:#ff5252; --starboard:#3ddc84;
 }
 *{box-sizing:border-box}
@@ -15,13 +15,14 @@ header{
  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
  position:sticky;top:0;z-index:50;   /* status pills ALWAYS visible while scrolling */
 }
-header .brakemode{margin-left:auto}   /* current state: brake/traction + armed, on the right */
+header .brakemode{margin-left:auto}   /* current state: driving/brake/freewheel + armed, on the right */
 .hdr-state{font-size:14px;font-weight:700;padding:5px 12px;border-radius:999px;
  background:#333;color:#fff;white-space:nowrap}
 .hdr-state.s0{background:#64748b}                       /* IDLE (disarmed) */
 .hdr-state.s1{background:var(--accent);color:#06121f}   /* calibration */
 .hdr-state.s2{background:var(--green);color:#04210f}    /* armed */
-.hdr-state.s3{background:var(--red);animation:blink 1s steps(2,start) infinite} /* fault */
+/* armed but A released (braking): outlined, not filled — 3 classes, so it beats the skin's .s2 */
+.hdr-state.s2.holda{background:var(--card2);color:var(--amber);box-shadow:inset 0 0 0 2px var(--amber)}
 @keyframes blink{50%{opacity:.35}}
 
 /* Tabs */
@@ -37,12 +38,12 @@ header .brakemode{margin-left:auto}   /* current state: brake/traction + armed, 
 @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
 
 /* Charts */
-#chart,#spdchart{width:100%;height:auto;background:#000;border:1px solid var(--line);border-radius:10px}
+#chart{width:100%;height:auto;background:#000;border:1px solid var(--line);border-radius:10px}
 .chart-title{font-size:13px;color:var(--muted);font-weight:600;margin:10px 0 4px}
 .legend{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:8px 0;font-size:13px}
 .legend span{font-weight:600}
 
-/* Progress bars (accel / PWM / speed) */
+/* Progress bars (forward / turn / PWM) */
 #bars{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0}
 .bar{margin:9px 0}
 .bar .lbl{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:4px}
@@ -91,57 +92,53 @@ label:last-child{border-bottom:0}
  font-weight:600;font-size:13px;color:var(--accent);letter-spacing:.4px}
 .cfgcat:first-child{margin-top:-8px;border-top:0;border-radius:12px 12px 0 0}
 label[title]{cursor:help}
-/* Faults page */
-.faultlist{display:flex;flex-direction:column;gap:8px;margin:10px 0}
-.faultcard{background:#3a1212;border:1px solid #a33;color:#ffd9d9;border-radius:10px;padding:10px 14px;font-size:14px}
-.faultcard.info{background:#33301a;border-color:#aa3;color:#f5edc2}
-.faultok{background:#12351b;border:1px solid #3a5;color:#c9f5d4;border-radius:10px;padding:12px 14px;font-size:15px}
+/* Dashboard: the "why it will not drive" card */
+.stoplist{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.stopcard{background:#3a1212;border:1px solid #a33;color:#ffd9d9;border-radius:10px;padding:10px 14px;font-size:14px}
+.stopok{background:#12351b;border:1px solid #3a5;color:#c9f5d4;border-radius:10px;padding:12px 14px;font-size:15px}
 .tab.tabalert{color:#fff;background:var(--red)}
-/* Fault-location diagram (top view of the tricycle) */
+/* Vehicle diagram (top view of the tricycle) */
 .hudcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 8px 6px;margin:10px 0}
-#faultdiag{width:100%;max-width:250px;display:block;margin:6px auto 2px}
-#faultdiag .body,#faultdiag .zsh{fill:var(--card2);stroke:var(--line);stroke-width:2}
-#faultdiag .tire{fill:#0c0f14}
-#faultdiag .tread{stroke:var(--line);stroke-width:1.5;opacity:.7}
-#faultdiag .seat{fill:#2a3342;stroke:var(--line);stroke-width:1.5}
-#faultdiag .seatback{fill:var(--line)}
-#faultdiag .fork{stroke:var(--muted);stroke-width:3;stroke-linecap:round}
-#faultdiag .casterw{fill:#2a3342;stroke:var(--line);stroke-width:1.5}
-#faultdiag .wave{fill:none;stroke:var(--line);stroke-width:1.5;opacity:.6}
-#faultdiag .diagfront{fill:var(--muted);font:10px system-ui,sans-serif;letter-spacing:2px}
-#faultdiag .ctxlab{fill:var(--muted);font:11px system-ui,sans-serif}
-#faultdiag .zlab{fill:var(--muted);font:600 13px system-ui,sans-serif}
-#faultdiag .zsub{fill:var(--muted);font:400 9px system-ui,sans-serif;opacity:.8}
-#faultdiag #fd-vbat{fill:var(--txt);font:700 14px ui-monospace,Menlo,Consolas,monospace}
-#faultdiag .fz.on .zsub,#faultdiag .fz.on #fd-vbat{fill:#ffd9d9}
-#faultdiag .fz.warn .zsub,#faultdiag .fz.warn #fd-vbat{fill:#ffe6a0}
-#faultdiag .stick{fill:var(--line)}
-#faultdiag .fz.on .zsh{fill:#4a1414;stroke:var(--red);stroke-width:2.5;animation:fpulse 1.1s ease-in-out infinite}
-#faultdiag .fz.on .zlab,#faultdiag .fz.on .stick,#faultdiag .fz.on .tread{stroke:#ffd9d9;fill:#ffd9d9}
-#faultdiag .fz.warn .zsh{fill:#3a2f10;stroke:var(--amber);stroke-width:2.5}
-#faultdiag .fz.warn .zlab,#faultdiag .fz.warn .stick,#faultdiag .fz.warn .tread{stroke:#ffe6a0;fill:#ffe6a0}
+#kartdiag{width:100%;max-width:250px;display:block;margin:6px auto 2px}
+#kartdiag .body,#kartdiag .zsh{fill:var(--card2);stroke:var(--line);stroke-width:2}
+#kartdiag .tire{fill:#0c0f14}
+#kartdiag .tread{stroke:var(--line);stroke-width:1.5;opacity:.7}
+#kartdiag .seat{fill:#2a3342;stroke:var(--line);stroke-width:1.5}
+#kartdiag .seatback{fill:var(--line)}
+#kartdiag .fork{stroke:var(--muted);stroke-width:3;stroke-linecap:round}
+#kartdiag .casterw{fill:#2a3342;stroke:var(--line);stroke-width:1.5}
+#kartdiag .wave{fill:none;stroke:var(--line);stroke-width:1.5;opacity:.6}
+#kartdiag .diagfront{fill:var(--muted);font:10px system-ui,sans-serif;letter-spacing:2px}
+#kartdiag .ctxlab{fill:var(--muted);font:11px system-ui,sans-serif}
+#kartdiag .zlab{fill:var(--muted);font:600 13px system-ui,sans-serif}
+#kartdiag .zsub{fill:var(--muted);font:400 9px system-ui,sans-serif;opacity:.8}
+#kartdiag #fd-vbat{fill:var(--txt);font:700 14px ui-monospace,Menlo,Consolas,monospace}
+#kartdiag .fz.on .zsub,#kartdiag .fz.on #fd-vbat{fill:#ffd9d9}
+#kartdiag .stick{fill:var(--line)}
+#kartdiag .fz.on .zsh{fill:#4a1414;stroke:var(--red);stroke-width:2.5;animation:fpulse 1.1s ease-in-out infinite}
+#kartdiag .fz.on .zlab,#kartdiag .fz.on .stick,#kartdiag .fz.on .tread{stroke:#ffd9d9;fill:#ffd9d9}
 @keyframes fpulse{50%{stroke-opacity:.35}}
-#faultdiag .fdrpm{fill:var(--txt);font:600 12px ui-monospace,Menlo,Consolas,monospace}
-#faultdiag .fdms{fill:var(--accent);font:700 15px ui-monospace,Menlo,Consolas,monospace}
-#faultdiag .fdrpm5{fill:var(--muted);font:11px ui-monospace,Menlo,Consolas,monospace}
-#faultdiag .fdpwm{font:600 11px ui-monospace,Menlo,Consolas,monospace}
-#faultdiag .fdpwml{fill:var(--port)}       /* LEFT motor = red (port) */
-#faultdiag .fdpwmr{fill:var(--starboard)}  /* RIGHT motor = green (starboard) */
-#faultdiag .zlab.lab-l{fill:var(--port)}       /* LEFT wheel label = red */
-#faultdiag .zlab.lab-r{fill:var(--starboard)}  /* RIGHT wheel label = green */
-#faultdiag .pwmtrack{fill:rgba(255,255,255,.06);stroke:var(--line);stroke-width:1}
-#faultdiag .pwmfill{transition:y .1s linear,height .1s linear}
-#faultdiag .pwmzero{stroke:var(--muted);stroke-width:1;opacity:.7}
-#faultdiag .fdmix{fill:var(--green);font:700 13px ui-monospace,Menlo,Consolas,monospace}
-#faultdiag .fdmix.act{fill:var(--green)}   /* active PID braking */
-#faultdiag .fdmix.dyn{fill:var(--amber)}   /* dynamic (short-circuit) braking */
-#faultdiag .fdmix.free{fill:var(--muted)}  /* freewheel (coast, no brake) */
+#kartdiag .fdpwm{font:600 11px ui-monospace,Menlo,Consolas,monospace}
+#kartdiag .fdpwml{fill:var(--port)}       /* LEFT motor = red (port) */
+#kartdiag .fdpwmr{fill:var(--starboard)}  /* RIGHT motor = green (starboard) */
+#kartdiag .zlab.lab-l{fill:var(--port)}       /* LEFT wheel label = red */
+#kartdiag .zlab.lab-r{fill:var(--starboard)}  /* RIGHT wheel label = green */
+#kartdiag .pwmtrack{fill:rgba(255,255,255,.06);stroke:var(--line);stroke-width:1}
+#kartdiag .pwmfill{transition:y .1s linear,height .1s linear}
+#kartdiag .pwmzero{stroke:var(--muted);stroke-width:1;opacity:.7}
+#kartdiag .fdmix{fill:var(--green);font:700 13px ui-monospace,Menlo,Consolas,monospace}
+#kartdiag .fdmix.dyn{fill:var(--amber)}   /* dynamic (short-circuit) braking */
+#kartdiag .fdmix.free{fill:var(--muted)}  /* pseudo-freewheel (PWM run-down) */
+/* A (hold to drive) line under the drive command */
+#kartdiag .fdhint{fill:var(--muted);font:11px ui-monospace,Menlo,Consolas,monospace}
+#kartdiag .fdhint.warn{fill:var(--amber)}
+#kartdiag .fdhint.on{fill:var(--green)}
 .diagcap{color:var(--muted);font-size:12px;text-align:center;margin:0 0 6px}
-/* Persistent brake-mode badge (traction / dynamic / active) */
+/* Persistent output-mode badge (driving / dynamic brake / pseudo-freewheel) */
 .pill.brakemode{font-weight:600}
 .pill.bm0{background:#2a3550;color:#cfe2ff}
 .pill.bm1{background:#4a3410;color:#ffd9a0;border:1px solid var(--amber)}
-.pill.bm2{background:#12351b;color:#c9f5d4;border:1px solid #3a5}
+.pill.bm2{background:var(--card2);color:var(--muted);border:1px dashed var(--muted)}
 button:disabled{opacity:.35;cursor:not-allowed}
 input{width:120px;background:var(--card2);color:var(--txt);border:1px solid var(--line);
  border-radius:8px;padding:7px 9px;font-size:14px;text-align:right}
@@ -223,19 +220,17 @@ body{font-family:ui-monospace,Menlo,Consolas,monospace;background:
 header{background:linear-gradient(90deg,#1a1400,#0b0d0a);border-bottom:2px solid var(--accent);
  text-transform:uppercase;letter-spacing:3px}
 .hdr-state.s2{background:var(--accent);color:#1a1200}
-.pill.brakemode.bm2{background:var(--card2);color:var(--accent);border:1px solid var(--accent)}
 .tab{text-transform:uppercase;letter-spacing:1px}
 .tab.active{border-bottom-color:var(--accent);color:var(--accent)}
 .chart-title{text-transform:uppercase;letter-spacing:2px;color:var(--accent);
  border-left:3px solid var(--accent);padding-left:8px}
 .cfgcat{color:var(--accent);text-transform:uppercase;letter-spacing:2px}
-.hudcard,form,.status,#bars,.faultok{box-shadow:inset 0 0 0 1px rgba(255,176,0,.06)}
+.hudcard,form,.status,#bars,.stopok{box-shadow:inset 0 0 0 1px rgba(255,176,0,.06)}
 .pill{text-transform:uppercase;letter-spacing:1px}
 .pill.on{background:var(--accent);color:#1a1200}
 button{background:var(--accent);color:#1a1200;text-transform:uppercase;letter-spacing:1px}
 button.alt{background:var(--card2);color:var(--accent);border:1px solid var(--accent)}
-#faultdiag .fdms{fill:var(--accent);font:800 16px ui-monospace,monospace}
-#faultdiag .fdmix{fill:var(--green)}
+#kartdiag .fdmix{fill:var(--green)}
 /* PWM gauge/label + wheel-label colours follow the structural port/starboard
    convention (--port / --starboard); no skin override so LEFT stays red,
    RIGHT stays green in every theme. */

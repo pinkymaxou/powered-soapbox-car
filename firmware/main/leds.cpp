@@ -1,7 +1,8 @@
 // leds.cpp — Task dedicated to the WS2812B strip: reflects the kart's state.
 //   ARMED = moving rainbow (scrolling hue wheel) · yellow = healthy but disarmed ·
-//   pulsing yellow = arming · fault stop = 2 s rapid red blink then a steady 1 Hz red
-//   blink until the fault clears · blue = calibration.
+//   pulsing yellow = arming · red = the gamepad is connected but NOT CALIBRATED, so the kart
+//   will not arm at all (2 s rapid blink, then a steady 1 Hz one until it is done) ·
+//   blue = calibration in progress.
 #include "leds.hpp"
 
 #include "config.hpp"
@@ -17,10 +18,10 @@
 namespace
 {
 constexpr int REFRESH_MS = 50;             // ~20 Hz
-constexpr int FAULT_ALERT_MS = 2000;       // rapid red blink burst on a fault stop
+constexpr int ALERT_MS = 2000;             // rapid red blink burst when the alert starts
 Ws2812 m_strip;
 int     m_phase = 0;
-int     m_fault_ms = 0;                    // time in Fault since entry (drives the 2 s alert)
+int     m_red_ms = 0;                      // time in the red state (drives the 2 s burst)
 
 // Hue wheel (0-255) → RGB, full saturation/value: the classic thirds-of-the-circle ramp.
 void hueToRgb(uint8_t h, uint8_t& r, uint8_t& g, uint8_t& b)
@@ -54,20 +55,24 @@ void render(const KartConfig& cfg)
 {
     ++m_phase;
     const bool slow     = ((m_phase / 10) & 1);   // ~1 Hz
-    const bool veryfast = ((m_phase /  2) & 1);    // ~5 Hz (rapid fault alert)
+    const bool veryfast = ((m_phase /  2) & 1);    // ~5 Hz (rapid alert burst)
     uint8_t r = 0;
     uint8_t g = 0;
     uint8_t b = 0;
 
     const KartStatus st = statusSnapshot();
     const State state = static_cast<State>(st.m_state);
-    m_fault_ms = (State::Fault == state) ? (m_fault_ms + REFRESH_MS) : 0;
+    // The ONE condition worth a red light: the gamepad is there but was never calibrated, so
+    // START does nothing and the kart looks dead. Every other Stop cause (gamepad off, silent,
+    // B held) either IS the resting state or resolves itself, and shows as plain disarmed.
+    const bool red = (static_cast<int>(Stop::NotCalibrated) == st.m_stop);
+    m_red_ms = red ? (m_red_ms + REFRESH_MS) : 0;
 
     // Calibration collection in progress → BLUE, checked FIRST. The truth lives in
     // input::calState(), not in the core's State: the core deliberately knows nothing about
     // the calibration wizard (State::Calibrate exists in the enum but nothing produces it —
-    // the blue LED was dead code until this check). It also outranks Fault below: collecting
-    // raises the blocking NOCAL on purpose (see input.cpp), and blinking red at someone
+    // the blue LED was dead code until this check). It also outranks the red below: collecting
+    // marks the gamepad uncalibrated on purpose (see input.cpp), and blinking red at someone
     // following the wizard would read as "something broke".
     if (1 == input::calState())
     {
@@ -77,15 +82,20 @@ void render(const KartConfig& cfg)
         return;
     }
 
+    if (red)
+    {
+        // 2 s rapid red blink to grab attention, then a steady ~1 Hz one until the gamepad is
+        // calibrated. It must NEVER settle to solid red — a static light reads as "state
+        // shown", a blinking one as "something needs doing".
+        r = (m_red_ms <= ALERT_MS) ? (veryfast ? 255 : 0) : (slow ? 255 : 0);
+        m_strip.setBrightness(static_cast<uint8_t>(cfg.led_brightness));
+        m_strip.setAll(r, g, b);
+        m_strip.show();
+        return;
+    }
+
     switch (state)
     {
-        case State::Fault:
-            // Stop due to a fault: 2 s rapid red blink to grab attention, then a steady ~1 Hz
-            // red blink for as long as the fault lasts. It must NEVER settle to solid red — a
-            // static light reads as "state shown", a blinking one as "something needs fixing",
-            // and some faults (encoders) latch until reboot with nothing else to signal them.
-            r = (m_fault_ms <= FAULT_ALERT_MS) ? (veryfast ? 255 : 0) : (slow ? 255 : 0);
-            break;
         case State::Calibrate:
             b = 255;
             break;

@@ -30,7 +30,7 @@ def sim_stale() -> bool:
     sources = [FW / "test_host/sim_main.cpp", FW / "main/controller_core.cpp",
                FW / "main/controller_core.hpp", FW / "main/config_params.cpp",
                FW / "main/control_types.hpp", FW / "main/control_math.hpp",
-               FW / "main/pid.hpp"]
+               FW / "main/mixer.hpp", FW / "main/advisors.hpp"]
     sources += (FW / "test_host/sim").glob("*.hpp")
     return any(s.stat().st_mtime > bin_mtime for s in sources)
 

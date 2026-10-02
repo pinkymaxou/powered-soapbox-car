@@ -11,28 +11,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-// Sensor callback: the two wheel encoders — the read ERRORS travel in the return
-// (enc_ok_*/mag_ok_*). Nothing else is measured on this kart: the pack is always 12 V.
-SensorReadings EspController::readSensors()
-{
-    // Timed separately from the whole tick: loop_max_us is WALL CLOCK and so also counts
-    // preemption by Wi-Fi/BT, which would otherwise be blamed on the sensors. This one is
-    // the I2C cost alone.
-    const int64_t t0 = esp_timer_get_time();
-    SensorReadings s;
-    s.enc_delta_l = board::encLeftDelta();
-    s.enc_delta_r = board::encRightDelta();
-    s.enc_ok_l = board::encLeftPresent();
-    s.enc_ok_r = board::encRightPresent();
-    board::refreshMagStatus();                 // poll AS5600 STATUS (rate-limited internally)
-    s.mag_ok_l = board::encLeftMagOk();
-    s.mag_ok_r = board::encRightMagOk();
-    const uint32_t d = static_cast<uint32_t>(esp_timer_get_time() - t0);
-    for (uint32_t& peak : m_sens_max_us)
-        if (d > peak) peak = d;
-    return s;
-}
-
 // Output callback: the motor command, nothing else (see CtrlOutputs).
 void EspController::applyOutputs(const CtrlOutputs& out)
 {
@@ -53,6 +31,7 @@ void EspController::pushPad()
     p.calibrated = input::calibrated();
     p.estop = m_in.estop;
     p.start = m_in.start;
+    p.drive = m_in.drive;
     p.last_report_us = input::lastReportUs();
     m_ctrl.setPad(p);
     m_pad_in = p;
@@ -63,11 +42,7 @@ void EspController::publish(const CtrlTelemetry& t)
 {
     KartStatus st;
     st.m_state      = static_cast<int>(t.state);
-    st.m_fault      = static_cast<int>(primaryFault(t.faults));   // derived from the bitset
-    st.m_faults     = t.faults;
-    st.m_rpm_l      = t.rpm_l;
-    st.m_rpm_r      = t.rpm_r;
-    st.m_speed_ms   = t.speed_ms;
+    st.m_stop       = static_cast<int>(t.stop);
     st.m_fwd        = t.fwd;
     st.m_turn       = t.turn;
     st.m_out_l      = t.out_l;
@@ -75,6 +50,7 @@ void EspController::publish(const CtrlTelemetry& t)
     st.m_brake_mode = static_cast<int>(t.brake_mode);
     st.m_arming     = t.armed;
     st.m_btn_start  = t.btn_start;
+    st.m_btn_drive  = m_in.drive;
 
     st.m_estop    = m_in.estop;
     st.m_pad_conn = m_in.connected;
@@ -95,15 +71,13 @@ void EspController::init()
 {
     board::init();
     input::init();
-    m_ctrl.setCallbacks([this] { return readSensors(); },
-                        [this](const CtrlOutputs& out) { applyOutputs(out); });
+    m_ctrl.setCallbacks([this](const CtrlOutputs& out) { applyOutputs(out); });
     statusPublish(KartStatus{});   // safe defaults: Lockout, dynamic braking, no fault
 }
 
 void EspController::tickOnce()
 {
-    // Worst tick since the last read, published in the telemetry. A sensor that goes quiet
-    // costs an I2C timeout, and this is what makes that cost VISIBLE instead of suspected.
+    // Worst tick since the last read, published in the telemetry.
     const int64_t t_begin = esp_timer_get_time();
     pushPad();
     const KartConfig cfg = configSnapshot();   // the web config can change at any time
@@ -115,17 +89,14 @@ void EspController::tickOnce()
     const CtrlTelemetry t = m_ctrl.telemetry();
     const RumbleCmd r = m_rumble.update(t, m_pad_in, now);
     if (r.active) input::rumble(r.strong, r.weak, r.duration_ms);
-    // Event log: arm/disarm edges and fault bits raised mid-run. The Disarm record carries
-    // the WHOLE fault mask of its tick — that mask IS the answer to "why did it stop": the
-    // culprit bit (pad stale, e-stop, encoder…) rises on the very tick that disarms, so a
-    // separate rising-edge record would always miss it. Mask 0 = manual or inactivity.
+    // Event log: the arm/disarm edges. The Disarm record carries the Stop cause of its very
+    // tick — that IS the answer to "why did it stop": the culprit (pad stale, e-stop…) appears
+    // on the tick that disarms, so watching for it separately would always miss it.
+    // Stop::None = a manual disarm or the inactivity timeout.
     // push() is a RAM ring write — the flash cost lives in evlog's drain task, disarmed only.
     if (t.armed && !m_ev_armed) evlog::push(evlog::Ev::Arm, 0);
-    if (!t.armed && m_ev_armed) evlog::push(evlog::Ev::Disarm, t.faults);
-    const unsigned rising = t.faults & ~m_ev_faults;
-    if (t.armed && 0 != rising) evlog::push(evlog::Ev::Fault, rising);
+    if (!t.armed && m_ev_armed) evlog::push(evlog::Ev::Disarm, static_cast<uint32_t>(t.stop));
     m_ev_armed = t.armed;
-    m_ev_faults = t.faults;
 
     publish(t);
 
@@ -139,14 +110,6 @@ uint32_t EspController::loopMaxUs(int who)
     if (who < 0 || who >= PEAK_N) return 0;
     const uint32_t v = m_loop_max_us[who];
     m_loop_max_us[who] = 0;
-    return v;
-}
-
-uint32_t EspController::sensMaxUs(int who)
-{
-    if (who < 0 || who >= PEAK_N) return 0;
-    const uint32_t v = m_sens_max_us[who];
-    m_sens_max_us[who] = 0;
     return v;
 }
 
@@ -178,11 +141,6 @@ void init()
 uint32_t loopMaxUs(int who)
 {
     return m_controller.loopMaxUs(who);
-}
-
-uint32_t sensMaxUs(int who)
-{
-    return m_controller.sensMaxUs(who);
 }
 
 void start()

@@ -13,8 +13,8 @@
 # ⚠️ 2026-08-10 (build decision): the bench moved 6" FORWARD and the axle 6" BACK — 12" of
 # separation between the passengers and the axle they used to sit on.
 # w_eff 332 -> 254 mm, a_tip 0.69 g -> 0.53 g, load on the driven wheels 79 % -> 61 %.
-# The software turn limiter stopped being redundancy at that point — with it off the
-# simulation now rolls the kart over (see firmware/test_host/sim_main.cpp).
+# Since 2026-09-29 there is no software turn limiter at all (no wheel sensors): duty_cap is
+# the only lever, and at 1.0 an off-centre load tips in simulation (firmware/test_host/sim_main.cpp).
 # The deck hangs 4" of shim above the driven axle and the 10" wheels poke through side
 # NOTCHES beside it, bearing laterally on the two inboard 2x3 rails — which sets the track.
 import matplotlib
@@ -107,7 +107,7 @@ ax.annotate("12 V battery, nose, OVER the caster:\nkeeps that single wheel plant
 ax.annotate("the 10″ caster needs its plate at 332 mm:\na short pad (73 mm) over the deck",
             xy=(60, CASTER_PLATE + 10), xytext=(230, 500), fontsize=8, color='#b71c1c',
             arrowprops=dict(arrowstyle='->', lw=0.8, color='#b71c1c'))
-ax.annotate("bench 6″ AHEAD of the driven axle (axle went back 6″):\nthe 12″ gap costs 78 mm of w_eff — a_tip 0.69 g → 0.53 g,\nso the turn limiter is now load-bearing, not redundancy",
+ax.annotate("bench 6″ AHEAD of the driven axle (axle went back 6″):\nthe 12″ gap costs 78 mm of w_eff — a_tip 0.69 g → 0.53 g,\nand no firmware turn limit backs it up: duty_cap is the only lever",
             xy=(SEAT_X0 + 150, FLOOR_TOP + 45), xytext=(440, 570),
             fontsize=8.5, color='#b71c1c',
             arrowprops=dict(arrowstyle='->', lw=0.8, color='#b71c1c'))

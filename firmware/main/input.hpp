@@ -30,6 +30,7 @@ struct State
     bool  connected = false; // gamepad paired AND connected
     bool  estop = false;     // gamepad stop button (e.g. B) — immediate brake
     bool  start = false;     // gamepad START/Options button — the ONLY way to arm the kart
+    bool  drive = false;     // gamepad A button — HOLD TO DRIVE (released = dynamic brake)
 };
 
 // Haptic feedback: makes the gamepad rumble (magnitudes 0..255, duration in ms).

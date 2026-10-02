@@ -230,25 +230,22 @@ size_t buildWifiPb(const char* error = "")
 // are plenty for the screen (~520 px chart).
 constexpr int HIST_FAST_N   = 120;  // 10 min @ 5 s
 constexpr int HIST_FAST_DT  = 5;
-constexpr int HIST_SPEED_N  = 60;   // 1 min @ 1 s (dedicated speed chart, small)
-// Hist is callback-encoded too, but its size is fully known: 3 varints + 8 byte arrays of
+// Hist is callback-encoded too, but its size is fully known: 1 varint + 4 byte arrays of
 // fixed length. Bound it so growing a window cannot quietly overflow its buffer — and bound
 // it against the RIGHT buffer: Hist encodes into m_hist_bin (its own 1 s cache, sent as-is),
 // NOT into the m_reply arena. The first version of this guard checked hw::PB_REPLY_CAP
 // (10240) while the actual buffer was 1024 bytes — a guard that could never fire, in front
 // of an encode that fails silently (no frame, charts just stop updating).
-constexpr size_t HIST_PB_MAX = 2 * 6                       // dt_fast / dt_spd
-                             + 7 * 3                       // one tag + length varint each
-                             + 6 * HIST_FAST_N             // accel, pwml, pwmr, rpml, rpmr, loop
-                             + HIST_SPEED_N;               // spd
-constexpr size_t HIST_BIN_CAP = 1024;   // measured full ≈ 900 bytes (780 of samples + headers)
+constexpr size_t HIST_PB_MAX = 6                           // dt_fast
+                             + 4 * 3                       // one tag + length varint each
+                             + 4 * HIST_FAST_N;            // accel, pwml, pwmr, loop
+constexpr size_t HIST_BIN_CAP = 512;    // full ≈ 500 bytes (480 of samples + headers)
 static_assert(HIST_PB_MAX + 8 <= HIST_BIN_CAP,   // +8: Msg envelope tag + length
               "The history series no longer fit m_hist_bin: grow HIST_BIN_CAP");
 struct
 {
-    Ring<uint8_t, HIST_FAST_N>  accel, pwml, pwmr, rpml, rpmr;   // rpml/rpmr: wheel rpm (0..250)
+    Ring<uint8_t, HIST_FAST_N>  accel, pwml, pwmr;
     Ring<uint8_t, HIST_FAST_N>  loop;   // worst 500 Hz tick, in units of 50 µs (0..250 = 12.5 ms)
-    Ring<uint8_t, HIST_SPEED_N> spd;
     int tick = 0;
 } m_hist;
 SemaphoreHandle_t  m_hist_mtx = nullptr;
@@ -259,22 +256,6 @@ uint8_t pctU8(float v)   // percentage 0..100 (throttle, PWM)
     if (v < 0.f) v = 0.f;
     if (v > 100.f) v = 100.f;
     return static_cast<uint8_t>(v + 0.5f);
-}
-
-uint8_t u8x10(float v)   // physical value ×10 (resolution 0.1; clamped 0..25.5 → m/s)
-{
-    float s = v * 10.f;
-    if (s < 0.f) s = 0.f;
-    if (s > 255.f) s = 255.f;
-    return static_cast<uint8_t>(s + 0.5f);
-}
-
-// Encoder-shaft rpm → 1 byte: rpm/5, so 0..255 covers 0..1275 rpm (raw, no gear ratio applied).
-uint8_t rpmU8(float rpm_in)
-{
-    float rpm = fabsf(rpm_in) / 5.f;   // 1 byte holds 0..255 → 0..1275 rpm (encoder shaft)
-    if (rpm > 255.f) rpm = 255.f;
-    return static_cast<uint8_t>(rpm + 0.5f);
 }
 
 void histSample(void*)
@@ -289,14 +270,11 @@ void histSample(void*)
         xSemaphoreGive(m_hist_mtx);
         return;
     }
-    m_hist.spd.push(u8x10(fabsf(st.m_speed_ms)));                        // |vehicle v| m/s ×10, each s
     if (0 == (m_hist.tick % HIST_FAST_DT))
     {
         m_hist.accel.push(pctU8(fabsf(st.m_fwd) * 100.f));               // % (forward command)
         m_hist.pwml.push(pctU8(fabsf(st.m_out_l) * 100.f));              // %
         m_hist.pwmr.push(pctU8(fabsf(st.m_out_r) * 100.f));              // %
-        m_hist.rpml.push(rpmU8(st.m_rpm_l));                             // rpm left wheel
-        m_hist.rpmr.push(rpmU8(st.m_rpm_r));                             // rpm right wheel
         // Worst tick over the window, in 50 µs units so a byte spans 12.5 ms. Reading it
         // RESETS the peak — our own PeakHist slot, so the System tab's sysdyn poll (which
         // reads PeakSysDyn) cannot steal a spike from this chart, nor we from it.
@@ -322,26 +300,22 @@ const pb_byte_t* buildHistPb(size_t& len)
         len = m_hist_bin_len;
         return m_hist_bin;
     }
-    static uint8_t lin_fast[6][HIST_FAST_N];
-    static uint8_t lin_spd[HIST_SPEED_N];
-    BytesArg args[7];
+    static uint8_t lin_fast[4][HIST_FAST_N];
+    BytesArg args[4];
     xSemaphoreTake(m_hist_mtx, portMAX_DELAY);
-    const Ring<uint8_t, HIST_FAST_N>* fast[6] = {&m_hist.accel, &m_hist.pwml, &m_hist.pwmr,
-                                        &m_hist.rpml, &m_hist.rpmr, &m_hist.loop};
-    for (int k = 0; k < 6; ++k)
+    const Ring<uint8_t, HIST_FAST_N>* fast[4] = {&m_hist.accel, &m_hist.pwml, &m_hist.pwmr, &m_hist.loop};
+    for (int k = 0; k < 4; ++k)
     {
         args[k] = {lin_fast[k], static_cast<size_t>(fast[k]->copyTo(lin_fast[k], HIST_FAST_N))};
     }
-    args[6] = {lin_spd, static_cast<size_t>(m_hist.spd.copyTo(lin_spd, HIST_SPEED_N))};
     xSemaphoreGive(m_hist_mtx);
 
     Msg msg = Msg_init_zero;
     msg.which_body = Msg_hist_tag;
     Hist& h = msg.body.hist;
     h.dt_fast = HIST_FAST_DT;
-    h.dt_spd = 1;
-    pb_callback_t* fields[7] = {&h.accel, &h.pwml, &h.pwmr, &h.rpml, &h.rpmr, &h.loop, &h.spd};
-    for (int k = 0; k < 7; ++k)
+    pb_callback_t* fields[4] = {&h.accel, &h.pwml, &h.pwmr, &h.loop};
+    for (int k = 0; k < 4; ++k)
     {
         fields[k]->funcs.encode = encBytes;
         fields[k]->arg = &args[k];
@@ -446,12 +420,7 @@ size_t buildStatusPb()
     const KartStatus s = statusSnapshot();
     Status& st = msg.body.status;
     st.state      = static_cast<Status_State>(s.m_state);
-    st.fault      = static_cast<Status_Fault>(s.m_fault);
-    st.faults     = s.m_faults;
-    st.speed_ms   = s.m_speed_ms;
-    // Wheels in RPM (signed), vehicle in m/s — the conversion happens HERE, on the micro side.
-    st.rpm_l      = s.m_rpm_l;   // already in rpm: enc_rpm_per_cps ratio from the controller
-    st.rpm_r      = s.m_rpm_r;
+    st.stop       = static_cast<Status_Stop>(s.m_stop);
     st.fwd        = s.m_fwd;
     st.turn       = s.m_turn;
     st.out_l      = s.m_out_l;
@@ -459,6 +428,7 @@ size_t buildStatusPb()
     st.brake_mode = static_cast<Status_BrakeMode>(s.m_brake_mode);
     st.arming     = s.m_arming;
     st.btn_start  = s.m_btn_start;
+    st.btn_drive  = s.m_btn_drive;
     st.pad_conn   = s.m_pad_conn;
     st.pad_batt   = s.m_pad_batt;
     st.pad_x      = s.m_pad_x;
@@ -615,7 +585,6 @@ size_t buildSysDynPb()
     msg.body.sysdyn.heap_min  = esp_get_minimum_free_heap_size();
     msg.body.sysdyn.ledc_fix  = board::ledcClkFixCount();
     msg.body.sysdyn.loop_max_us = Controller::loopMaxUs(EspController::PeakSysDyn);
-    msg.body.sysdyn.sens_max_us = Controller::sensMaxUs(EspController::PeakSysDyn);
     uint32_t gh[input::GAP_BUCKETS];
     input::gapStats(gh, msg.body.sysdyn.pad_gap_max_ms);
     msg.body.sysdyn.pad_gap_le15  = gh[0];

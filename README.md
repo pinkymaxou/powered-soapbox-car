@@ -5,7 +5,7 @@
 
 Project to build a **two-seat electric kart** for kids (~10 years old, 1.38–1.45 m), designed to be buildable with **basic tools** (drill, saw, wrenches) plus a **3D printer** for the gearboxes. Every choice is explained so you can adapt it to the materials you have on hand.
 
-> **Note:** this kart is a **REVERSED tricycle**. The **2 REAR wheels are powered and independent** (one **12 V DC motor + gearbox + #35 chain per wheel**), sitting **under the bench**; **steering is done by the speed difference** between them (*differential / skid steer*) — **no steering wheel, no column, no linkage**. At the **front centre**, **one free 10″ caster** orients itself, with the battery in the nose over it → **3 wheels total**. ⚠️ The first version had this backwards (driven wheels at the front, caster at the rear, bench far from the driven axle) and it was **too unstable — 0.39 g**, held upright by the software turn limiter alone. A tricycle tips about the line from the **single** wheel to one of the **paired** wheels, so the usable half-track is `(distance CG→single wheel)/wheelbase`: putting the mass near the **paired axle** takes that from 45 % to 80 %. ⚠️ On **2026-08-10** the bench moved **6″ forward** and the axle **6″ back** — 12″ of separation — which gave back 78 mm of that: **61 %, a_tip 0.53 g**. That is still 1.4× the original tricycle, but it is no longer enough on its own: **with the turn limiter off the simulation now rolls the kart over**, where the bench-over-the-axle version stayed planted. The limiter is safety, not comfort. The kart is a **two-seater** (two kids **side by side**) and **driven with a Bluetooth gamepad** ("arcade" mixing: one stick to go forward/back and to turn) — **no throttle pedal and no steering wheel**. Propulsion comes from the **2 rear motors**; there is **no** pedal crank and no chain.
+> **Note:** this kart is a **REVERSED tricycle**. The **2 REAR wheels are powered and independent** (one **12 V DC motor + gearbox + #35 chain per wheel**), sitting **under the bench**; **steering is done by the speed difference** between them (*differential / skid steer*) — **no steering wheel, no column, no linkage**. At the **front centre**, **one free 10″ caster** orients itself, with the battery in the nose over it → **3 wheels total**. ⚠️ The first version had this backwards (driven wheels at the front, caster at the rear, bench far from the driven axle) and it was **too unstable — 0.39 g**, held upright by the software turn limiter alone. A tricycle tips about the line from the **single** wheel to one of the **paired** wheels, so the usable half-track is `(distance CG→single wheel)/wheelbase`: putting the mass near the **paired axle** takes that from 45 % to 80 %. ⚠️ On **2026-08-10** the bench moved **6″ forward** and the axle **6″ back** — 12″ of separation — which gave back 78 mm of that: **61 %, a_tip 0.53 g**. That is still 1.4× the original tricycle — and since **2026-09-29 there is no software turn limiter at all** (the wheel sensors are gone; the owner's decision). In simulation a full-speed full turn at the default `duty_cap` 1.0 **tips the kart with one child sitting off-centre or with an adult aboard**; two children centred stay upright. `duty_cap` is the only lever — the numbers are in [§5](#5-critical-safety-points-child). The kart is a **two-seater** (two kids **side by side**) and **driven with a Bluetooth gamepad** ("arcade" mixing: one stick to go forward/back and to turn) — **no throttle pedal and no steering wheel**. Propulsion comes from the **2 rear motors**; there is **no** pedal crank and no chain.
 
 ## Table of contents
 
@@ -13,9 +13,9 @@ Project to build a **two-seat electric kart** for kids (~10 years old, 1.38–1.
 - [At a glance](#at-a-glance) · [Why these choices](#why-these-choices)
 - [1. Chassis dimensions](#1-chassis-dimensions)
 - [2. Seat / controls position](#2-seat--controls-position)
-- [3. Differential steering](#3-differential-steering-skid-steer)
+- [3. Differential steering](#3-differential-steering-skid-steer) · [Driving: START arms, A drives](#driving-start-arms-a-drives)
 - [4. Hardware & electronics](#4-hardware--electronics)
-  - [Propulsion (2 rear motors)](#propulsion--2-rear-12-v-dc-motors) · [ESP32 control](#electronic-control--esp32) · [AS5600 sensors](#as5600-speed-sensors-2-on-ic) · [Calibration](#gamepad-calibration)
+  - [Propulsion (2 rear motors)](#propulsion--2-rear-12-v-dc-motors) · [ESP32 control](#electronic-control--esp32) · [No wheel sensors](#no-wheel-sensors) · [Calibration](#gamepad-calibration)
   - [Electrical safety](#electrical-safety) · [Wiring & pinout](#wiring-diagram--esp32-pinout) · [System diagram](#full-system-diagram-all-connectors)
   - [The battery, unmeasured](#the-battery-unmeasured) · [2 batteries in parallel (dropped)](#wiring-2-batteries-in-parallel) · [Power switch (one main relay)](#power-switch-one-main-relay)
 - [5. Critical safety points](#5-critical-safety-points-child)
@@ -81,7 +81,7 @@ flowchart TB
 
 **Footprint:** length ~145 cm · width ~90 cm · **track ~83 cm** · **wheelbase ~117 cm** · **2 rear drive wheels Ø25.4 cm (10″), 6″ behind the bench** + **1 free 10″ front caster (centred)** + battery and electronics in the nose · **side guardrails** + **emergency stop at the top of the seatback (centered)** · **a_tip ≈ 0.53 g**.
 
-> ⚠️ For **flat ground, under adult supervision** only. Estimated speed ~8–12 km/h (~3.3 m/s), runtime ~10–20 min. **a_tip ≈ 0.53 g**. ⚠️ The software rollover protection (§3) is **load-bearing safety on this chassis, not a second layer**: with it disabled the simulation rolls the kart over in a full-speed turn. Never drive a child with `turn_limit_en` at 0.
+> ⚠️ For **flat ground, under adult supervision** only. Top speed **~9 km/h (~2.5 m/s, simulated)** since the 18T gearing of 2026-09-29, runtime ~10–20 min. **a_tip ≈ 0.53 g**. ⚠️ **There is no rollover protection**: nothing measures the speed, so nothing limits the turn. At the default `duty_cap` 1.0 a full-speed full turn tips the kart in simulation with one child off-centre or an adult aboard; `duty_cap` 0.9 keeps all three simulated loads upright ([§5](#5-critical-safety-points-child)).
 
 ## At a glance
 
@@ -90,26 +90,26 @@ flowchart TB
 | **Seats** | 2, single bench side by side; **driver on the left** (gamepad) |
 | **Steering** | **Differential (skid steer)**: speed difference between the 2 REAR driven wheels; **pivot in place** possible; **no mechanical steering parts** |
 | **Propulsion** | **2× 12 V DC motors (~172 W / 0.23 HP)** at the REAR, **independent** (one per wheel) — **PWM/DIR per wheel** |
-| **Transmission** | **3D-printed gearboxes** (16→80 then 30→80 = 1:13.33, 16T/24 DP motor pinion — see [`doc/reducteur.md`](doc/reducteur.md)) + **1.28:1 sprockets (25T→32T) bolted to the rear wheels + #35 chain** = **1:17 total** |
+| **Transmission** | **3D-printed gearboxes** (16→80 then 30→80 = 1:13.33, 16T/24 DP motor pinion — see [`doc/reducteur.md`](doc/reducteur.md)) + **1.778:1 sprockets (18T→32T) bolted to the rear wheels + #35 chain** = **1:23.7 total** (25T / 1:17.07 until 2026-09-29 — the owner went to 18T to slow the kart down for the children) |
 | **Wheels** | **2× rear drive Ø25.4 cm (10″)** (plastic rim, 1/2" bearing) + **1 free 10″ caster at the front centre** |
-| **Driving** | **Bluetooth gamepad** (stick: Y = forward/reverse, X = turn); **calibration mandatory**; analog joystick reserved (future) |
+| **Driving** | **Bluetooth gamepad** (stick: Y = forward/reverse, X = turn); **hold A to drive — release A = brake**; **calibration mandatory**; analog joystick reserved (future) |
 | **Electronics** | **ESP32** → **dual-channel driver 20 A / 6–30 V** (PWM + DIR / channel), PWM bounded by the manual `duty_cap` (the pack is always 12 V — the motors' nominal — so nothing is measured or capped automatically); **tech bay in the nose** (near the 2 motors, short power wiring) |
 | **Power** | **One 12 V motorcycle battery**, **in the NOSE over the caster** — it keeps that single wheel planted (~20 % of the load). Single pack, no paralleling |
-| **Speed** | Measured by **2 AS5600 angle sensors** (one per wheel, 1 per I²C bus); control loop at **500 Hz** |
-| **Controls** | Driving with the **Bluetooth gamepad**; **arming** by holding its **START/Options** button ~1 s (no button on the kart); **main switch** (dash) powers the kart; **hardware emergency stop** at the **top of the seatback, centered** (breaks the main relay's COIL — thin wires, ~10-20 ms — and cuts the whole kart, so it does **not** brake: the kart coasts; reachable by both kids and by an adult behind) **+** software emergency stop = gamepad button **B** (this one brakes); **electric brake by default** |
+| **Speed** | **Not measured** — no wheel sensors since 2026-09-29. ~2.5 m/s top (simulated), bounded only by `duty_cap`; control loop at **500 Hz** |
+| **Controls** | Driving with the **Bluetooth gamepad**; **arming** by holding its **START/Options** button ~1 s (no button on the kart), then **A held + stick = drive, A released = brake**; **main switch** (dash) powers the kart; **hardware emergency stop** at the **top of the seatback, centered** (breaks the main relay's COIL — thin wires, ~10-20 ms — and cuts the whole kart, so it does **not** brake: the kart coasts; reachable by both kids and by an adult behind) **+** software emergency stop = gamepad button **B** (this one brakes); **electric brake by default** |
 | **Frame** | Lightweight **wood**: **2×3** studs + **6 mm plywood** floor |
 | **Mass** | ~**32 kg** empty · ~**98 kg** loaded (2 kids) |
-| **Rollover** | **a_tip ≈ 0.53 g** — the bench sits 6″ ahead of the paired (driven) axle, which keeps 61 % of the half-track in the tip triangle (it was 80 % when the two were coincident). ⚠️ With the turn limiter off the simulation **rolls over** (−0.60 m/s²); with it on, the same run keeps +2.75 |
+| **Rollover** | **a_tip ≈ 0.53 g** — the bench sits 6″ ahead of the paired (driven) axle, which keeps 61 % of the half-track in the tip triangle (it was 80 % when the two were coincident). ⚠️ **No software protection**: a full-speed full turn at `duty_cap` 1.0 **tips** in simulation with one child off-centre (−0.24 m/s²) or adult + child (−0.07); two children centred keep +1.62. `duty_cap` 0.9 keeps all three upright |
 
 ## Why these choices
 
 - **Differential steering = zero mechanics**: no more steering wheel, column, kingpins, steering knuckles, tie rod or drag link → fewer parts to make, adjust and wear out; you **turn in software** (PWM difference between the 2 wheels). **Pivot in place** when forward motion ≈ 0.
 - **One free caster at the front centre, mass toward the rear axle**: the caster orients itself → no steering geometry, and the layout puts the CG **61 % of the way back from the single wheel**, which is what keeps the tip triangle usable. ⚠️ This is the whole design: **never move mass toward the caster**. The first version had the bench far from the driven axle and reached only 0.39 g; putting it *on* the axle gave 0.69 g; the 6″/6″ split of 2026-08-10 gave back a quarter of that, to 0.53 g. There is no margin left to spend. A three-point frame also never rocks on uneven ground, which a four-wheel version would.
-- **Stability now depends on the firmware**: **a_tip ≈ 0.53 g** (a car is ~1.0 g). The **firmware rollover protection** (turn amplitude clamped by speed + a slew-rate limiter) is what keeps the kart upright: disabled, the simulation **rolls over** on the reference manoeuvre (−0.60 m/s²); enabled, the same run keeps +2.75. `turn_alat_vmax` is capped at **0.2 — its own default**, because 0.3 lifts a wheel with one child off-centre (−0.27) and 0.25 leaves only +0.31.
+- **Stability is the geometry's and `duty_cap`'s alone**: **a_tip ≈ 0.53 g** (a car is ~1.0 g). The firmware rollover protection went away with the wheel sensors on 2026-09-29 — the owner's decision, taken with the numbers in hand: at `duty_cap` 1.0 the reference full-speed full turn **tips** the kart in simulation with one child off-centre (−0.24 m/s²) or adult + child (−0.07), while two children centred stay upright (+1.62). `duty_cap` 0.9 keeps every simulated load upright (+0.44 at worst); 0.8 gives back roughly the margin the old protection had (+1.07). Full sweep in [§5](#5-critical-safety-points-child).
 - **One battery voltage, and it is 12 V** (2026-09-20 simplification): the motors are 12 V, the pack is 12 V, and **nothing measures it** — no ADS1115, no divider, no low-voltage cutoff, no automatic `12 V / Vbat` cap. The driver would accept 6–30 V, but running anything above 12 V would now need that cap back, so **do not**. The only power ceiling left is the manual **`duty_cap`** on the config page, which doubles as the "make it gentler for a small child" knob. The trade, stated: a flat pack is no longer reported, warned about or protected against — it just makes the kart slower. Charge it on a schedule and watch its own indicator.
 - **Independently-mounted rear wheels**: driven by **#35 chain** (sprocket bolted to the rim), each keeps its original bearing on its own shoulder bolt — no through drive axle.
 - **Battery and electronics in the nose, drive at the rear**: longitudinal layout **CASTER + BATTERY + ESP32 + driver (nose) → CABIN → BENCH → DRIVEN AXLE 6″ behind it**. The children sit just ahead of the driven wheels, which puts **~61 % of the load on them** — traction and electric braking both act there, and weight transfer on a slope works with you. It was 79 % before the 6″/6″ move; that 18 points is the same thing the rollover margin lost. The battery in the nose keeps the caster planted. Power runs nose→rear in 10 AWG (~0.3 V at 40 A).
-- **Safety**: **central hardware emergency stop**, at the **top of the seatback** (within reach of both kids and an adult behind), **in the MAIN RELAY's coil loop together with the main switch** — the mushroom breaks ~150 mA, the relay contact breaks the 40 A, and **the whole kart goes dark, ESP32 included**. ⚠️ That means **no braking after the cut**: the kart coasts (~15 m from full speed on the flat, measured in simulation — do not use the mushroom as a brake, and never rely on it downhill). The **brake** is releasing the stick; the **software** emergency stop (gamepad button B) brakes properly because the firmware is still alive. Plus: one 40 A fuse, **two 1N4007 on the relay coil** — one **in series** (the coil energizes in one polarity only, so the relay is a **polarity gate** in front of the whole kart) and one **across** it (flyback for the two switches), **electric brake by default** (gamepad disconnect → immediate braking), **2 s watchdog (PANIC)**, **disarmed** start by default, guards over chains/sprockets, seatbelt, helmet.
+- **Safety**: **central hardware emergency stop**, at the **top of the seatback** (within reach of both kids and an adult behind), **in the MAIN RELAY's coil loop together with the main switch** — the mushroom breaks ~150 mA, the relay contact breaks the 40 A, and **the whole kart goes dark, ESP32 included**. ⚠️ That means **no braking after the cut**: the kart coasts (~11 m from full speed on the flat, measured in simulation — do not use the mushroom as a brake, and never rely on it downhill). The **brake** is releasing **A**; the **software** emergency stop (gamepad button B) brakes properly because the firmware is still alive. Plus: one 40 A fuse, **two 1N4007 on the relay coil** — one **in series** (the coil energizes in one polarity only, so the relay is a **polarity gate** in front of the whole kart) and one **across** it (flyback for the two switches), **electric brake by default** (gamepad disconnect → immediate braking), **2 s watchdog (PANIC)**, **disarmed** start by default, guards over chains/sprockets, seatbelt, helmet.
 
 ---
 
@@ -132,13 +132,14 @@ flowchart TB
 | **Axle length budget** | **85 mm of rod per wheel** (hub + washers + lock-nut), measured | One **1/2″ × 36″** rod (914 mm) covers both: 832 track leaves 41 mm of overhang per side for the 35 mm of hardware — ~6 mm of thread past the nylock |
 | Hub / front-wheel mounting | **Metal bearing, 1/2" bore**, wide hub ~3.8 cm | Turns **free** on a **through dead axle: 1/2″ × 36″ threaded rod** (grade **8.8/B7**, hardware-store), **locknuts + washers at each end**, spacers to fix the lateral position (chain alignment), frame supports as close as possible to the hubs (≤ 3–5 cm, flex) |
 
-**Guiding idea:** the mass goes **toward the paired axle**, and the single wheel goes at the far end carrying as little as possible. That rule took the same three wheels from 0.39 g to 0.69 g — and the 6″/6″ move of 2026-08-10 spent a quarter of it back, down to 0.53 g. Everything else still follows from it: battery in the nose over the caster, deck as low as the wheels allow, nothing heavy forward of the bench. `turn_alat_vmax` is now capped at **0.2, its own default** — measured, the binding case being one child sitting off-centre.
+**Guiding idea:** the mass goes **toward the paired axle**, and the single wheel goes at the far end carrying as little as possible. That rule took the same three wheels from 0.39 g to 0.69 g — and the 6″/6″ move of 2026-08-10 spent a quarter of it back, down to 0.53 g. Everything else still follows from it: battery in the nose over the caster, deck as low as the wheels allow, nothing heavy forward of the bench. Since 2026-09-29 no firmware limit backs the geometry up: `duty_cap` is the only lever (§5), the binding case being one child sitting off-centre.
 
 > **Track / body decoupling**: the cabin doesn't need to be as wide as the track —
 > a **T** frame: a **wide front crossmember** carrying the **axle bearings as close as possible to
 > the wheels** (≤ 3–5 cm, otherwise the threaded rod flexes), narrow rails behind. The space along
 > the axle between rail and wheel houses the **motor + gearbox + #35 chain** on each
-> side. ⚠️ The firmware rollover protection is an **empirical** ramp (`turn_full_ms`, `turn_alat_vmax`): re-tune it on the bench if the geometry changes.
+> side. ⚠️ There is no firmware rollover protection to re-tune: if the geometry changes, update
+> `VehicleParams` and re-run the simulation's `duty_cap` sweep (`firmware/test_host/run_sim.sh`) before driving.
 
 ---
 
@@ -158,16 +159,16 @@ Reference 0 = **caster axle** (front centre); dimensions measured **toward the r
 
 ➡️ With the **Bluetooth gamepad**, there's **no more pedal box or steering wheel** to position: only seating ergonomics matter. **Seatback → footrest ≈ 57 cm** ✔ leg almost straight, slight knee bend. ⚠️ The bench sits **6″ ahead of the driven axle** and the deck has ~15 cm of free length behind it: that space is the wheels' and the drive stack's, and moving the bench any further forward costs rollover margin directly (`w_eff ∝ 1 − x_cg/wheelbase`). Provide a safe place to **rest/charge the gamepad**. **Adjustable** seat (§6) to fit the child's size.
 
-➡️ **Emergency stop at the top of the seatback (centered)**: the **hardware mushroom button** (in series with the **main relay's coil**, together with the main switch) is mounted **at the top of the seatback, in the center** — reachable by **both kids** and by an **adult following the kart**. It **opens the main relay** (~10-20 ms, thin wires only) and **everything stops being powered: motors and ESP32 together**. ⚠️ Nothing brakes afterwards — the kart **coasts** (~15 m from full speed on the flat, and it does not stop at all on a slope). The **software** emergency stop on the gamepad (button **B**) is the one that brakes, because the firmware survives it; the mushroom is the last resort for "make it all stop being powered, now". Power returns on the main switch and the kart boots **disarmed**. **Side guardrails** on each side of the bench (no central divider: continuous bench). **Driving stays on the Bluetooth gamepad**.
+➡️ **Emergency stop at the top of the seatback (centered)**: the **hardware mushroom button** (in series with the **main relay's coil**, together with the main switch) is mounted **at the top of the seatback, in the center** — reachable by **both kids** and by an **adult following the kart**. It **opens the main relay** (~10-20 ms, thin wires only) and **everything stops being powered: motors and ESP32 together**. ⚠️ Nothing brakes afterwards — the kart **coasts** (~11 m from full speed on the flat, and it does not stop at all on a slope). The **software** emergency stop on the gamepad (button **B**) is the one that brakes, because the firmware survives it; the mushroom is the last resort for "make it all stop being powered, now". Power returns on the main switch and the kart boots **disarmed**. **Side guardrails** on each side of the bench (no central divider: continuous bench). **Driving stays on the Bluetooth gamepad**.
 
 > ⚠️ **Power off = coasting, and that now includes the e-stop.** Dynamic braking works by
 > closing the driver's **low-side** MOSFETs, which needs gate drive — i.e. power. The old
 > two-rail wiring kept the driver's logic alive through an e-stop so the brake probably
 > survived it; with a single relay it does not. Cutting power (main switch, mushroom, blown
 > fuse, or a relay released mid-reboot) opens every switch: **no electric brake**, only the
-> passive ×17 gearbox drag — effective on the flat (the kart coasts ~15 m from full speed and
-> stops), **insufficient on a slope** (the `coupure_pente8/16` scenarios reach 4.4 and
-> 12 m/s eight seconds after the cut). That is the price of the single-relay simplification,
+> passive drag of the 1:23.7 drivetrain — effective on the flat (the kart coasts ~11 m from full
+> speed and stops), **insufficient on a slope** (the `coupure_pente8/16` scenarios reach 4.5 and
+> 10.9 m/s eight seconds after the cut). That is the price of the single-relay simplification,
 > and it is why the mushroom is documented as a last resort rather than a brake.
 > Fail-safe remedy if ever needed: a **normally-closed-contact relay across each motor**
 > (coil on the switched rail) — any power loss re-closes the contacts → automatic dynamic
@@ -242,9 +243,9 @@ There are **no mechanical steering parts**: no steering wheel, no column, no whe
 
 ```mermaid
 flowchart TD
-    PAD["🎮 Bluetooth gamepad<br/>stick Y = forward · stick X = turn"]
+    PAD["🎮 Bluetooth gamepad<br/>stick Y = forward · stick X = turn<br/>hold A to drive"]
     MIX["'arcade' mixing (firmware)<br/>left = forward + turn·gain<br/>right = forward − turn·gain"]
-    LIM["Rollover protection<br/>(clamped amplitude + slew-rate limiter)"]
+    LIM["duty_cap — the only limit<br/>(A released → brake)"]
     ML["⚙️ Rear left motor"]
     MR["⚙️ Rear right motor"]
     RG["🛞 Rear left wheel"]
@@ -267,13 +268,26 @@ flowchart TD
 
 1. **"Arcade" mixing**: the firmware combines forward motion (stick Y) and turn (stick X) into two wheel commands: `left = forward + turn·gain` and `right = forward − turn·gain`. Push the stick right = left wheel faster → the kart turns right.
 2. **Pivot in place**: if forward motion ≈ 0 and you push the stick sideways, the two wheels turn **in opposite directions** → the kart **spins on itself** (the front caster swivels to follow).
-3. **Rollover protection** (a real second layer — the geometry does most, not all): the turn is shaped on **two fronts**:
-   - **Speed→turn ISO-a_lat limit (MEASURED speed)**: below `turn_full_ms` (~0.5 m/s) — and anywhere the curve allows — turning is permitted at **±100%** (full-power pivot in place, `turn_gain` default 1.0); above that, the limit decreases as **1/v** (same lateral acceleration at any speed) down to `turn_alat_vmax` (**±20%, which is now also its maximum**) at top speed, then keeps tightening in case of runaway. Calibrated by physics simulation: the old linear ramp tipped an **offset load** (a single child on one side, adult+child) as soon as the turn gain reached 100%; the iso-a_lat curve keeps ≥ +0.91 m/s² across the whole settable range (re-validated after the 6″/6″ move — the sim sweep is the authority). The faster you go, the less you can steer. **Reverse** has **its own speed limit** (`rev_speed_ms`, default 1 m/s), served by the same PID limiter as `speed_limit_ms` (target chosen by the measured direction).
-   - **Slew-rate limiter**: the turn command cannot change by more than `turn_rate` per second → an abrupt stick move is **smoothed** instead of causing a violent differential. The forward command is deliberately **not** slewed: softening the throttle is the job of the **mixing curves** (`mix_type` — expo, or expo + speed-soft for a child driver) and of the speed limiter.
+3. **No rollover protection, no turn smoothing** (removed 2026-09-29 with the wheel sensors — a speed-dependent turn limit needs a measured speed): the mixed stick goes straight to the motors, bounded only by `duty_cap`. A full turn at full speed is allowed, and at `duty_cap` 1.0 it tips an off-centre load in simulation — numbers in [§5](#5-critical-safety-points-child). The only softening left is the **mixing curve** (`mix_type` 1 = expo: gentle around the centre, full authority at the stops). **Reverse** is as fast as forward (~2.5 m/s simulated) — there is no separate reverse limit any more.
 
-Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_alat_vmax`** (rollover ramp), **`turn_rate`** (turn smoothness), and the **Drive feel** group (`mix_type`, `mix_expo_fwd`, `mix_expo_turn`, `mix_soft_hi` — stick-to-motor feel, from linear to child-gentle). Details in [`firmware/README.md`](firmware/README.md).
+Web parameters: **`duty_cap`** (the only limit), **`turn_gain`** (turn authority), and the **Drive feel** group (`mix_type` 0 linear / 1 expo, `mix_expo_fwd`, `mix_expo_turn`, `accel_pct_s`, `decel_pct_s`). Details in [`firmware/README.md`](firmware/README.md).
 
-> **Consequence of skid steer:** in a tight turn, the wheels **scrub** slightly on the ground (sliding friction) — that's inherent to this type of steering. At moderate speed on flat ground, the effect stays acceptable. The beyond-the-limit failure mode is now a sideways **slide**, not a rollover.
+> **Consequence of skid steer:** in a tight turn, the wheels **scrub** slightly on the ground (sliding friction) — that's inherent to this type of steering. At moderate speed on flat ground, the effect stays acceptable. ⚠️ Do not count on the hard tyres sliding before the kart tips: nothing limits the turn any more, and the simulation does not model lateral grip.
+
+### Driving: START arms, A drives
+
+| Gamepad | Kart |
+|---|---|
+| **START/Options** held ~1 s, stick centred | **arms** (soft rumble). Disarmed = braking, whatever else is pressed |
+| **A held + stick** | the mixed stick goes to the motors, bounded only by `duty_cap` |
+| **A held, stick centred** | **pseudo-freewheel**: the target becomes 0 and the command slides there at `decel_pct_s` (default 100 %/s = one second from full PWM; 0 = straight to the brake) |
+| **A released** | **dynamic brake** (motor short-circuit), **whatever the stick says** — this is the brake |
+| **B** | emergency stop: disarm + brake (strong rumble) |
+| stick pushed while **not armed** | strong rumble, repeated — the only "you can't drive" buzz; releasing A while armed does not buzz |
+
+A is Bluepad32's `BUTTON_A` (mask 0x01) — the button the page's **Gamepad** tab lights as "A", whatever is printed on it. From full speed (simulated): releasing **A** leaves ~0.64 m/s one second later, then the kart stops; releasing the **stick** with A held leaves ~2.42 m/s after the same second. Also: gamepad silent **750 ms** (heartbeat) or disconnected → disarm + brake; not calibrated → will not arm; armed without driving for `disarm_s` (30 s) → disarm.
+
+**Why "pseudo"-freewheel.** The Cytron MDD20A driver has **no coast state** in PWM/DIR mode: its truth table ([manual](doc/datasheet/motor-driver-20A-manual.pdf), Table 3, printed p. 3) puts both outputs low whenever PWM is low, whatever DIR — and both outputs low **is** the brake. So the firmware imitates a freewheel: the PWM runs down from where it was at the pace a coasting kart slows down, and the motor neither pushes nor brakes much on the way. Since 2026-09-30 that slide is a **rate in %/s**, not a duration: a run-down *is* a deceleration, so it shares one setting with the acceleration ramp instead of duplicating it in another unit. The old 10 s default (matched to a true coast) was far longer than anyone expects between centring the stick and stopping; 100 %/s = 1 s. Once the PWM reaches 0 it is electrically the brake, and the page says so. It is matched to the flat — nothing measures a slope. ⚠️ The old "freewheel" setting (`dyn_brake_en` = 0) **never freewheeled on this driver**: it put the same PWM-low state on the outputs, i.e. it braked.
 
 ---
 
@@ -290,11 +304,10 @@ Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_a
 | **Wheels** | **2× rear drive wheels** identical | **Ø25.4 cm (10″)**, plastic rim + PVC tire, 1/2" bearing |
 | | **1× pivoting FRONT caster wheel** | **Free**, unpowered; **Ø 25.4 cm (10")**, plate at ~33 cm, **load ≥ 50 kg** |
 | | Shoulder bolts (driven wheels) | **Supplied with the wheels** (1/2" shoulder, 3/8" thread) |
-| **Propulsion** | **2× 12 V DC motors** (one per **front** wheel) | ~172 W (0.23 HP), 19.6 A, 4615 rpm; **independent** |
-| | 2 3D gearboxes | **1:13.33** (16→80 then 30→80, [design](doc/reducteur.md)) + 1.28:1 sprockets = **1:17 total**, printed (PETG/ABS/nylon) |
-| | Sprockets + #35 chain | Sprocket **bolted to each rear (driven) wheel** + #35 roller chain from the gearbox (**25T→32T = 1.28:1**). Chain rather than a belt: **it can be cut to any length**, so the gearbox-to-wheel centre distance is free instead of being dictated by stock belt lengths. |
-| | **2× AS5600 angle sensor** + diametric magnet | one per driven (rear) wheel, **1 per I²C bus**; contactless magnetic, **12-bit absolute I²C** (fixed address 0x36), **3.3 V native** (no level-shift), 4.7 kΩ pull-ups |
-| **Driving** | **Bluetooth gamepad** | stick: Y = forward/reverse, X = turn; button **B** = emergency stop, button **START** = arming; **calibration mandatory** |
+| **Propulsion** | **2× 12 V DC motors** (one per **rear** wheel) | ~172 W (0.23 HP), 19.6 A, 4615 rpm; **independent** |
+| | 2 3D gearboxes | **1:13.33** (16→80 then 30→80, [design](doc/reducteur.md)) + 1.778:1 sprockets = **1:23.7 total**, printed (PETG/ABS/nylon) |
+| | Sprockets + #35 chain | Sprocket **bolted to each rear (driven) wheel** + #35 roller chain from the gearbox (**18T→32T = 1.778:1**; 25T→32T until 2026-09-29). Chain rather than a belt: **it can be cut to any length**, so the gearbox-to-wheel centre distance is free instead of being dictated by stock belt lengths. |
+| **Driving** | **Bluetooth gamepad** | stick: Y = forward/reverse, X = turn; button **A** = hold to drive (released = brake), button **B** = emergency stop, button **START** = arming; **calibration mandatory** |
 | | *Analog joystick* | **possible future**, behind the same software abstraction — but it would now need an ADC of its own (the ADS1115 and its two reserved channels are gone) |
 | **Power / electronics** | Battery | **One 12 V motorcycle battery** (~40 A peak OK, PWM ~100%) **in the NOSE, strapped in a retaining tray above the front caster** — it is the counterweight that keeps that single wheel planted. No paralleling this phase. **12 V is now a design constant**: nothing measures the pack, so nothing could cap the duty for a higher-voltage one — the 24 V option went away with the ADC |
 | | **Battery adapters** (×2) | Slide-on holder → power terminals (+ / −) |
@@ -302,20 +315,20 @@ Web parameters: **`turn_gain`** (turn authority), **`turn_full_ms`** / **`turn_a
 | | **Main switch + e-stop mushroom** | both **in series in the relay's coil** (~150 mA, thin wire): the main switch on the dash is the kart's on/off, the mushroom at the top of the seatback is the emergency cut. No latch, no priming button, no FORCE ON toggle, no hold capacitor. Full BOM: [`doc/electronique.md`](doc/electronique.md) |
 | | Motor driver | **1 dual-channel board 20 A / 6–30 V** (PWM+DIR/channel), duty bounded by the manual cap `duty_cap` |
 | | Controller | **ESP32-WROOM board** (dual-core 240 MHz, Wi-Fi/BT, 4 MB flash) |
-| | **Breakout board** | Screw terminals + 5 V / 3.3 V outputs + status LED; the **3.3 V** powers the two AS5600 |
+| | **Breakout board** | Screw terminals + 5 V / 3.3 V outputs + status LED |
 | | **Buck → 5 V** (20 V-rated unit already on hand, fed from the switched 12 V rail) | powers the ESP32 (which makes its own 3.3 V) |
-| | **Soldered perfboard** | I²C pull-ups and connectors (⚠️ no breadboard — vibration). The Vbat divider that used to live here is gone |
+| | **Soldered perfboard** | connectors + the WS2812's series resistor (⚠️ no breadboard — vibration). The I²C pull-ups and the Vbat divider that used to live here are gone |
 | | **Weatherproof electrical enclosure** (ABS, clear lid, ~150 × 100 × 70 mm, ≈IP65) | **in the front tech bay**; houses ESP32 + breakout + perfboard; cable glands for the cables; protects against dust/rain/impact (clear lid = status LED visible) |
 | | Elec. safety | **Emergency stop (NC) in series in the relay coil** (mushroom button **at the top of the seatback, centered**, within reach of both kids) + **main switch** in the same loop + **fuse** |
-| | **WS2812B** strip (~10 LEDs) | status: **moving rainbow = armed & ready**, yellow = disarmed (pulsing while arming), blinking red = fault, blue = calibration |
+| | **WS2812B** strip (~10 LEDs) | status: **moving rainbow = armed & ready**, yellow = disarmed (pulsing while arming), blinking red = gamepad connected but **not calibrated** (START does nothing until it is), blue = calibration in progress |
 | **Controls** | **Arming** | ~1 s press on the **gamepad's START/Options** button, stick centered — no button on the kart itself |
-| **Brake** | **Electric brake (default)** ✅ | handled by the firmware (plugging PID); **default state = braking**; gamepad disconnect → immediate braking; no brake pad |
-| **Future reserves** | **analog joystick** | would need its own ADC now, plus 2 free GPIOs — 13, 21, 22 and 23 are available |
+| **Brake** | **Electric brake (default)** ✅ | **A released = dynamic brake** (the driver grounds both motor terminals); **default state = braking**; gamepad disconnect → immediate braking; no brake pad. Stick pulled back with A held = plugging (reverse torque) |
+| **Future reserves** | **analog joystick** | would need its own ADC now, plus 2 free GPIOs — 13, 14, 16, 18, 19, 21, 22, 23 and 27 are available |
 | **Fasteners / finish** | M8/M10 through-bolts, **nylock** nuts | brackets, wood screws, varnish; rounded edges |
 
 ### Propulsion — 2 rear 12 V DC motors
 
-Each **rear wheel** is driven by its **own 12 V permanent-magnet DC motor** through a **3D-printed 1:13.33 gearbox** (16→80, 30→80) and a **25T→32T #35 chain (1.28:1)** — total reduction **1:17.07**. The **two motors are controlled independently** (PWM + DIR per channel): it's this **command difference** that provides steering. **Each wheel has its own AS5600 sensor** for the control loop.
+Each **rear wheel** is driven by its **own 12 V permanent-magnet DC motor** through a **3D-printed 1:13.33 gearbox** (16→80, 30→80) and an **18T→32T #35 chain (1.778:1)** — total reduction **1:23.70**. It was 25T / 1:17.07 until **2026-09-29**, when the owner fitted the 18T to slow the kart down for the children: top speed **×0.72**, wheel torque **×1.39**. The **two motors are controlled independently** (PWM + DIR per channel): it's this **command difference** that provides steering. **Nothing measures the wheels** — stick → PWM, open loop.
 
 | Characteristic | Value |
 |---|---|
@@ -332,7 +345,7 @@ Each **rear wheel** is driven by its **own 12 V permanent-magnet DC motor** thro
 flowchart LR
     BATT["🔋 12 V motorcycle battery"]
     PAD["🎮 Bluetooth gamepad"]
-    ESP["🧠 ESP32<br/>(arcade mixing, rollover protection, limits)"]
+    ESP["🧠 ESP32<br/>(arcade mixing, A-button gate, duty_cap)"]
     DRV["Dual-channel driver<br/>20 A · 6–30 V · PWM+DIR"]
     M1["Rear L motor 12 V (~172 W)"]
     M2["Rear R motor 12 V (~172 W)"]
@@ -346,10 +359,8 @@ flowchart LR
     PAD -. "Bluetooth (x,y)" .-> ESP
     ESP -- "PWM+DIR channel L (3.3 V)" --> DRV
     ESP -- "PWM+DIR channel R (3.3 V)" --> DRV
-    DRV -- "channel L (≤20 A)" --> M1 --> G1 -- "25T→32T #35 chain (1.28:1)" --> R1
-    DRV -- "channel R (≤20 A)" --> M2 --> G2 -- "25T→32T #35 chain (1.28:1)" --> R2
-    M1 -. "wheel L speed: AS5600 (I²C bus 0)" .-> ESP
-    M2 -. "wheel R speed: AS5600 (I²C bus 1)" .-> ESP
+    DRV -- "channel L (≤20 A)" --> M1 --> G1 -- "18T→32T #35 chain (1.778:1)" --> R1
+    DRV -- "channel R (≤20 A)" --> M2 --> G2 -- "18T→32T #35 chain (1.778:1)" --> R2
     R1 -. "the frame pivots" .-> CAS
     R2 -. "the frame pivots" .-> CAS
 
@@ -367,12 +378,12 @@ flowchart LR
 
 | Parameter | Value |
 |---|---|
-| Speed at ~50% (≈ 10 V) | ~**3850 rpm** motor → **~225 rpm wheel** (÷17.07) |
-| Estimated top speed | **~3.3 m/s (~12 km/h)** — firmware-limited |
+| Wheel speed at full PWM, no load | 4615 rpm ÷ 23.70 ≈ **195 rpm** → 2.6 m/s |
+| Estimated top speed | **~2.5 m/s (~9 km/h)** loaded, simulated — bounded only by `duty_cap` (it was ~3.3 m/s with the 25T) |
 | Total current | ~**40 A**, all from the single 12 V pack |
 | Battery energy / runtime | ~90–100 Wh → **~10–20 min** depending on use |
 
-**Transmission gearbox → wheel:** sprocket **bolted to the inner side of the wheel** (multiple spokes, large washers / backing plate so as not to crack the plastic), **25T→32T #35 sprockets = 1.28:1** (exact tooth ratio — see [`doc/reducteur.md`](doc/reducteur.md)) with tension adjustment (slotted holes / idler), **closed guard**. The wheel turns **free on the through axle**; the motor only drives it. **Measure the hub thickness before the final cut of the rod**; **adjustable spacers** to bring the wheel-sprocket plane in line with the gearbox sprocket (chain alignment = critical adjustment: a misaligned chain climbs a sprocket flank and is thrown), gearbox mounting with slotted holes for fine adjustment.
+**Transmission gearbox → wheel:** sprocket **bolted to the inner side of the wheel** (multiple spokes, large washers / backing plate so as not to crack the plastic), **18T→32T #35 sprockets = 1.778:1** (exact tooth ratio — see [`doc/reducteur.md`](doc/reducteur.md)) with tension adjustment (slotted holes / idler), **closed guard**. The wheel turns **free on the through axle**; the motor only drives it. **Measure the hub thickness before the final cut of the rod**; **adjustable spacers** to bring the wheel-sprocket plane in line with the gearbox sprocket (chain alignment = critical adjustment: a misaligned chain climbs a sprocket flank and is thrown), gearbox mounting with slotted holes for fine adjustment.
 
 **Where to put the gearbox output sprocket** — full reasoning and the centre-distance table in
 [`doc/reducteur.md`](doc/reducteur.md#where-to-put-the-gearbox-output-sprocket):
@@ -386,30 +397,45 @@ flowchart LR
 - **The constraint is the DISTANCE, not the direction**: any position on a circle around the wheel
   axle works, as long as it avoids the two vertical 45° sectors. Useful freedom when a frame member
   is in the way — forward, back or diagonally up are all fine.
-- **165 mm centre distance → 64 links** for this build (168.7 mm hits 64 exactly). A short centre
-  distance costs almost nothing at 1.3 m/s and 10 % of working load; what it costs is **tension
-  sensitivity** (1.7 mm of nominal slack), so expect to re-tension more often.
+- **165 mm centre distance → 60 links** with the 18T (165.3 mm hits 60 exactly; it was 64 links
+  with the 25T, and a 64-link chain on the 18T would need 184.5 mm). A short centre distance costs
+  almost nothing at ~1.0 m/s and 15 % of working load; what it costs is **tension sensitivity**
+  (1.7 mm of nominal slack), so expect to re-tension more often.
 - **Even link count is mandatory** (an odd one needs a cranked link, ~20 % weaker), slack **~1 % of
   C** rather than the usual 2 % because reverse makes both runs tight in turn, and slot the mount
   **±15 mm**.
 
 ### Electronic control — ESP32
 
-- The **ESP32** receives the **Bluetooth gamepad** axes, applies **arcade mixing** + **rollover protection**, then sends **an independent PWM + DIR to each channel** of the driver.
-- Driver: **dual-channel, 20 A continuous / 60 A peak, 6–30 V**, **PWM + DIR** inputs compatible with **3.3 V**, PWM up to 20 kHz; **overcurrent / undervoltage / temperature** protections. ⚠️ **No reverse-polarity protection** (VB+/VB-) → a reversed connection **destroys the board**.
-- **PID brake by default**: at a stop or with no forward command, a **PID brings each wheel to 0** (AS5600 reading) — signed output → can **reverse the motor** (plugging). This is the **default state**.
-- Best practices: **manual PWM cap** (`duty_cap`), **expo mixing curves** for a gentle throttle (`mix_type`), **speed limiter** (sensor measurement), **watchdog**, **braking if the gamepad disconnects**.
+- The **ESP32** receives the **Bluetooth gamepad** axes and buttons, applies **arcade mixing** while **A is held**, then sends **an independent PWM + DIR to each channel** of the driver, bounded by `duty_cap`.
+- Driver: **Cytron MDD20A — dual-channel, 20 A continuous / 60 A peak, 6–30 V**, **PWM + DIR** inputs compatible with **3.3 V**, PWM up to 20 kHz; **overcurrent / undervoltage / temperature** protections. ⚠️ **No reverse-polarity protection** (VB+/VB-) → a reversed connection **destroys the board**. ⚠️ **No coast state** in PWM/DIR mode: PWM low = both outputs low = brake, whatever DIR — hence the [pseudo-freewheel](#driving-start-arms-a-drives).
+- **Dynamic brake by default**: A released, disarmed, gamepad lost, silent, uncalibrated or B pressed → PWM 0 + DIR low on both channels = both motor terminals grounded (short-circuit braking, force ∝ speed). This is the **default state**, from boot. No PID and no braking loop — nothing measures the wheels.
+- Best practices: **manual PWM cap** (`duty_cap`), **expo mixing curves** for a gentle throttle (`mix_type`), **accel ramp** in %/s to spare the drivers the current step of a stick slammed open (`accel_pct_s`), **hold-to-drive A button**, **watchdog**, **braking if the gamepad disconnects**.
 
-### AS5600 speed sensors (×2, on I²C)
+### No wheel sensors
 
-**AS5600** angle sensor: **contactless** magnetic, **12-bit absolute angle** (4096 points/turn) read over **I²C**, with a **diametric magnet** on the shaft end. There is **one AS5600 per driven (rear) wheel**, **one per I²C bus** (each AS5600 having the fixed address **0x36**, they cannot coexist on the same bus). **Known kinematics** (see [`doc/reducteur.md`](doc/reducteur.md)): the magnet is on the **output of the 1:13.33 gearbox**, followed by **1.28:1 sprockets** → **the sensor makes 1.28 turns per wheel turn** ⇒ web parameter `enc_per_wheel = 1.28` (3.41 if the magnet moves to the 1:5 intermediate shaft), **10″ wheel = 0.254 m**. The **vehicle speed** (m/s) = **signed average** of the 2 wheels (pivot in place → 0 m/s). The conversion is **fully determined**. They serve to:
-- **Measure each wheel's speed** → reliable limiter; **PID brake** toward 0; **direction** (sign of Δangle, the DIR pin sets the convention); **safety** (stall: PWM active with no rotation > 1 s → fault).
+**Nothing on this kart measures speed** (2026-09-29 simplification). The two **AS5600** angle
+sensors, their magnets, their two I²C buses (GPIO 18/19 and 27/14, now free) and the 4.7 kΩ
+pull-ups are gone, and with them everything that read them: the speed-limiter and braking PIDs,
+the **rollover protection** (speed-dependent turn limit + turn slew rate), the speed-adaptive
+mixer (`mix_type` 2), the reverse speed limit and the encoder conditions (stuck / reversed /
+erratic / absent / magnet). What is left is **stick → PWM**, gated by A, bounded by `duty_cap`.
 
-✅ **3.3 V native** (VDD5V/VDD3V3 tied together) → **SDA/SCL directly on the ESP32, NO level-shift**. Wiring per sensor: **SDA, SCL, 3.3 V, GND** (+ magnet), **4.7 kΩ** pull-ups per bus.
+What that costs, plainly: no speed limit other than `duty_cap`, **no rollover protection**
+([§5](#5-critical-safety-points-child)), no detection of a stalled wheel or a thrown chain, no
+speed on the page. What it buys: no sensor to mount, align, wire or trust, and nothing that
+stops the kart because a magnet moved.
 
-Implementation: I²C read of the **RAW ANGLE** register (0x0C/0x0D) → **speed = derivative of the angle** (`Δcounts × frequency`, **wrap 0↔4095**); **500 Hz loop** (FreeRTOS 1000 Hz) → no ambiguity; **diametric** magnet centered, **air gap 0.5–3 mm**; I²C bus **away from power**, decoupling capacitor on the supply.
+### No faults
 
-> *A quadrature encoder per wheel was once held in reserve as an alternative — dropped: the AS5600 do the job.*
+That last removal took the **fault layer** with it (2026-09-30). The firmware no longer has a
+fault mask, a `Fault` enum, a fault state or a red "FAULT" badge: each sensor that could report
+a breakage had already gone — the battery ADC, the relay-coil sense, the encoders — and what was
+left were four ordinary gamepad conditions (**off · silent · B held · not calibrated**), none of
+which is a failure. They still **disarm and brake**; the page and the event log now simply name
+the one that applies (`enum class Stop`) instead of lighting up a fault. Retired bits, codes and
+protobuf fields are **never reused**, so the event log written by an older firmware still decodes
+to what it meant then.
 
 ### No analog measurements
 
@@ -423,8 +449,6 @@ What replaces it: **nothing, deliberately.** The manual `duty_cap` is the power 
 battery's own indicator is the fuel gauge, and a worn pack shows up as a kart that feels
 slower (simulated in `batterie_usee`: 11.2 V and 0.12 Ω of internal resistance still drive,
 just less briskly, with no fault raised). Deep-discharge protection is the pack's business.
-I²C bus 0 now carries the left AS5600 alone — which also removed the read-timing interference
-the 20 Hz battery polling used to add to that bus.
 
 ### Gamepad calibration
 
@@ -433,16 +457,16 @@ the 20 Hz battery polling used to add to that bus.
 1. **Center**: stick at rest → captures the neutral point;
 2. **Extremes**: move the sticks fully → captures the amplitude per axis.
 
-The scale (center + half-amplitude per axis) is **persisted in NVS** (namespace `pad`). ⚠️ **(Re)pairing ERASES the calibration** (new gamepad = new calibration). Until the gamepad is calibrated, connected and armed, the controller **stays braking** (default state).
+The scale (center + half-amplitude per axis) is **persisted in NVS** (namespace `pad`). ⚠️ **(Re)pairing ERASES the calibration** (new gamepad = new calibration). Until the gamepad is calibrated, connected and armed — and A is held — the controller **stays braking** (default state).
 
 ### Electrical safety
 
-- **Emergency stop** easily accessible, **in the main relay's coil loop** (in series with the main switch): pressing it de-energises the coil and the **relay contact breaks the 40 A** (~10-20 ms). The mushroom itself only switches ~150 mA on signal-gauge wires — no 40 A detour to the seatback, any decent NC mushroom qualifies. ⚠️ **It cuts the ESP32 too**, so the firmware never sees it: no fault, no log entry, and above all **no braking** — the kart coasts (~15 m from full speed on the flat; a slope is worse). Power returns on the main switch and the kart boots **disarmed**. A **welded contact** is no longer detectable in software either: the commissioning test (mushroom pressed, multimeter on VB+) is what catches it. In exchange the wiring lost a relay, an opto, a sense pin and every software path that went with them. The gamepad's **button B** remains the emergency stop that actually **brakes**, because the firmware survives it.
+- **Emergency stop** easily accessible, **in the main relay's coil loop** (in series with the main switch): pressing it de-energises the coil and the **relay contact breaks the 40 A** (~10-20 ms). The mushroom itself only switches ~150 mA on signal-gauge wires — no 40 A detour to the seatback, any decent NC mushroom qualifies. ⚠️ **It cuts the ESP32 too**, so the firmware never sees it: nothing reported, no log entry, and above all **no braking** — the kart coasts (~11 m from full speed on the flat; a slope is worse). Power returns on the main switch and the kart boots **disarmed**. A **welded contact** is no longer detectable in software either: the commissioning test (mushroom pressed, multimeter on VB+) is what catches it. In exchange the wiring lost a relay, an opto, a sense pin and every software path that went with them. The gamepad's **button B** remains the emergency stop that actually **brakes**, because the firmware survives it.
 - **Main switch** (dash, in the same coil loop) is the kart's on/off — the only control on the vehicle. Arming is a gamepad button. **Fuse/pack**, wiring ≥ the 2 motors' current.
 - **The relay is a polarity gate**: nothing is powered until the contact closes, and a **1N4007 in series** in the coil loop means the coil energizes in one polarity only. Connect the battery backwards and the coil simply does nothing — no current anywhere, nothing blown, nothing stressed; put it back the right way and the kart starts. A second 1N4007 **across** the coil is the flyback for the two mechanical switches. ⚠️ Neither one covers a VB+/VB− swap made *downstream* of the contact, at the driver's terminals.
 - **Battery: one 12 V motorcycle battery** (lead-acid — no BMS of its own). ⚠️ **Deep-discharge protection is now the pack's alone**: the firmware LVC went away with the voltage measurement. The 40 A fuse still covers shorts. Charge on a schedule rather than on a warning.
 - **One 12 V pack, no paralleling** (this phase): it carries the whole ~40 A, so its internal resistance sets the sag under load — a motorcycle battery at ~0.05 Ω dips ~2 V at full throttle, which the motors feel as a little less thrust. ⚠️ **Never put packs in series**: 24 V on 12 V motors, with no automatic cap left to hold the duty down, cooks them.
-- **Speed limiter** low at first; **battery secured/protected**; **guards**; **electric brake** + **auto disarm** + **2 s watchdog** + manual `duty_cap`. Cut power before servicing (main switch, and pull the fuse for anything invasive).
+- **`duty_cap` low at first** (it is the only limit); **battery secured/protected**; **guards**; **electric brake** (A released) + **auto disarm** + **2 s watchdog**. Cut power before servicing (main switch, and pull the fuse for anything invasive).
 
 ### Wiring diagram + ESP32 pinout
 
@@ -460,8 +484,6 @@ flowchart LR
     DRV["Dual-channel driver<br/>20 A / 6–30 V"]
     M1["⚙️ Rear L motor 12 V"]
     M2["⚙️ Rear R motor 12 V"]
-    EG["🧭 AS5600 wheel L (bus 0)"]
-    ED["🧭 AS5600 wheel R (bus 1)"]
     WS["🌈 WS2812B strip"]
 
     %% Power: ONE relay, ONE rail — either switch in the coil kills everything
@@ -473,11 +495,9 @@ flowchart LR
     BATT -- "−" --> GNDC
     DRV -- "GND" --> GNDC
 
-    %% Motor outputs + speed feedback
+    %% Motor outputs (no speed feedback: nothing measures the wheels)
     DRV -- "M1A / M1B" --> M1
     DRV -- "M2A / M2B" --> M2
-    EG -. "I²C bus 0 SDA18/SCL19 (3.3 V)" .-> ESP
-    ED -. "I²C bus 1 SDA27/SCL14 (3.3 V)" .-> ESP
 
     %% Signals
     PAD -. "Bluetooth" .-> ESP
@@ -496,37 +516,34 @@ flowchart LR
 
 | GPIO | Function | Direction | Note |
 |---|---|---|---|
-| 26 / 25 | **PWM / DIR REAR left motor** | output | LEDC, **duty ≤ 50%** |
+| 26 / 25 | **PWM / DIR REAR left motor** | output | LEDC 18 kHz, duty ≤ `duty_cap` |
 | 33 / 32 | **PWM / DIR REAR right motor** | output | same |
-| 18 / 19 | **I²C bus 0 SDA / SCL** | I/O | **AS5600 wheel L (0x36)** alone on the bus, 3.3 V, 4.7 kΩ pull-ups |
-| 27 / 14 | **I²C bus 1 SDA / SCL** | I/O | **AS5600 wheel R (0x36)**, 3.3 V, 4.7 kΩ pull-ups |
 | 4 | **WS2812B strip** (data) | output | ~10 LEDs |
 | 2 | **Status LED** (onboard) | output | — |
 | **Free** | | | |
 | 34 / 35 / 36 / 39 | unused | inputs only | input-only pins, **no internal pulls** |
-| 13 / 16 / 21 / 22 / 23 | unused | — | free — **13** was `POWER_HOLD` (power latch), **22** `MOTOR_PWR_SENSE` (e-stop coil sense), **16** the arming button. **No GPIO input is used at all**: the kart's only controls are the main switch, the mushroom and the gamepad |
+| 13 / 14 / 16 / 18 / 19 / 21 / 22 / 23 / 27 | unused | — | free — **13** was `POWER_HOLD` (power latch), **22** `MOTOR_PWR_SENSE` (e-stop coil sense), **16** the arming button, **18/19** and **27/14** the two I²C buses of the wheel encoders (removed 2026-09-29). **No GPIO input is used at all**: the kart's only controls are the main switch, the mushroom and the gamepad |
 | — | **Power on/off** | (no GPIO) | **hardware only**: main switch + e-stop in the relay coil. The firmware can neither hold nor cut its own supply |
 
 > **Motor wiring corrections in software** (web page → Settings → Behavior), for when the
 > motors are not wired as above: **`mot_inv_l` / `mot_inv_r`** flip one wheel's direction
 > (= swapping that motor's two leads), **`mot_swap_lr`** sends the LEFT wheel's command to the
 > RIGHT channel (GPIO 33/32) and vice versa (= motors on crossed driver channels: forward is
-> right but the steering is mirrored). They only touch the **motors** — the encoders must
-> already read the right wheels. While any of them is set, the **Dashboard** and the
+> right but the steering is mirrored). While any of them is set, the **Dashboard** and the
 > **pinout** of the page show an amber banner: the wiring then does NOT match this table.
 > Rewiring to match the table stays the cleaner fix.
 
 **Key wiring points:**
-- **Common ground** ESP32 ↔ driver ↔ I²C sensors: essential.
+- **Common ground** ESP32 ↔ driver: essential.
 - **One rail**: the main relay's contact carries everything (buck → ESP32 + strip, driver VB+ *and* driver logic). Its coil runs through the **main switch** and the **e-stop mushroom** in series, with the **1N4007** across it. No GPIO is involved in powering the kart.
-- **Brake by default**: at a stop, with no forward command, or if the gamepad disconnects, the firmware brakes.
+- **Brake by default**: A released, disarmed, or gamepad lost → the firmware brakes.
 - **Power ~10 AWG** (crimped lugs); **signals thin wire**. **40 A fuse** on the single pack.
 - ⚠️ **Driver polarity (VB+/VB-)**: the board has no reverse protection, and it sits **downstream of the relay contact**, where the coil diode cannot help → **double-check by hand**.
 - **Nothing measures the battery** — no divider, no ADC (see [the battery](#the-battery-unmeasured)).
 
 ### Full system diagram (all connectors)
 
-Block-by-block overview showing **each connector** (gamepad via the internal radio, 2× AS5600 on 2 I²C buses, rear motors, WS2812) and the **power supply** (one relay, one rail).
+Block-by-block overview showing **each connector** (gamepad via the internal radio, rear motors, WS2812 — there are no sensors) and the **power supply** (one relay, one rail).
 
 ```mermaid
 flowchart LR
@@ -541,9 +558,7 @@ flowchart LR
     ESP["🧠 ESP32-WROOM<br/>3.3 V via on-board regulator"]
     V5 --> ESP
 
-    PAD["🎮 BLUETOOTH GAMEPAD<br/>(ESP32 internal radio)"] -.->|"x, y, buttons"| ESP
-    EG["🧭 AS5600 L CONN (bus 0)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO18/19 (3.3 V)"| ESP
-    ED["🧭 AS5600 R CONN (bus 1)<br/>SDA / SCL / 3V3 / GND"] -->|"I²C GPIO27/14 (3.3 V)"| ESP
+    PAD["🎮 BLUETOOTH GAMEPAD<br/>(ESP32 internal radio)"] -.->|"x, y, buttons (A, B, START)"| ESP
 
     ESP -->|"PWM/DIR L+R<br/>GPIO26/25/33/32"| DRV["🛞 MOTOR DRIVER<br/>2 channels 20 A"]
     RAIL --> DRV
@@ -552,13 +567,11 @@ flowchart LR
     ESP -->|"GPIO4 data"| WS["🌈 WS2812B CONN"]
 
     V5 -. "+5 V" .-> WS
-    ESP -. "3.3 V" .-> EG
-    ESP -. "3.3 V" .-> ED
 
     classDef pwr fill:#f8d7da,stroke:#333;
     classDef conn fill:#fff3cd,stroke:#333;
     class RAIL,V5,BR,MSW,ESTOP,DRV pwr;
-    class PA,PAD,EG,ED,MG,MD,WS conn;
+    class PA,PAD,MG,MD,WS conn;
 ```
 
 ### Electrical schematic (symbols)
@@ -653,9 +666,9 @@ flowchart LR
 > the driver's logic stayed alive through an e-stop, so the brake probably survived it (a
 > bench test settled it either way). With one relay it does not survive: the mushroom removes
 > the gate drive along with everything else, and the kart **coasts**. The simulation puts a
-> number on it (`arret_urgence_plat`): from full speed on the flat, **~15 m** on rolling
-> resistance alone. On a slope it does not stop at all (`coupure_pente8/16`: 4.4 and 12 m/s
-> eight seconds later). **The mushroom is the last resort; the brake is releasing the stick**,
+> number on it (`arret_urgence_plat`): from full speed on the flat, **~11 m** (10.7 m) on rolling
+> resistance alone. On a slope it does not stop at all (`coupure_pente8/16`: 4.5 and 10.9 m/s
+> eight seconds later). **The mushroom is the last resort; the brake is releasing A**,
 > and the gamepad's button B is the emergency stop that actually brakes.
 >
 > If that is ever judged unacceptable, the documented fix is a **normally-closed relay
@@ -707,7 +720,8 @@ flowchart LR
 > too: arming already required a connected, calibrated gamepad whose own START/Options button
 > the driver was holding, so the button on the kart duplicated a control already in hand — and
 > a button on the vehicle is a button a bystander can press. The ESP32 now has **no input pin
-> in use at all**: two I²C buses in, four motor pins and one LED line out.
+> in use at all**: four motor pins and one LED line out, nothing else (the two I²C buses went
+> with the wheel sensors on 2026-09-29).
 >
 > *(Dropped with this change: the opto relay module, the coil-sense optocoupler, the priming
 > button, the arming button, the hidden FORCE ON toggle, the never-fitted hold capacitor, and
@@ -717,15 +731,33 @@ flowchart LR
 
 ## 5. Critical safety points (child)
 
-- ⚠️ **Rollover protection**: a_tip ≈ 0.53 g, and the firmware is now what keeps the kart upright — **with the protection off the simulation rolls it over**. Never move seating or ballast toward the caster, keep the **wide track (83 cm)**, don't raise the seat (height is the other big term), leave `turn_limit_en` at 1 and `turn_alat_vmax` at 0.2 or below. Start with low `turn_gain`/`speed_limit_ms`.
+> ⚠️ **There is no rollover protection.** Since 2026-09-29 nothing measures the speed, so
+> nothing limits the turn — the owner's explicit decision, stated here so nobody assumes
+> otherwise. The geometry (a_tip ≈ 0.53 g) and **`duty_cap`** are all there is. Simulation,
+> 18T gearing, full-speed full turn, minimum tip margin in m/s² (< 0 = tips):
+>
+> | `duty_cap` | 2 children centred | 1 child off-centre (33 kg) | adult + child |
+> |---|---:|---:|---:|
+> | **1.0** (default) | +1.62 | **−0.24 TIPS** | **−0.07 TIPS** |
+> | 0.9 | +2.29 | +0.44 | +0.59 |
+> | 0.8 | +2.88 | +1.07 | +1.19 |
+> | 0.7 | +3.42 | +1.61 | +1.73 |
+> | 0.6 | +3.89 | +2.08 | +2.20 |
+>
+> The default stays **1.0** (the owner's call). Tested on the flat with 40 lb pellet bags, the
+> kart could not be tipped — but the bags sit lower than a seated child, the kart is slower
+> than before (18T), and the model has **never been calibrated against a real tip test**.
+> Source: `testCapSweep` in [`firmware/test_host/sim_main.cpp`](firmware/test_host/sim_main.cpp).
+
+- ⚠️ **Rollover**: never move seating or ballast toward the caster, keep the **wide track (83 cm)**, don't raise the seat (height is the other big term), and pick `duty_cap` knowing the table above. Start with a low `duty_cap`.
 - ⚠️ **Mounting of the 2 rear drives**: motor mounts solidly bolted/reinforced; chains tensioned, lubricated and guards closed (never any slack — a slack chain climbs the sprocket and is thrown).
 - ⚠️ **Front caster wheel**: axle and swivel well tightened (nylock / threadlocker); check it pivots freely with no binding, and that its 73 mm pad is solidly fixed — it carries the nose and the battery.
 - ⚠️ **Driven-wheel axle secured**: nylock + **cotter pin/retaining washer**.
 - ⚠️ **Chain/sprocket guard**: no fingers/laces/clothing caught.
 - ⚠️ **Rounded corners**, sanding against splinters, bolt heads countersunk/capped on the child side.
 - ⚠️ **Lap belt** anchored to the frame; **helmet mandatory**; **footrest**.
-- ⚠️ **Central hardware emergency stop**: at the **top of the seatback, centered**, **easily reachable by both kids** (and by an adult behind); it **opens the main relay's coil** (~10-20 ms) and cuts **the entire kart, brain included**. ⚠️ **It does not brake — the kart coasts** (~15 m from full speed on the flat; on a slope it keeps accelerating). Teach it as "kill everything", not as "stop": the **brake** is letting go of the stick, and the gamepad's **button B** is the emergency stop that brakes. A **welded relay contact** is no longer detected in software — verify at commissioning that VB+ really dies when the mushroom is pressed. Check that the button is neither hidden nor blocked, and that the kids know how to use it.
-- ⚠️ **Gamepad**: calibrated before each session; check that **button B (software emergency stop)** brakes, and that a **disconnect** (gamepad off / out of range) triggers braking.
+- ⚠️ **Central hardware emergency stop**: at the **top of the seatback, centered**, **easily reachable by both kids** (and by an adult behind); it **opens the main relay's coil** (~10-20 ms) and cuts **the entire kart, brain included**. ⚠️ **It does not brake — the kart coasts** (~11 m from full speed on the flat; on a slope it keeps accelerating). Teach it as "kill everything", not as "stop": the **brake** is letting go of **A**, and the gamepad's **button B** is the emergency stop that brakes. A **welded relay contact** is no longer detected in software — verify at commissioning that VB+ really dies when the mushroom is pressed. Check that the button is neither hidden nor blocked, and that the kids know how to use it.
+- ⚠️ **Gamepad**: calibrated before each session; check that **releasing A** brakes, that **button B (software emergency stop)** brakes, and that a **disconnect** (gamepad off / out of range) triggers braking.
 - ⚠️ **Inspection before each use**: motor mounts, chain tension + lubrication + sprocket tightness, **front caster (swivels free, pad solid)**, **central hardware e-stop** + gamepad e-stop, tech bay mounting (battery secured in the nose), electric brake test.
 - ⚠️ **Flat ground, supervised**, away from traffic and slopes.
 - ⚠️ **Plastic tires = little grip** → moderate speed, gentle turns, and **skid-steer scrub** in tight turns (see §3).
@@ -762,7 +794,7 @@ To adjust the **seatback ↔ front-of-seat** distance to the child's size:
 | + 2 kids (~33 kg each) | +66 kg |
 | **LOADED TOTAL** | **≈ 98 kg** |
 
-**Consequences:** wood dominates (~56 % empty) → the first lever for weight saving. Removing the steering parts (steering wheel, column, tie rod, steering knuckles) **saves weight** versus the 4-wheeler. **Where the mass sits matters more than how much of it there is:** the two kids (66 kg, two thirds of the loaded total) sit **6″ ahead of the driven axle**, which puts the CG 46 cm from it — it was 21 cm when they sat on it, and that difference is a quarter of the rollover margin. The battery (the one heavy item at the other end) is deliberately in the **nose over the caster** — it keeps that wheel planted while barely moving the CG. ⚠️ Anything heavy added later goes **at the rear**, never in the cabin's front half: the sim's `xcg_m` (distance CG→driven axle, **0.455 m**) is the number that would move, and the rollover range was validated at that value (`turn_alat_vmax` capped at 0.2, its own default). Rolling resistance at ~100 kg ≈ **25 N** on the flat; the combined drive force of the 2 rear wheels is still enough at 61 % of the load → **OK on the flat**, realistic grade **~3–6 %**. Electric braking must be sized for ~100 kg.
+**Consequences:** wood dominates (~56 % empty) → the first lever for weight saving. Removing the steering parts (steering wheel, column, tie rod, steering knuckles) **saves weight** versus the 4-wheeler. **Where the mass sits matters more than how much of it there is:** the two kids (66 kg, two thirds of the loaded total) sit **6″ ahead of the driven axle**, which puts the CG 46 cm from it — it was 21 cm when they sat on it, and that difference is a quarter of the rollover margin. The battery (the one heavy item at the other end) is deliberately in the **nose over the caster** — it keeps that wheel planted while barely moving the CG. ⚠️ Anything heavy added later goes **at the rear**, never in the cabin's front half: the sim's `xcg_m` (distance CG→driven axle, **0.455 m**) is the number that would move, and the `duty_cap` sweep of §5 was computed at that value. Rolling resistance at ~100 kg ≈ **25 N** on the flat; the combined drive force of the 2 rear wheels is still enough at 61 % of the load → **OK on the flat**, realistic grade **~3–6 %**. Electric braking must be sized for ~100 kg.
 
 ---
 
@@ -773,28 +805,28 @@ Order from simplest to riskiest. **Golden rule: test everything with the wheels 
 ```mermaid
 flowchart LR
     P1["1. Wooden frame"] --> P2["2. Rear wheels + front caster"] --> P3["3. Rear drives<br/>(2 motors + gearbox + #35 chains)"]
-    P3 --> P5["4. Power<br/>(batteries, latch, driver)"]
-    P5 --> P6["5. Control<br/>(ESP32, 2× AS5600)"] --> P7["6. Firmware<br/>+ gamepad pairing/calibration"]
+    P3 --> P5["4. Power<br/>(battery, main relay, driver)"]
+    P5 --> P6["5. Control<br/>(ESP32, WS2812)"] --> P7["6. Firmware<br/>+ gamepad pairing/calibration"]
     P7 --> P8["7. Progressive tests"] --> P9["8. Final safety"]
 ```
 
-**Phase 0 — Preparation.** Gather hardware (§4) and tools (drill, saw, wrenches, soldering iron, multimeter, 3D printer). Print the 2 gearboxes (1:17) + drilling template. Work with **batteries disconnected**.
+**Phase 0 — Preparation.** Gather hardware (§4) and tools (drill, saw, wrenches, soldering iron, multimeter, 3D printer). Print the 2 gearboxes (1:13.33), the 18T and 32T sprockets + drilling template. Work with **batteries disconnected**.
 
 **Phase 1 — Wooden frame.** **30″ × 46″ plywood deck** + the two **inboard 2×3 rails** running its full length, flush with its edges and **overhanging 150 mm at the nose** to carry the caster; crossmembers ~25–30 cm; **notches cut in the deck sides at the rear** so the drive wheels can be slid into place and then bear laterally on the rails; **tech bay in the nose** (~30 cm, over the caster); **continuous** 76 cm bench **6″ ahead of the driven axle**, leaving ~15 cm of deck behind it for the wheels and the drive stack (no divider) + **side guardrails** (1/2″ plywood, ~30 cm) + seatback. ✅ *Two people can sit without excessive flex; the guardrails hold a child who slides sideways well.* ⚠️ *Do not move the bench any further forward to "balance" the kart — the 6″ it has already moved cost a quarter of the rollover margin, and there is none left to spend.*
 
 **Phase 2 — Rear wheels + front caster.** 2 Ø25.4 cm wheels at the rear on the **1/2″ threaded rod** (85 mm of rod per wheel: hub + spacers + lock nut), dropped **4″ below the rails on shims**, turning **free**; **pivoting 10″ caster** bolted under the nose overhang, its plate raised on a ~73 mm pad so both axles sit at the same height, pivot tight but free. ✅ *Rear track 83 cm, nothing rubs, both wheels touch the ground evenly; the caster orients itself when you push the frame.*
 
-**Phase 3 — Rear drives (replaces the old "steering").** On **each rear wheel**: bolted 32T sprocket (large washers / backing plate) + 3D gearbox with its 25T output **ahead of and above the axle** (165 mm centre distance, so chain slack hangs on the run instead of climbing the teeth) + motor on a reinforced mount + #35 chain cut to length + tension adjustment + guard. **No linkage**: steering is differential, so nothing to adjust on the steering-wheel/tie-rod side. ✅ *With no power: each rear wheel turns by hand, chain tensioned and lubricated.*
+**Phase 3 — Rear drives (replaces the old "steering").** On **each rear wheel**: bolted 32T sprocket (large washers / backing plate) + 3D gearbox with its 18T output **ahead of and above the axle** (165 mm centre distance, 60 links, so chain slack hangs on the run instead of climbing the teeth) + motor on a reinforced mount + #35 chain cut to length + tension adjustment + guard. **No linkage**: steering is differential, so nothing to adjust on the steering-wheel/tie-rod side. ✅ *With no power: each rear wheel turns by hand, chain tensioned and lubricated.*
 
 **Phase 4 — Power electronics ⚠️ (in the nose).** The **single 12 V pack in the NOSE, strapped in its retaining tray over the caster** (build the tray first: plywood plate + rims on the deck); **fuse 40 A AT the battery → main relay (contact 30→87) → +12V_SW rail → 10 AWG pair back to the rear motors**; the relay **coil** fed through the **main switch (dash)** and the **e-stop mushroom (NC, top of the seatback)** in series — thin wires, the contact is what breaks the 40 A — with **two 1N4007 on the coil**: one **in series** (band toward the relay — the polarity gate: a reversed battery energizes nothing and blows nothing) and one **across 85/86** (cathode to 85/+, flyback for the two switches). No latch, no priming button, no FORCE ON toggle, no capacitor. See [`doc/electronique.md`](doc/electronique.md) for the full wiring guide and [`doc/schematics/power_rails.png`](doc/schematics/power_rails.png) for the schematic; **mount the emergency-stop mushroom button at the top of the seatback, centered** (within reach of both kids and an adult behind); driver (⚠️ **VB+/VB- polarity**, and the coil diode does NOT protect this side) → 2 rear motors; **~10 AWG**, crimped lugs. ✅ *With a multimeter BEFORE connecting: polarity, ~12 V at the driver once the main switch is on, and **the e-stop kills everything — verify VB+ actually reads 0 V** (the only test that catches a welded contact). Then force a reset while powered: the kart must stay powered, reboot and come back disarmed. Finally, know the coast: with the kart rolling gently, press the mushroom and see how far it keeps going — it does not brake.*
 
-**Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the switched 12 V rail** (the ESP makes its own 3.3 V); **2× AS5600**: wheel L on **bus 0 (SDA18/SCL19)**, wheel R on **bus 1 (SDA27/SCL14)**, 4.7 kΩ pull-ups per bus + centered magnets; WS2812B (GPIO4). **No buttons, no ADC, no divider, no sense line** — GPIO 13, 16, 22 stay free and the board has no input at all besides the two I²C buses. ✅ *Common grounds, 3.3 V/5 V present, AS5600 detected (0x36 on each bus — the boot-time I²C scan prints what actually answers).*
+**Phase 5 — Control electronics.** ESP32 + breakout; **buck → 5 V on the switched 12 V rail** (the ESP makes its own 3.3 V); motor driver PWM/DIR on GPIO 26/25 (left) and 33/32 (right); WS2812B (GPIO4). **No sensors, no buttons, no ADC, no divider, no sense line** — four motor pins and one LED line are the whole logic harness. ✅ *Common grounds, 3.3 V/5 V present.*
 
-**Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)). Wi-Fi **Kart-Config** → `http://kart.local` (or `http://192.168.4.1`). **Pair then calibrate the gamepad** (mandatory to drive). Speed conversion **already determined** (AS5600 at the output of the 1:13.33 gearbox + 1.28:1 sprockets → `enc_per_wheel=1.28`, 10″ wheel, **vehicle speed in m/s**) → **verify on the bench** (both rpm signs POSITIVE pushing forward; fix with `enc_inv_l/r`) + **fine-tune the PIDs** (limiter ≈ 0.54/0.50, brake ≈ 0.43/0.29/0.011 — in m/s). Set a **low speed limit** (`speed_limit_ms`) + **rollover protection** (`turn_gain`, `turn_full_ms`, `turn_alat_vmax`, `turn_rate`) + a child-friendly **mixing** (`mix_type` 1 or 2) + set `duty_cap` (the only power ceiling). *(500 Hz loop, IPv6, System page with persistent event log: automatic.)*
+**Phase 6 — Firmware + settings.** `idf.py build flash monitor` (see [`firmware/README.md`](firmware/README.md)); later updates can go over Wi-Fi (System tab, or `POST /ota`). Wi-Fi **Kart-Config** → `http://kart.local` (or `http://192.168.4.1`). **Pair then calibrate the gamepad** (mandatory to drive), and check on the Gamepad tab which button lights as **A**. Nothing to calibrate on the wheels — there are no sensors. Set **`duty_cap`** (the only limit — read the [§5 table](#5-critical-safety-points-child) before choosing it), `turn_gain`, a child-friendly **mixing** (`mix_type` 1 = expo), `accel_pct_s` if the kart pulls away too abruptly, and `decel_pct_s` if the freewheel feels wrong. *(500 Hz loop, IPv6, System page with persistent event log: automatic.)*
 
-**Phase 7 — Progressive tests (wheels in the air).** Arm (gamepad START held ~1 s), light forward → correct direction of **each wheel** (swap M1A/M1B if needed); push the stick right → turns right; test **default brake**, **pivot in place**, **disarm**, **gamepad emergency stop (B)** and **gamepad disconnect → braking**, **central hardware e-stop** (everything dies, including the page's connection — then power back on with the main switch: the kart must come back **disarmed**); trigger the faults (**sensor failure** by unplugging an AS5600) → must refuse/cut. Then on the ground: flat terrain, minimum speed, rollover protection active, 1 light child first, **progressive** limit.
+**Phase 7 — Progressive tests (wheels in the air).** Arm (gamepad START held ~1 s), **hold A**, light forward → correct direction of **each wheel** (fix with `mot_inv_l` / `mot_inv_r`, or swap M1A/M1B); push the stick right → turns right (mirrored → `mot_swap_lr`, or rewire the channels); **release A → brake**; A held + stick released → the wheels slide down at `decel_pct_s`; test **pivot in place**, **disarm**, **gamepad emergency stop (B)** and **gamepad disconnect → braking**, **central hardware e-stop** (everything dies, including the page's connection — then power back on with the main switch: the kart must come back **disarmed**). Then on the ground: flat terrain, low `duty_cap`, 1 light child first, raise `duty_cap` **progressively**.
 
-**Phase 8 — Final safety.** Seatbelt anchored, helmets, guards, rounded corners, footrest, secured axles, tightened caster, **nose tech bay secured**, **battery strapped in its nose tray**, **central emergency stop clear and tested** (motor feed broken, fault reported). **Inspection before each use**. Use **under adult supervision**.
+**Phase 8 — Final safety.** Seatbelt anchored, helmets, guards, rounded corners, footrest, secured axles, tightened caster, **nose tech bay secured**, **battery strapped in its nose tray**, **central emergency stop clear and tested** (everything dies, driver VB+ at 0 V). **Inspection before each use**. Use **under adult supervision**.
 
 ---
 
@@ -802,9 +834,9 @@ flowchart LR
 
 ESP-IDF 6.1 (C++) code in [`firmware/`](firmware/) — details in [`firmware/README.md`](firmware/README.md).
 
-- **500 Hz control loop** (FreeRTOS 1000 Hz): **gamepad** read (pluggable mixing: linear / expo / expo+speed-soft) + **rollover protection** (iso-a_lat clamp + turn slew-rate), **2 wheel speeds** via **AS5600** (I²C, one per bus), **braking PID** + **speed-limiter PID** per wheel, **independent PWM + DIR**. State machine, arming (gamepad START), **watchdog**. No ADC and no power control: the pack is always 12 V and the kart is switched by hand. **Brake by default** from boot and if the gamepad disconnects.
+- **500 Hz control loop** (FreeRTOS 1000 Hz): **gamepad** read, **A-button gate** (A released → dynamic brake), pluggable mixing (linear / expo), **accel/decel ramps** (`accel_pct_s` / `decel_pct_s`), `duty_cap`, **independent PWM + DIR**. No sensor read of any kind — no encoders, no ADC, no power control: the pack is always 12 V and the kart is switched by hand. State machine, arming (gamepad START), gamepad heartbeat, **watchdog**. **Brake by default** from boot and if the gamepad disconnects.
 - **FreeRTOS tasks** (priority / core / stack): see [`doc/firmware-tasks.md`](doc/firmware-tasks.md); constants in [`firmware/main/rtos.hpp`](firmware/main/rtos.hpp).
-- **Bluetooth (gamepad) + Wi-Fi** in coexistence; **Wi-Fi AP + station**, **IPv6**, **mDNS** (`http://kart.local` on both interfaces — no IP to remember; Android excepted), **WebSocket** server: dashboard (scaled Chart.js graphs — forward/PWM + speed per wheel, vehicle speed, worst control tick), live configuration, **Gamepad tab** (pairing, calibration, stick visualization), Wi-Fi, pinout, and a **System page** with the **persistent event log** (why did it disarm — survives reboots and power cuts). Settings that write flash are refused while armed.
+- **Bluetooth (gamepad) + Wi-Fi** in coexistence; **Wi-Fi AP + station**, **IPv6**, **mDNS** (`http://kart.local` on both interfaces — no IP to remember; Android excepted), **WebSocket** server: dashboard (scaled Chart.js graphs — forward command + PWM per wheel, worst control tick), live configuration, **Gamepad tab** (pairing, calibration, stick visualization), Wi-Fi, pinout, and a **System page** with the **persistent event log** (why did it disarm — survives reboots and power cuts). Settings that write flash are refused while armed.
 - Build: `cd firmware && idf.py build flash monitor`.
 
 ---
@@ -814,16 +846,15 @@ ESP-IDF 6.1 (C++) code in [`firmware/`](firmware/) — details in [`firmware/REA
 Points to **address / validate before any real use**.
 
 **Safety & access**
-- **The central hardware emergency stop removes ALL power by opening the main relay** (mushroom in the relay's **coil loop** with the main switch, at the top of the seatback, within reach of both kids; ~10-20 ms). It stops the kart being powered, not the kart: with no gate drive there is no electric brake, so it **coasts** (~15 m from full speed on the flat, measured). The firmware never sees it — it is off too — and the kart boots **disarmed** when power returns. Everything that actually brakes is software and needs power: gamepad emergency stop (button B), disarm, watchdog, braking on gamepad disconnect.
+- **The central hardware emergency stop removes ALL power by opening the main relay** (mushroom in the relay's **coil loop** with the main switch, at the top of the seatback, within reach of both kids; ~10-20 ms). It stops the kart being powered, not the kart: with no gate drive there is no electric brake, so it **coasts** (~11 m from full speed on the flat, simulated). The firmware never sees it — it is off too — and the kart boots **disarmed** when power returns. Everything that actually brakes is software and needs power: releasing A, gamepad emergency stop (button B), disarm, watchdog, braking on gamepad disconnect.
 - **Unauthenticated web — by choice**: only the AP password protects access (changing it is still recommended). **Gamepad calibration** is locked outside the disarmed/stopped state.
 - **Gamepad dependency**: if the gamepad disconnects, the kart **brakes** (safety), but the driver loses directional control until reconnection → drive within Bluetooth range, gamepad charged.
 
-**Firmware / sensors**
-- **2 AS5600 sensors** (I²C, 12-bit angle, one per bus): speed = derivative at **500 Hz**, wrap handled, **3.3 V native**. **Known** kinematics → hardcoded constants (`AS5600_CPR=4096`, `WHEEL_DIAM_M=0.254`) + the mount-dependent web parameter `enc_per_wheel` (1.28 at the gearbox output). **Fully determined conversion**; still to **verify on the bench**.
-- **Sensor failure detection**: PWM active (>10%) but 0 rotation > 1 s → fault (covers motor stall / thrown or broken chain). The **reversed-wiring watchdog** is optional (`enc_rev_chk`, default on) — an owner who verifies the rpm signs at commissioning can disable it to avoid its downhill-plugging false trip.
-- **Pre-tuned PIDs** (validated in simulation) — limiter 0.54/0.50, brake 0.43/0.29/0.011 (m/s); to **fine-tune on the bench**.
-- **Rollover protection to tune empirically**: `turn_gain`, `turn_full_ms`, `turn_alat_vmax`, `turn_rate` depend on the actual track, the CG height and grip → start cautious. NB: the ramp relies on the **measured** speed → with `use_encoders=0`, no turn limiting.
-- **Brake = PID toward 0** (plugging): effective but **generates current spikes** (no regeneration) → relies on the driver's current limiting.
+**Firmware / control**
+- **No wheel sensors**: nothing measures speed. So: no speed limit but `duty_cap`, **no rollover protection** (§5 — at the default 1.0 an off-centre load tips in simulation), no stall or thrown-chain detection (a stalled motor draws its current until the driver limits it), no speed on the page.
+- **Pseudo-freewheel only**: the MDD20A cannot float its outputs in PWM/DIR mode, so "A held, stick centred" just targets 0 and lets the command slide there at `decel_pct_s` (100 %/s by default = 1 s from full) — nothing knows about slopes.
+- **Dynamic brake only**: releasing A shorts the motors — force ∝ speed, so it slows the kart hard on the flat but only holds it to a creep downhill (~0.19 m/s on 8 %, ~0.50 m/s on 16 %, simulated; 16 % was a 3.6 m/s runaway at 1:17.07). Plugging (stick back with A held) **generates current spikes** (no regeneration) → relies on the driver's current limiting.
+- **Model not calibrated**: the simulation's physical parameters (Ra, Iz, h_cg, x_cg, frictions) are estimates; the §5 rollover numbers are measurements of the model, not of the kart.
 
 **Electrical / power**
 - **Motor current 19.6 A ≈ 20 A/channel limit**: a prolonged wheel stall triggers the driver's limiting/heating. **No current measurement** in firmware.
@@ -833,7 +864,7 @@ Points to **address / validate before any real use**.
 
 **Mechanical**
 - **Skid steer = scrub in tight turns**: the tires slide sideways when you turn hard (friction, wear, energy loss). Pivot in place = maximum scrub; avoid on abrasive surfaces. There is indeed a **command differential** between the 2 wheels, but **no mechanical differential** on the axle side.
-- **Stability now comes from the firmware** (a_tip ≈ 0.53 g since the bench and axle moved 6″ apart): with the rollover protection off the simulation rolls the kart over. Keep nothing heavy toward the caster, don't raise the CG, and never disable `turn_limit_en` with a child aboard.
+- **Stability is geometry + `duty_cap`, nothing else** (a_tip ≈ 0.53 g since the bench and axle moved 6″ apart; no firmware protection since 2026-09-29). Keep nothing heavy toward the caster, don't raise the CG, and choose `duty_cap` from the §5 table.
 - **Plastic under stress** (rim, 6 mm plywood floor) → risk of cracking; reinforce.
 - **Hard PVC tires** → low grip; moderate speed.
 

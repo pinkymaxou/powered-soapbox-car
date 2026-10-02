@@ -1,6 +1,5 @@
 // sim_controller.hpp — SIMULATED host for the controller: same wiring as EspController, but the
-// KartController callbacks read the physics model (vehicle.hpp) and apply the motor
-// command to it; the gamepad is SCRIPTED (function of time). The host decision left
+// KartController output callback applies the motor command to the physics model (vehicle.hpp); the gamepad is SCRIPTED (function of time). The host decision left
 // (rumble) goes through the SAME advisor as the ESP (advisors.hpp). Virtual
 // clock: one tick = hw::CTRL_DT_S exactly. This is the "mockup" for the tests and the
 // viewer.
@@ -23,6 +22,10 @@ struct PadCmd
     float y = 0.f;            // forward [-1..1]
     bool  start = false;      // START/Options button held
     bool  estop = false;      // B button
+    bool  drive = true;       // A button held (hold to drive). DEFAULT TRUE: the scripted
+                              // driver holds A unless a scenario says otherwise, so every
+                              // stick script still means "drive this"; A itself is tested
+                              // by the scenarios that release it.
     bool  connected = true;
     bool  reports = true;     // false = link "connected" but NO more reports at all (heartbeat)
     bool  sys_power = true;   // false = the MAIN RELAY is open: main switch off, or the
@@ -42,8 +45,7 @@ public:
     SimController(Vehicle& veh, PadScript script)
         : m_veh(veh), m_script(std::move(script))
     {
-        m_ctrl.setCallbacks([this] { return readSensors(); },
-                            [this](const CtrlOutputs& out) { applyOutputs(out); });
+        m_ctrl.setCallbacks([this](const CtrlOutputs& out) { applyOutputs(out); });
     }
 
     // One full simulation step: gamepad → controller → host decisions → physics.
@@ -69,6 +71,7 @@ public:
         pad.calibrated = calibrated;
         pad.estop = m_cmd.estop;
         pad.start = m_cmd.start;
+        pad.drive = m_cmd.drive;
         pad.last_report_us = m_last_report_us;
 
         m_ctrl.setPad(pad);
@@ -90,7 +93,7 @@ public:
     bool calibrated = true;    // calibration is a prerequisite, not the subject of the physics
     int  rumbles = 0;          // number of vibrations emitted (RumbleAdvisor)
 
-    // RAW gamepad input from the script (before deadzone/ramps/rollover protection)
+    // RAW gamepad input from the script (before the deadzone)
     float padX() const { return m_cmd.x; }
     float padY() const { return m_cmd.y; }
 
@@ -100,18 +103,6 @@ public:
     bool  lastBrake() const { return m_brake_out; }
 
 private:
-    // Sensors callback — mirror of EspController::readSensors, the physics model in
-    // place of the I2C bus: the failures (absent/reversed/stuck/crazy) come from the vehicle's EncMode.
-    SensorReadings readSensors()
-    {
-        SensorReadings s;
-        s.enc_delta_l = m_veh.encDelta(true);
-        s.enc_delta_r = m_veh.encDelta(false);
-        s.enc_ok_l = m_veh.encPresent(true);
-        s.enc_ok_r = m_veh.encPresent(false);
-        return s;
-    }
-
     // Outputs callback: stores the motor command (applied to the vehicle by stepOnce).
     void applyOutputs(const CtrlOutputs& out)
     {

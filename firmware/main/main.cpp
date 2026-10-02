@@ -28,7 +28,7 @@ extern "C" void app_main()
     wifiSoftAPInit();    // "Kart-Config" access point
     webServerStart();    // HTTP/WebSocket server
     mdnsStart();         // advertises http://kart.local (after the server: the port is open)
-    Controller::init();  // hardware (PWM, I2C sensors, button)
+    Controller::init();  // hardware (PWM/DIR motor outputs, gamepad)
     ledsStart();         // WS2812B strip display task
     Controller::start(); // 500 Hz control loop (system disarmed at startup)
 

@@ -1,5 +1,5 @@
 # chain_layout.py — Where to put the gearbox output sprocket relative to the wheel one.
-# #35 chain, 25T (gearbox) → 32T (wheel). See doc/reducteur.md. Regenerate:
+# #35 chain, 18T (gearbox) → 32T (wheel) — 25T until 2026-09-29. See doc/reducteur.md. Regenerate:
 #   . .venv-schem/bin/activate && python doc/schematics/chain_layout.py
 import math
 
@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Wedge, FancyArrowPatch
 
 P = 9.525                      # #35 pitch (mm)
-R25 = P / (2 * math.sin(math.pi / 25))   # 38.0 mm pitch radius
+N_GB = 18                      # gearbox-output sprocket (was 25 until 2026-09-29)
+R_GB = P / (2 * math.sin(math.pi / N_GB))   # 27.4 mm pitch radius
 R32 = P / (2 * math.sin(math.pi / 32))   # 48.6 mm
 C = 165.0                      # chosen centre distance (mm) — short, fits the frame
 
@@ -41,15 +42,15 @@ def chain_runs(ax, a, ra, b, rb, sag_dir, sag, style='-'):
 
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 6.4))
-fig.suptitle("#35 chain, 25T gearbox → 32T wheel — where to put the gearbox output",
+fig.suptitle(f"#35 chain, {N_GB}T gearbox → 32T wheel — where to put the gearbox output",
              fontsize=13, fontweight='bold')
 
 # ── 1. VERTICAL: what the user correctly predicted ──
 ax = axes[0]
 wheel, gear = (0, 0), (0, C)
 sprocket(ax, wheel, R32, "32T wheel")
-sprocket(ax, gear, R25, "25T gearbox")
-chain_runs(ax, wheel, R32, gear, R25, (1, 0), 11)
+sprocket(ax, gear, R_GB, f"{N_GB}T gearbox")
+chain_runs(ax, wheel, R32, gear, R_GB, (1, 0), 11)
 ax.add_patch(FancyArrowPatch((-72, C * 0.62), (-72, 20), arrowstyle='-|>',
                              mutation_scale=16, color=BAD, lw=2.2))
 ax.text(-80, C * 0.40, "gravity pulls the\nslack DOWN the\nrun, not into\nthe teeth",
@@ -63,8 +64,8 @@ ax.set_xlim(-150, 120); ax.set_ylim(-125, C + 78)
 ax = axes[1]
 wheel, gear = (0, 0), (C, 0)
 sprocket(ax, wheel, R32, "32T wheel")
-sprocket(ax, gear, R25, "25T gearbox")
-chain_runs(ax, wheel, R32, gear, R25, (0, -1), 9)
+sprocket(ax, gear, R_GB, f"{N_GB}T gearbox")
+chain_runs(ax, wheel, R32, gear, R_GB, (0, -1), 9)
 ax.text(C / 2, 78, "tight side on top", ha='center', fontsize=9, color=GOOD)
 ax.annotate("", xy=(0, -92), xytext=(C, -92),
             arrowprops=dict(arrowstyle='<->', color=DIM, lw=1.1))
@@ -86,7 +87,7 @@ ax.add_patch(Circle(wheel, C, fill=False, ls='--', lw=1.4, ec=DIM, zorder=1))
 sprocket(ax, wheel, R32, "")
 for ang in (0, 32, -38, 180, 145, -150):
     r = math.radians(ang)
-    sprocket(ax, (C * math.cos(r), C * math.sin(r)), R25, '', color='#dcc46a')
+    sprocket(ax, (C * math.cos(r), C * math.sin(r)), R_GB, '', color='#dcc46a')
 ax.text(0, RB - 26, "✗ within 45° of vertical", ha='center', fontsize=10,
         color=BAD, fontweight='bold')
 ax.text(0, -RB + 14, "✓ any position on the dashed circle,\nwithin 45° of horizontal",
@@ -104,10 +105,10 @@ for ax in axes:
     ax.set_aspect('equal')
     ax.axis('off')
 
-LINKS = math.ceil(2*C/P + (25+32)/2 + ((32-25)/(2*math.pi))**2 * P/C)
+LINKS = math.ceil(2*C/P + (N_GB+32)/2 + ((32-N_GB)/(2*math.pi))**2 * P/C)
 LINKS += LINKS % 2      # an odd count needs a cranked link: ~20 % weaker
 fig.text(0.5, 0.015,
-         f"25T Ø{2*R25:.0f} mm · 32T Ø{2*R32:.0f} mm · centre distance {C:.0f} mm → {LINKS} links (even!) · "
+         f"{N_GB}T Ø{2*R_GB:.0f} mm · 32T Ø{2*R32:.0f} mm · centre distance {C:.0f} mm → {LINKS} links (even!) · "
          f"slack ~1 % of C ≈ {C*0.01:.1f} mm at mid-span (low, because reverse makes both runs tight in turn) · "
          "slot the mount ±15 mm",
          ha='center', fontsize=8.5, color='#444')

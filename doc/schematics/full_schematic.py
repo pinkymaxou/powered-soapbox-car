@@ -1,9 +1,10 @@
 # full_schematic.py — Kart electrical schematic (differential drive, SINGLE-RELAY power).
 # Single 12 V battery; ONE switched rail (+12V_SW) behind the main relay, whose coil runs
 # through the main switch and the e-stop mushroom — the switching detail lives in
-# power_rails.png. 2 independent REAR motors, 2 AS5600 sensors (one per I2C bus), driven by
-# BLUETOOTH GAMEPAD (ESP32 internal radio, no pedal). No ADC and no buttons: the pack is
-# always 12 V and nothing measures it, and arming is the gamepad's own START button.
+# power_rails.png. 2 independent REAR motors, driven by BLUETOOTH GAMEPAD (ESP32 internal
+# radio, no pedal). No sensors (the two AS5600 wheel encoders and their I2C buses went on
+# 2026-09-29), no ADC and no buttons: the pack is always 12 V and nothing measures it, and
+# arming is the gamepad's own START button.
 # Generates doc/schematics/full_schematic.png via schemdraw.
 #   . .venv-schem/bin/activate && python doc/schematics/full_schematic.py
 #
@@ -38,13 +39,10 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
                            fontsize=15).at((6, 13.0))
 
     # ───────────────────────── ESP32 (central integrated circuit) ─────────────────────────
-    # 2 I2C buses: bus 0 (SDA0/SCL0 = AS5600 L) · bus 1 (SDA1/SCL1 = AS5600 R).
-    LEFT = [('18', 'SDA0'), ('19', 'SCL0'), ('27', 'SDA1'), ('14', 'SCL1')]
+    # Outputs only: 4 motor pins + the LED strip. No sensor, no input (2026-09-29).
     RIGHT = [('25', 'DIR_L'), ('26', 'PWM_L'), ('32', 'DIR_R'), ('33', 'PWM_R'),
              ('4', 'WS')]
     pins = []
-    for i, (g, _) in enumerate(LEFT):
-        pins.append(elm.IcPin(name=g, side='left', slot=f'{len(LEFT)-i}/{len(LEFT)}'))
     for i, (g, _) in enumerate(RIGHT):
         pins.append(elm.IcPin(name=g, side='right', slot=f'{len(RIGHT)-i}/{len(RIGHT)}'))
     pins += [elm.IcPin(name='3V3', side='top'), elm.IcPin(name='5V', side='top'),
@@ -52,39 +50,13 @@ with schemdraw.Drawing(file='doc/schematics/full_schematic.png', dpi=150, show=F
     esp = elm.Ic(pins=pins, label='ESP32\nWROOM', w=4.6, h=9.5, plblsize=12, leadlen=1.1)
     esp.right(); esp.anchor('center'); esp.at((0, 0)); d.add(esp)
     d += elm.Label().label('BT gamepad\n(internal radio)', fontsize=8, color=NET).at((0, -5.6))
-    for g, net in LEFT:
-        flag(d, P(esp, g), net, 'left')
+    d += elm.Label().label('no sensors, no inputs — FREE:\nGPIO 13, 14, 16, 18, 19,\n21, 22, 23, 27\n+ input-only 34/35/36/39\n(18/19, 27/14 = the old\nencoder I²C buses)',
+                           fontsize=8, color='#555').at((-5.6, 0.6))
     for g, net in RIGHT:
         flag(d, P(esp, g), net, 'right')
     d += elm.Line().up().at(P(esp, '3V3')).length(0.9); d += elm.Vdd().label('+3V3')
     d += elm.Line().up().at(P(esp, '5V')).length(0.9); d += elm.Vdd().label('+5V')
     d += elm.Line().down().at(P(esp, 'GND')).length(0.6); d += elm.Ground()
-
-    # ───────────── AS5600 LEFT wheel sensor (bus 0) + pull-ups ─────────────
-    hg = header(d, -11.5, 6.5, 'AS5600 rear wheel L (0x36)', ['SDA', 'SCL', '3V3', 'GND'])
-    flag(d, P(hg, 'pin1'), 'SDA0', 'left')
-    flag(d, P(hg, 'pin2'), 'SCL0', 'left')
-    flag(d, P(hg, 'pin3'), '+3V3', 'left')
-    d += elm.Ground().at(P(hg, 'pin4'))
-    d += elm.Vdd().at((-7.6, 6.9)).label('+3V3', fontsize=8)
-    d += elm.Resistor().down().at((-7.6, 6.9)).length(1.2).label('4k7', fontsize=8)
-    flag(d, d.here, 'SDA0', 'down')
-    d += elm.Vdd().at((-6.7, 6.9)).label('+3V3', fontsize=8)
-    d += elm.Resistor().down().at((-6.7, 6.9)).length(1.2).label('4k7', fontsize=8)
-    flag(d, d.here, 'SCL0', 'down')
-
-    # ───────────── AS5600 RIGHT wheel sensor (bus 1) + pull-ups ─────────────
-    hd = header(d, -11.5, 1.4, 'AS5600 rear wheel R (0x36)', ['SDA', 'SCL', '3V3', 'GND'])
-    flag(d, P(hd, 'pin1'), 'SDA1', 'left')
-    flag(d, P(hd, 'pin2'), 'SCL1', 'left')
-    flag(d, P(hd, 'pin3'), '+3V3', 'left')
-    d += elm.Ground().at(P(hd, 'pin4'))
-    d += elm.Vdd().at((-7.6, 1.8)).label('+3V3', fontsize=8)
-    d += elm.Resistor().down().at((-7.6, 1.8)).length(1.2).label('4k7', fontsize=8)
-    flag(d, d.here, 'SDA1', 'down')
-    d += elm.Vdd().at((-6.7, 1.8)).label('+3V3', fontsize=8)
-    d += elm.Resistor().down().at((-6.7, 1.8)).length(1.2).label('4k7', fontsize=8)
-    flag(d, d.here, 'SCL1', 'down')
 
     # ───────────────────────── Motor driver + 2 REAR motors ─────────────────────────
     DRV_X, DRV_Y, DRV_W, DRV_H = 10.5, 2.0, 6.0, 5.0

@@ -90,7 +90,7 @@ with schemdraw.Drawing(file='doc/schematics/power_rails.png', dpi=150, show=Fals
     d += elm.Dot()
     d += elm.Label().label('either switch opens ⇒ coil drops ⇒ the WHOLE kart goes dark in ~10-20 ms\n'
                            '(motors AND ESP32 — the firmware never sees it, and nothing brakes:\n'
-                           'with no power the kart COASTS — 15 m from full speed on the flat)',
+                           'with no power the kart COASTS — ~11 m from full speed on the flat)',
                            fontsize=8, color=HL).at((11.6, 7.9))
     d += elm.Label().label('POLARITY GATE: the SERIES diode means the coil can only pull in one way round,\n'
                            'and the contact carries the whole kart — so a reversed battery closes nothing,\n'
@@ -125,11 +125,12 @@ with schemdraw.Drawing(file='doc/schematics/power_rails.png', dpi=150, show=Fals
     d += elm.Line().left().at(P(esp, 'GND')).length(0.8)
     d += elm.Ground()
     flag(d, P(esp, '3V3'), '+3V3', 'right')
-    d += elm.Label().label('no power-latch pin, no e-stop sense, no arming button:\n'
-                           'GPIO13, 16 and 22 are FREE and the board has NO input.\n'
-                           'Power is the main switch; arming is a gamepad button.',
-                           fontsize=8, color='#555').at((1.0, -1.2))
-    d += elm.Label().label('+3V3: AS5600 ×2 (I²C buses 0 and 1) — see full_schematic.png',
+    d += elm.Label().label('no power-latch pin, no e-stop sense, no arming button, no sensors:\n'
+                           'GPIO13, 16, 22 (and 14/18/19/27, the old encoder I²C) are FREE\n'
+                           'and the board has NO input. Power is the main switch;\n'
+                           'arming (START) and driving (hold A) are gamepad buttons.',
+                           fontsize=8, color='#555').at((1.0, -1.4))
+    d += elm.Label().label('+3V3: ESP32 only — nothing else on the kart uses it',
                            fontsize=8, color='#555').at((7.6, 2.2))
 
 print('render OK')

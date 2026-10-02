@@ -1,5 +1,5 @@
 // test_main.cpp — HOST tests (g++, without ESP-IDF) of the firmware's pure logic:
-// PID (pid.hpp), ring buffer (ringbuffer.hpp) and control math (control_math.hpp).
+// ring buffer (ringbuffer.hpp), control math (control_math.hpp) and mixers (mixer.hpp).
 // Run: ./run_tests.sh (or see the CI "host-tests" job).
 #include <cmath>
 #include <cstdio>
@@ -9,7 +9,6 @@
 
 #include "control_math.hpp"
 #include "mixer.hpp"
-#include "pid.hpp"
 #include "ringbuffer.hpp"
 
 static int g_failures = 0;
@@ -56,6 +55,30 @@ static void test_slew()
     CHECK(near(v, 0.7f));
 }
 
+// ramp: the asymmetric limiter. `up` bounds growth away from zero, `dn` the fall back toward
+// it; either at 0 lets that side through untouched. A reversal is dn then up, in that order.
+static void test_ramp()
+{
+    CHECK(near(ctl::ramp(1.f, 0.f, 2.f, 4.f, 0.1f), 0.2f));      // growing → up·dt
+    CHECK(near(ctl::ramp(-1.f, 0.f, 2.f, 4.f, 0.1f), -0.2f));    // …in both directions
+    CHECK(near(ctl::ramp(0.f, 1.f, 2.f, 4.f, 0.1f), 0.6f));      // shrinking → dn·dt (faster)
+    CHECK(near(ctl::ramp(0.3f, 1.f, 2.f, 4.f, 0.1f), 0.6f));     // toward a smaller target: dn
+    CHECK(near(ctl::ramp(0.5f, 1.f, 2.f, 4.f, 0.2f), 0.5f));     // target inside the step → reached
+    CHECK(near(ctl::ramp(1.f, 0.f, 0.f, 4.f, 0.1f), 1.f));       // up = 0 → no rise limit
+    CHECK(near(ctl::ramp(0.f, 1.f, 2.f, 0.f, 0.1f), 0.f));       // dn = 0 → drops at once
+    // Reversal: the fall to 0 is spent at dn, and only then does it build the other way at up.
+    CHECK(near(ctl::ramp(-1.f, 0.5f, 2.f, 4.f, 0.1f), 0.1f));    // 0.5 → 0.1, still falling
+    CHECK(near(ctl::ramp(-1.f, 0.f, 2.f, 4.f, 0.1f), -0.2f));    // …then up takes over
+    // A tick that finishes the fall does NOT stall on 0: what is left of it already builds the
+    // other way, so plugging never loses a tick sitting at zero.
+    CHECK(near(ctl::ramp(-1.f, 0.1f, 2.f, 4.f, 0.1f), -0.2f));
+    float v = 0.f;                                               // converges, no overshoot
+    for (int i = 0; i < 100; ++i) v = ctl::ramp(0.7f, v, 2.f, 4.f, 0.01f);
+    CHECK(near(v, 0.7f));
+    for (int i = 0; i < 100; ++i) v = ctl::ramp(0.f, v, 2.f, 4.f, 0.01f);
+    CHECK(near(v, 0.f));
+}
+
 static void test_mix_arcade()
 {
     float l = 0.f, r = 0.f;
@@ -90,87 +113,6 @@ static void test_square_map()
     CHECK(std::fabs(x) <= 1.f && std::fabs(y) <= 1.f);      // always bounded
 }
 
-static void test_turn_limit()
-{
-    // Rollover protection: ±100% below v_full, then a 1/v (iso-a_lat) decrease toward hi at v_max.
-    CHECK(near(ctl::turnLimit(0.0f, 0.5f, 3.3f, 0.5f), 1.f));    // pivot in place → 100%
-    CHECK(near(ctl::turnLimit(0.5f, 0.5f, 3.3f, 0.5f), 1.f));    // at the threshold → still 100%
-    CHECK(near(ctl::turnLimit(1.0f, 0.5f, 3.3f, 0.5f), 1.f));    // 1/v > 100% → still full
-    CHECK(near(ctl::turnLimit(3.3f, 0.5f, 3.3f, 0.5f), 0.5f));   // at Vmax → 50%
-    CHECK(near(ctl::turnLimit(9.0f, 0.5f, 3.3f, 0.5f), 0.5f * 3.3f / 9.f));   // runaway → tightens further (iso-a_lat)
-    const float mid = ctl::turnLimit(1.9f, 0.5f, 3.3f, 0.5f);    // mid-speed → hi·vmax/v ≈ 87%
-    CHECK(near(mid, 0.5f * 3.3f / 1.9f, 1e-3f));
-    CHECK(near(ctl::turnLimit(2.0f, 0.5f, 0.5f, 0.5f), 0.125f)); // v_max ≤ v_full → 1/v direct, no division by 0
-}
-
-static void test_rev_detect()
-{
-    const int64_t WIN = 400000;   // 400 ms
-    const int64_t DT = 2000;      // tick 500 Hz
-    const float OUT_MIN = 0.25f, V_MIN = 0.30f, DECAY = 0.15f;
-
-    // STICK BRAKING: kart at +2 m/s, command -0.5 → the opposing speed DECAYS toward 0.
-    // Deceleration 2 m/s²: NOT a reversal, no trigger expected.
-    ctl::RevDetect d;
-    int64_t t = 0; float v = 2.0f; bool fired = false;
-    while (v > 0.f)
-    {
-        fired |= d.update(-0.5f, v, t, WIN, OUT_MIN, V_MIN, DECAY);
-        v -= 2.0f * 0.002f;   // 2 m/s² × 2 ms
-        t += DT;
-    }
-    CHECK(!fired);
-
-    // REAL REVERSAL: command +0.5, measured wheel at -1 m/s STABLE → confirmed after 400 ms.
-    ctl::RevDetect di; t = 0; fired = false;
-    for (int i = 0; i < 300; ++i) { fired |= di.update(0.5f, -1.0f, t, WIN, OUT_MIN, V_MIN, DECAY); t += DT; }
-    CHECK(fired);
-
-    // Reversal with INCREASING speed (the kart accelerates, sensor backwards) → confirmed.
-    ctl::RevDetect dc; t = 0; v = -0.4f; fired = false;
-    for (int i = 0; i < 400; ++i)
-    {
-        fired |= dc.update(0.6f, v, t, WIN, OUT_MIN, V_MIN, DECAY);
-        v -= 1.0f * 0.002f;   // accelerates in the wrong direction
-        t += DT;
-    }
-    CHECK(fired);
-
-    // Brief opposition (< 400 ms) then back to normal → nothing.
-    ctl::RevDetect db; t = 0; fired = false;
-    for (int i = 0; i < 100; ++i) { fired |= db.update(0.5f, -1.0f, t, WIN, OUT_MIN, V_MIN, DECAY); t += DT; }
-    for (int i = 0; i < 300; ++i) { fired |= db.update(0.5f, 1.0f, t, WIN, OUT_MIN, V_MIN, DECAY); t += DT; }
-    CHECK(!fired);
-}
-
-// ───────────────────────── Pid ─────────────────────────
-static void test_pid()
-{
-    Pid pid;
-
-    // Pure P: output proportional to the error, bounded.
-    pid.reset();
-    CHECK(near(pid.update(1.f, 0.f, 0.01f, 0.5f, 0.f, 0.f, -1.f, 1.f), 0.5f));
-    CHECK(near(pid.update(10.f, 0.f, 0.01f, 0.5f, 0.f, 0.f, -1.f, 1.f), 1.f));   // clamp high
-
-    // Integral: accumulates toward the command (stuck system → output rises).
-    pid.reset();
-    const float o1 = pid.update(1.f, 0.f, 0.1f, 0.f, 1.f, 0.f, -1.f, 1.f);
-    const float o2 = pid.update(1.f, 0.f, 0.1f, 0.f, 1.f, 0.f, -1.f, 1.f);
-    CHECK(o2 > o1);
-
-    // Anti-windup: after a LONG saturation, an error reversal must lift off
-    // immediately from the max (the integral was frozen, not inflated).
-    pid.reset();
-    for (int i = 0; i < 1000; ++i) pid.update(10.f, 0.f, 0.01f, 1.f, 1.f, 0.f, -1.f, 1.f);
-    const float after = pid.update(0.f, 10.f, 0.01f, 1.f, 1.f, 0.f, -1.f, 1.f);
-    CHECK(after < 1.f);   // a "wound-up" PID would stay stuck at +1
-
-    // reset() properly clears the state.
-    pid.reset();
-    CHECK(near(pid.update(0.f, 0.f, 0.01f, 1.f, 1.f, 1.f, -1.f, 1.f), 0.f));
-}
-
 // ───────────────────────── Ring ─────────────────────────
 static void test_ring()
 {
@@ -197,8 +139,8 @@ static void test_ring()
 // Pluggable stick→motor mixing (mixer.hpp): the expo curve's contract, then each mixer.
 static void test_mixers()
 {
-    // The expo curve: endpoints exact, sign preserved, never AMPLIFIES (that is what lets
-    // the rollover clamp survive any mixer), monotonic, e=0 = identity.
+    // The expo curve: endpoints exact, sign preserved, never AMPLIFIES, monotonic,
+    // e=0 = identity.
     CHECK(near(mixdet::expo(1.f, 0.7f), 1.f));
     CHECK(near(mixdet::expo(-1.f, 0.7f), -1.f));
     CHECK(near(mixdet::expo(0.4f, 0.f), 0.4f));                       // e=0 → identity
@@ -215,40 +157,25 @@ static void test_mixers()
     cfg.turn_gain = 1.f;
     cfg.mix_expo_fwd = 0.5f;
     cfg.mix_expo_turn = 0.5f;
-    cfg.mix_soft_hi = 0.6f;
-    cfg.speed_limit_ms = 3.3f;
-    cfg.rev_speed_ms = 1.0f;
-    float ll, lr, el, er, sl, sr;
+    float ll, lr, el, er;
 
-    // Type 0 ≡ the historical mixArcade, and any unknown type falls back to it.
-    mixerFor(0).mix(0.5f, 0.3f, 2.f, cfg, ll, lr);
+    // Type 0 ≡ the historical mixArcade, and any unknown type (2 = the retired speed-soft
+    // mixer, from an old NVS) falls back to it.
+    mixerFor(0).mix(0.5f, 0.3f, cfg, ll, lr);
     float rl, rr;
     ctl::mixArcade(0.5f, 0.3f, cfg.turn_gain, rl, rr);
     CHECK(near(ll, rl) && near(lr, rr));
-    mixerFor(99).mix(0.5f, 0.3f, 2.f, cfg, el, er);
-    CHECK(near(el, ll) && near(er, lr));
+    for (int unknown : {2, 99})
+    {
+        mixerFor(unknown).mix(0.5f, 0.3f, cfg, el, er);
+        CHECK(near(el, ll) && near(er, lr));
+    }
 
     // EXPO: softer than linear at half stick, identical at full stick.
-    mixerFor(1).mix(0.5f, 0.f, 0.f, cfg, el, er);
+    mixerFor(1).mix(0.5f, 0.f, cfg, el, er);
     CHECK(near(el, 0.3125f) && near(er, 0.3125f));                    // 31% instead of 50%
-    mixerFor(1).mix(1.f, 0.f, 0.f, cfg, el, er);
+    mixerFor(1).mix(1.f, 0.f, cfg, el, er);
     CHECK(near(el, 1.f) && near(er, 1.f));                            // stops keep full power
-
-    // SOFT accelerating: authority tapers with speed — ×soft_hi at the limit.
-    mixerFor(2).mix(0.5f, 0.f, 0.f, cfg, sl, sr);
-    CHECK(near(sl, 0.3125f));                                         // standstill = plain expo
-    mixerFor(2).mix(0.5f, 0.f, cfg.speed_limit_ms, cfg, sl, sr);
-    CHECK(near(sl, 0.3125f * 0.6f));                                  // at Vmax: ×mix_soft_hi
-    mixerFor(2).mix(0.5f, 0.f, 0.5f * cfg.speed_limit_ms, cfg, sl, sr);
-    CHECK(near(sl, 0.3125f * 0.8f));                                  // halfway: linear taper
-    // SOFT braking (command opposes the motion): NEVER tapered, in both directions.
-    mixerFor(2).mix(-0.5f, 0.f, cfg.speed_limit_ms, cfg, sl, sr);     // reverse cmd, rolling fwd
-    CHECK(near(sl, -0.3125f));
-    mixerFor(2).mix(0.5f, 0.f, -cfg.rev_speed_ms, cfg, sl, sr);       // fwd cmd, rolling back
-    CHECK(near(sl, 0.3125f));
-    // Reverse taper uses the REVERSE limit as its reference.
-    mixerFor(2).mix(-0.5f, 0.f, -cfg.rev_speed_ms, cfg, sl, sr);
-    CHECK(near(sl, -0.3125f * 0.6f));
 }
 
 int main()
@@ -256,11 +183,9 @@ int main()
     test_clampf();
     test_deadzone();
     test_slew();
+    test_ramp();
     test_mix_arcade();
     test_square_map();
-    test_turn_limit();
-    test_rev_detect();
-    test_pid();
     test_ring();
     test_mixers();
 

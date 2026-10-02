@@ -1,11 +1,11 @@
 // vehicle.hpp — Physics model of the kart (pure, header-only) for the host simulation.
 // Planar differential dynamics (rigid body: longitudinal speed + yaw), DC motors
-// with back-EMF, battery with internal resistance, simulated sensors
-// (quantized AS5600, voltage), optional slope, and the ROLLOVER CRITERION (3 or 4 wheels).
+// with back-EMF, battery with internal resistance, optional slope, and the ROLLOVER
+// CRITERION (3 or 4 wheels). No simulated sensors: the kart has none since 2026-09-29.
 //
 // "Order of magnitude" fidelity: the estimated parameters (Ra, Iz, h_cg, x_cg, frictions)
 // are gathered in VehicleParams, commented, and recalibratable with real measurements.
-// The constants SHARED with the firmware (wheel, reduction gear, CPR) come from hw:: —
+// The constants SHARED with the firmware (control rate, PWM scale) come from hw:: —
 // single source of truth (control_types.hpp).
 #pragma once
 
@@ -77,9 +77,11 @@ struct VehicleParams
     // capped everywhere at kt·i_max: the simulation can NEVER exceed the theoretical
     // capacity of the motors (real stall 85 A and plugging ~150 A are therefore clamped).
     float i_max_a   = 19.6f;
-    float gear      = 17.07f;   // total motor → wheel reduction (1:17.07)
+    // 2026-09-29: chain stage changed from 25T→32T (1.28) to 18T→32T (1.778) to slow the kart
+    // down for the children — 13.33 × 32/18 = 23.70 (was 17.07: top speed ×0.72, torque ×1.39).
+    float gear      = 23.70f;   // total motor → wheel reduction (1:23.70)
     float eta       = 0.85f;    // gearbox + belt efficiency
-    float wheel_r_m = hw::WHEEL_DIAM_M / 2.f;
+    float wheel_r_m = 0.127f;   // 10" wheel (0.254 m) — no longer an hw:: constant, nothing on the kart uses it
 
     // ── Resistances to motion ──
     float roll_n    = 30.f;     // rolling resistance (N, opposing the motion)
@@ -99,9 +101,6 @@ struct VehicleParams
     float lean_max_rad = 0.07f;
     float lean_tau_s   = 0.15f;
 };
-
-// Simulatable encoder failures (per wheel) — to test the controller's faults.
-enum class EncMode { Ok, Absent, Reversed, Stuck, Crazy };
 
 // Drive mode for the simulation step:
 // Drive = signed PWM applied · Brake = phase short-circuit (dynamic braking) ·
@@ -232,10 +231,6 @@ public:
         // the kart FALLS BACK onto its wheels as soon as the force releases. (Simplification: as long as
         // the wheel is lifted, the planar v/ω dynamics continue unchanged.)
         if (!m_air) stepRoll(dt);   // no edge lift while airborne (already in the air!)
-
-        // Encoders: SENSOR angle accumulation (wheel turns × GEAR_RATIO × CPR)
-        accumulate(m_acc_l, vlNow());
-        accumulate(m_acc_r, vrNow());
     }
 
     // Integrates the roll around the edge (φ > 0 = leaning LEFT — turning right).
@@ -300,25 +295,6 @@ public:
         m_roll = s * nphi;
     }
 
-    // ── Sensors for SimController ──
-    // AS5600 Δcounts since the last call (quantized like the real 12-bit).
-    int encDelta(bool left)
-    {
-        EncMode mode = left ? enc_mode_l : enc_mode_r;
-        double& acc  = left ? m_acc_l : m_acc_r;
-        long&   last = left ? m_last_l : m_last_r;
-        if (EncMode::Absent == mode || EncMode::Stuck == mode) return 0;
-        const long cur = static_cast<long>(std::floor(acc));
-        long d = cur - last;
-        last = cur;
-        if (EncMode::Reversed == mode) d = -d;
-        if (EncMode::Crazy == mode) d += 900;   // ~+55 m/s: physically impossible
-        return static_cast<int>(d);
-    }
-    bool encPresent(bool left) const
-    {
-        return (left ? enc_mode_l : enc_mode_r) != EncMode::Absent;
-    }
     float vbatVolts() const { return m_vterm; }   // pack terminal voltage (display only)
 
     // ── Physical quantities (asserts + display) ──
@@ -364,9 +340,8 @@ public:
     // Driving mode hooks up the shed and the Backrooms grid (terrain.hpp); see integrate()
     // for how a hit resolves (slide along the free axis, speed bleeds on the blocked one).
     std::function<bool(float, float)> wall_fn;
-    EncMode enc_mode_l = EncMode::Ok;
-    EncMode enc_mode_r = EncMode::Ok;
     VehicleParams& params() { return m_p; }
+    const VehicleParams& params() const { return m_p; }
 
 private:
     // Wheel force of a DC motor powered at v_applied, wheel at v_wheel (m/s).
@@ -391,12 +366,6 @@ private:
     float vlNow() const { return m_v + m_w * m_p.track_m / 2.f; }
     float vrNow() const { return m_v - m_w * m_p.track_m / 2.f; }
 
-    void accumulate(double& acc, float v_wheel)
-    {
-        const double wheel_rps = v_wheel / (PI_F * hw::WHEEL_DIAM_M);
-        acc += wheel_rps * hw::GEAR_RATIO * hw::AS5600_CPR * (1.0 / hw::CTRL_HZ);
-    }
-
     VehicleParams m_p;
     float m_v = 0.f, m_w = 0.f;          // dynamic state
     float m_x = 0.f, m_y = 0.f, m_h = 0.f, m_t = 0.f;
@@ -414,8 +383,6 @@ private:
     bool  m_tipped = false;
     float m_power_w = 0.f;               // instantaneous battery power (estimate)
     float m_energy_wh = 0.f;             // cumulative battery energy (estimate)
-    double m_acc_l = 0.0, m_acc_r = 0.0; // accumulated sensor angle (counts, fractional)
-    long   m_last_l = 0, m_last_r = 0;
 };
 
 } // namespace sim

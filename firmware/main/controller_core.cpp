@@ -1,10 +1,23 @@
 // controller_core.cpp — Kart control logic (see controller_core.hpp).
-// PURE: transplanted 1:1 from the old controller.cpp; all I/O goes through the io*.
+// PURE: all I/O goes through the host (setPad/setConfig in, the output callback out).
 // Arcade mixing: y = forward, x = turn → left = forward + turn, right = forward − turn.
-// Safeties: gamepad disconnected/silent, gamepad e-stop, encoder faults → BRAKING.
+// Safeties: gamepad disconnected/silent, gamepad e-stop, missing calibration → BRAKING.
+// None of those is called a "fault" any more (2026-09-30): they are ordinary gamepad
+// conditions, they disarm and brake, and the ONE that applies is published as Stop.
 // (The HARDWARE emergency stop is not seen here: the mushroom opens the main relay's
 // coil and the ESP dies with the rest — see doc/electronique.md.)
-// Rollover protection: the allowed turn decreases with the measured speed.
+//
+// SIMPLIFIED on 2026-09-29: no sensor on the wheels, so no speed limiter, no PID braking,
+// no rollover protection and no turn smoothing. What is left, once armed:
+//   A released           → dynamic brake (motor short-circuit), whatever the stick says;
+//   A held + stick       → the mixed stick goes to the motors, bounded by duty_cap only;
+//   A held + stick at 0  → PSEUDO-freewheel: the command SLIDES to 0 instead of dropping.
+// Both directions are one rate limiter (control_math.hpp): accel_pct_s bounds the rise (for
+// the motor drivers), decel_pct_s the fall — and that fall IS the freewheel, which is why the
+// old coast_ms duration is gone. Neither delays the BRAKE: releasing A, disarming or any Stop
+// cause grounds the windings on the tick it happens.
+// ⚠️ Nothing limits the turn at speed any more: in simulation a full turn at full PWM tips
+// the kart. duty_cap is the only lever (see its help text and the sim measurement).
 #include "controller_core.hpp"
 
 #include <algorithm>
@@ -16,79 +29,8 @@ namespace
 {
 using ctl::clampf;
 using ctl::deadzone;
-using ctl::mixArcade;
-using ctl::slew;
-using ctl::turnLimit;
-
-// Median of 5 — rejects isolated outliers (a corrupted I2C read, or an aliased Δ when the loop
-// was delayed and the shaft moved > half a turn between reads) without averaging lag.
-float median5(const float w[5]) { float a[5]; std::copy(w, w + 5, a); std::sort(a, a + 5); return a[2]; }
+using ctl::ramp;
 } // namespace
-
-// Brakes one wheel: speed PID → 0 (signed output, can reverse). Speed in m/s.
-float KartController::brakeWheel(Pid& pid, float speed_ms, const KartConfig& cfg, float dt)
-{
-    if (std::fabs(speed_ms) <= hw::EBRAKE_MIN_MPS)
-    {
-        pid.reset();
-        return 0.f;
-    }
-    return pid.update(0.f, speed_ms, dt, cfg.brk_kp, cfg.brk_ki, cfg.brk_kd, -1.f, 1.f);
-}
-
-void KartController::updateEncStuck(int64_t now, float cmd, float speed_ms)
-{
-    if (std::fabs(cmd) > hw::ENC_STUCK_PWM && std::fabs(speed_ms) <= 0.05f)
-    {
-        if (0 == m_stuck_us) m_stuck_us = now;
-        else if ((now - m_stuck_us) > static_cast<int64_t>(hw::ENC_STUCK_MS) * 1000) m_enc_fault = true;
-    }
-    else
-    {
-        m_stuck_us = 0;
-    }
-}
-
-// Encoder sanity: reversed direction (wheel measured opposite to a firm command —
-// sensor OR motor wired backwards) and aberrant measurement (impossible speed). A sensor
-// that LIES makes PID braking and the limiter DANGEROUS (they would push instead of hold) →
-// TOTAL STOP, latched until restart. "braking" excludes PID braking: it opposes
-// rotation by design and would trigger the direction test wrongly.
-void KartController::updateEncSanity(int64_t now, bool braking, float out_l, float out_r,
-                                     float sl, float sr)
-{
-    // RevDetect distinguishes a REAL reversal (opposed speed, stable/growing) from a
-    // commanded DECELERATION — braking at the stick — where the opposed speed melts toward zero.
-    // OPTIONAL (enc_rev_chk): its blind spot is plugging on a downhill — reverse stick while
-    // the slope holds the speed up looks exactly like a reversed sensor, and the latched full
-    // stop mid-descent is worse than what it guards against. An owner who verifies the rpm
-    // signs at commissioning (Dashboard, push the kart forward) can turn the watchdog off;
-    // ENC_MAD and ENC_STUCK stay as the runtime backstops either way.
-    if (!braking && 0 != m_cfg.enc_rev_chk)
-    {
-        constexpr int64_t win = static_cast<int64_t>(hw::ENC_REV_MS) * 1000;
-        if (m_rev_l.update(out_l, sl, now, win, hw::ENC_REV_PWM, hw::ENC_REV_MPS, hw::ENC_REV_DECAY_MPS) ||
-            m_rev_r.update(out_r, sr, now, win, hw::ENC_REV_PWM, hw::ENC_REV_MPS, hw::ENC_REV_DECAY_MPS))
-        {
-            m_enc_rev_fault = true;
-        }
-    }
-    else
-    {
-        m_rev_l.reset();
-        m_rev_r.reset();
-    }
-
-    if (std::fabs(sl) > hw::ENC_MAX_SANE_MPS || std::fabs(sr) > hw::ENC_MAX_SANE_MPS)
-    {
-        if (0 == m_mad_us) m_mad_us = now;
-        else if ((now - m_mad_us) > static_cast<int64_t>(hw::ENC_MAD_MS) * 1000) m_enc_mad_fault = true;
-    }
-    else
-    {
-        m_mad_us = 0;
-    }
-}
 
 // step() — ALL the business logic of a step. Runs UNDER the lock taken by tick().
 CtrlOutputs KartController::step(const CtrlInputs& in)
@@ -96,107 +38,39 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
     CtrlOutputs out;
     const int64_t now = in.now_us;
 
-    const bool use_enc = (m_cfg.use_encoders != 0);   // 0 = ignore the AS5600 (bench without encoders)
-
-    // Heartbeat: "connected" but no HID report for 250 ms → treated as
+    // Heartbeat: "connected" but no HID report for PAD_HB_TIMEOUT_US → treated as
     // DISCONNECTED (immediate disarm + braking, without waiting for the Bluetooth timeout).
     const bool pad_stale = in.pad.connected &&
                            ((now - in.pad.last_report_us) > hw::PAD_HB_TIMEOUT_US);
-    // Count rate (counts/s), smoothed by EMA (attenuates the quantization of the Δangle per
-    // tick at low speed) then converted by the CONFIG RATIOS (enc_mps_per_cps /
-    // enc_rpm_per_cps) — the core knows neither the CPR, nor the reduction, nor the wheel.
-    // The encoders are ALWAYS read and published (bench gearbox testing: watch the rpm even
-    // disarmed or with use_encoders=0). use_encoders only decides whether the CONTROL loop
-    // TRUSTS them (speed limiter, brake PID, rollover limit, encoder faults) — not the display.
-    // Count rate over the REAL elapsed time (esp_timer), not a fixed 2 ms tick: the encoder
-    // read sits after variable per-tick work, so the read spacing jitters — dividing Δcounts
-    // by the actual interval removes that ripple. Then 5-sample MEDIAN (spike reject) → EMA.
-    float dt_s = (m_last_now_us != 0) ? (now - m_last_now_us) * 1e-6f : hw::CTRL_DT_S;
-    m_last_now_us = now;
-    if (dt_s <= 0.f || dt_s > 0.1f) dt_s = hw::CTRL_DT_S;   // first tick / clock glitch → nominal
-    const float inv_dt = 1.f / dt_s;
-    // Per-wheel SIGN. Which way an AS5600 counts depends on which face of the magnet it sees,
-    // so it flips with the motor's mounting orientation — and the two sides are mirrored to
-    // begin with. CONVENTION: positive rpm = FORWARD, negative = reverse, on both wheels.
-    // enc_inv_* corrects the mounting in software instead of rewiring; the ENC_REV fault stays
-    // as the safety net for the case where it is set wrong.
-    const float sign_l = (0 != m_cfg.enc_inv_l) ? -1.f : 1.f;
-    const float sign_r = (0 != m_cfg.enc_inv_r) ? -1.f : 1.f;
-    m_cps_win_l[m_cps_win_i] = sign_l * static_cast<float>(in.sensors.enc_delta_l) * inv_dt;
-    m_cps_win_r[m_cps_win_i] = sign_r * static_cast<float>(in.sensors.enc_delta_r) * inv_dt;
-    m_cps_win_i = (m_cps_win_i + 1) % 5;
-    const float cps_l = median5(m_cps_win_l);
-    const float cps_r = median5(m_cps_win_r);
-    m_cps_l += hw::SPEED_EMA_ALPHA * (cps_l - m_cps_l);
-    m_cps_r += hw::SPEED_EMA_ALPHA * (cps_r - m_cps_r);
-    const float sl = m_cps_l * m_cfg.enc_mps_per_cps;   // SIGNED wheel speeds (m/s), measured
-    const float sr = m_cps_r * m_cfg.enc_mps_per_cps;
-    const float v_meas = 0.5f * (sl + sr);   // measured vehicle speed (m/s) — for telemetry
-    // CONTROL speed: forced to 0 without encoders so nothing (limiter / brake / rollover
-    // limit) trusts them. Pivot in place (two opposite wheels) also averages to ~0.
-    const float v_veh = use_enc ? v_meas : 0.f;
-    if (!use_enc)
-    {
-        m_enc_fault = false;   // no encoders → no "sensor" fault
-        m_enc_rev_fault = false;
-        m_enc_mad_fault = false;
-        m_rev_l.reset();
-        m_rev_r.reset();
-        m_mad_us = 0;
-    }
 
-    // PWM cap: MANUAL only (duty_cap, web page). The pack is always 12 V — the motors' own
-    // nominal voltage — so there is no over-voltage to cap against and nothing measures the
-    // battery any more. duty_cap stays as the single, explicit power ceiling.
-    const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * clampf(m_cfg.duty_cap_frac, 0.f, 1.f));
+    // PWM cap: MANUAL only (duty_cap, web page) — the single ceiling on everything.
+    const float    cap_frac = clampf(m_cfg.duty_cap_frac, 0.f, 1.f);
+    const uint32_t cap = static_cast<uint32_t>(hw::PWM_MAX * cap_frac);
 
-    // ── Faults / non-driving conditions ──
-    // ABSENT encoders (I2C silent): with use_encoders=1 it is blocking — PID braking and
-    // the limiter would think the wheel is stopped. With use_encoders=0 (bench): simply ignored.
-    // Encoder SENSOR status — REPORTED regardless of use_encoders (so the bench sees it with
-    // use_encoders=0); only BLOCKS driving when use_encoders=1 (see `blocking` below).
-    const bool enc_l_abs = !in.sensors.enc_ok_l;   // I2C silent (chip absent/unplugged)
-    const bool enc_r_abs = !in.sensors.enc_ok_r;
-    const bool mag_l_out = in.sensors.enc_ok_l && !in.sensors.mag_ok_l;  // chip present, magnet out of field
-    const bool mag_r_out = in.sensors.enc_ok_r && !in.sensors.mag_ok_r;
+    // WHY the kart will not drive — ONE cause, highest priority first (see Stop). There is no
+    // fault mask, no fault state and no fault LED any more: each of these conditions simply
+    // disarms and brakes, and the cause is published so the page can say which.
+    Stop stop = Stop::None;
+    if      (!in.pad.connected)   stop = Stop::PadLost;
+    else if (pad_stale)           stop = Stop::PadStale;
+    else if (in.pad.estop)        stop = Stop::EStop;
+    else if (!in.pad.calibrated)  stop = Stop::NotCalibrated;
+    const bool blocked = (Stop::None != stop);
 
-    // BITSET of ALL active errors/conditions — the sole representation of the
-    // core's faults. fb::BLOCKING forbids driving; the priority fault for
-    // display is derived with primaryFault(). Bits: see FAULTS_DESC (index.html).
-    unsigned fmask = 0;
-    if (in.pad.estop)                                fmask |= fb::ESTOP;
-    if (in.pad.connected && !in.pad.calibrated)          fmask |= fb::NOCAL;
-    if (m_enc_fault)                             fmask |= fb::ENC_STUCK;
-    if (!in.pad.connected)                           fmask |= fb::PAD_LOST;
-    if (pad_stale)                               fmask |= fb::PAD_STALE;
-    if (m_enc_rev_fault)                         fmask |= fb::ENC_REV;
-    if (m_enc_mad_fault)                         fmask |= fb::ENC_MAD;
-    if (enc_l_abs)                               fmask |= fb::ENC_L_ABS;
-    if (enc_r_abs)                               fmask |= fb::ENC_R_ABS;
-    if (mag_l_out)                               fmask |= fb::MAG_L;
-    if (mag_r_out)                               fmask |= fb::MAG_R;
-    const bool blocking = (0 != (fmask & fb::BLOCKING)) ||
-                          (use_enc && (enc_l_abs || enc_r_abs || mag_l_out || mag_r_out));
+    // Anything in the way → disarm and brake. Re-arm (START held) once it is resolved.
+    if (blocked) m_armed = false;
 
-    // Gamepad absent / gamepad e-stop / BLOCKING FAULT → we disarm and brake (absolute
-    // safety). A fault forces disarming: re-arm (START held) once resolved.
-    if (!in.pad.connected || pad_stale || in.pad.estop || blocking) m_armed = false;
-
-    const bool can_drive = m_armed && in.pad.connected && !pad_stale && !in.pad.estop && !blocking;
-
-    // ── Arming by held press on START (anti-startup: stick centered + gamepad connected) ──
-    // START = the gamepad's START/Options button. It is the ONLY arming input: the physical
-    // button went away with the last GPIO input on the board — no button can be pressed by a
-    // bystander, and arming already required a connected, calibrated gamepad anyway.
-    const bool start_held = in.pad.start;
+    // ── Arming by held press on START (anti-startup: stick centered + nothing in the way) ──
+    // START = the gamepad's START/Options button, the ONLY arming input. Arming alone does
+    // not move anything: the kart still needs A held (dead man) on top of the stick.
     const bool centered = (std::fabs(in.pad.x) < hw::ARM_CENTER_MAX) && (std::fabs(in.pad.y) < hw::ARM_CENTER_MAX);
-    if (start_held)
+    if (in.pad.start)
     {
         if (0 == m_hold_start_us) m_hold_start_us = now;
         else if (!m_start_latch && (now - m_hold_start_us) > static_cast<int64_t>(m_cfg.arm_hold_ms) * 1000)
         {
             m_start_latch = true;
-            if (!m_armed && in.pad.connected && !pad_stale && centered && !blocking)
+            if (!m_armed && !blocked && centered)
             {
                 m_armed = true;
                 m_last_act_us = now;
@@ -213,175 +87,77 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
         m_start_latch = false;
     }
 
+    // m_armed is cleared above the moment anything blocks, so being armed IS being able to drive.
+    const bool can_drive = m_armed;
+
     float out_l = 0.f, out_r = 0.f, fwd = 0.f, turn = 0.f;
-    bool braking = false;
-    bool dyn_brake = false;   // true → motor short-circuit (passive dynamic braking)
-    State state = State::Run;
+    BrakeMode mode = BrakeMode::Dynamic;
+    State state = State::Lockout;
 
-    if (!can_drive)
+    if (can_drive)
     {
-        // NOT ARMED / fault / e-stop / gamepad disconnected → DYNAMIC BRAKING (motor
-        // short-circuit). Default resting state; requires neither encoders nor control loop.
-        dyn_brake = true;
-        braking = true;
-        m_brake_l.reset();
-        m_brake_r.reset();
-        m_speed_pid.reset();
-        m_fwd_cmd = 0.f;     // restarts smoothly at the next arming
-        m_turn_cmd = 0.f;
-        state = blocking ? State::Fault : State::Lockout;
-    }
-    else
-    {
-        m_brake_l.reset();
-        m_brake_r.reset();
-        float fwd_t = deadzone(in.pad.y, m_cfg.thr_deadzone);
-        const float turn_t = deadzone(in.pad.x, m_cfg.thr_deadzone);
-        // Reverse is always allowed; rev_speed_ms is what holds it back.
-        // (No PWM limit in reverse: the TOTAL SPEED LIMIT — PID on |v| — holds
-        // in both directions, like the rollover protection which works on |v|.)
-
-        if (m_cfg.open_loop != 0)
-        {
-            // OPEN-LOOP TEST MODE: the mixed stick goes straight to the motors — NO forward/
-            // turn smoothing, NO rollover limit, NO speed-limiter PID, NO active (PID) braking,
-            // and always the plain LINEAR mix (a diagnostic mode must not depend on the
-            // feel curve selected in mix_type).
-            // The output PWM cap (manual duty) still bounds the drive, and
-            // every safety gate (arming, heartbeat, e-stop, blocking faults) is unchanged
-            // upstream. Releasing the stick engages DYNAMIC braking (motor short-circuit) — a
-            // passive resting state, not a control loop — so it stops like every other mode
-            // instead of coasting away.
-            fwd = fwd_t;
-            turn = turn_t;
-            m_fwd_cmd = fwd;
-            m_turn_cmd = turn;
-            m_speed_pid.reset();
-            if (std::fabs(fwd) < 1e-3f && std::fabs(turn) < 1e-3f)
-            {
-                // Released: dynamic brake (short-circuit) if enabled, else FREEWHEEL (coast).
-                if (m_cfg.dyn_brake_en != 0) { braking = true; dyn_brake = true; }
-            }
-            else
-            {
-                mixArcade(fwd, turn, m_cfg.turn_gain, out_l, out_r);
-                m_last_act_us = now;
-            }
-        }
-        else
-        {
-            // Forward: NO input smoothing — the stick maps straight to the command. Any
-            // acceleration limiting belongs in the control layer (speed PID / duty cap), not
-            // here. Turn keeps its slope limiter (smooths abrupt steering, feeds rollover).
-            m_fwd_cmd = fwd_t;
-            m_turn_cmd = slew(turn_t, m_turn_cmd, m_cfg.turn_rate, hw::CTRL_DT_S);
-            fwd = m_fwd_cmd;
-            turn = m_turn_cmd;
-
-            // "iso-a_lat" rollover protection: the turn limit follows the MEASURED speed
-            // as 1/v (same lateral acceleration at all speeds — see turnLimit); ±100%
-            // below turn_full_ms (pivot in place at full power), turn_hi at speed_limit_ms,
-            // and even tighter beyond. Without encoders, v=0 → no limiting.
-            // Disableable (turn_limit_en=0) for bench testing.
-            if (m_cfg.turn_limit_en != 0)
-            {
-                const float turn_max = turnLimit(std::fabs(v_veh), m_cfg.turn_full_ms, m_cfg.speed_limit_ms, m_cfg.turn_hi);
-                turn = clampf(turn, -turn_max, turn_max);
-                m_turn_cmd = turn;   // keeps the state bounded (no ramp windup beyond the limit)
-            }
-
-            // Stick→motor mixing, pluggable (mixer.hpp): linear / expo / expo+speed-soft,
-            // chosen from the web config. `turn` is already rollover-clamped above, and expo
-            // only ever shrinks a magnitude, so no mixing type can widen that limit; the
-            // speed limiter and PWM caps below apply to every type alike. v_veh (not v_meas):
-            // without encoders the speed-adaptive type degrades to plain expo, like the
-            // other speed-driven safeties.
-            mixerFor(m_cfg.mix_type).mix(fwd, turn, v_veh, m_cfg, out_l, out_r);
-
-            // Global speed cap (preserves the turn ratio) via PID on the average speed.
-            // Target based on the MEASURED DIRECTION: forward → speed_limit_ms, reverse → rev_speed_ms. On the
-            // measured direction (not the command): in plugging (reverse stick, kart still moving
-            // forward) the target stays the forward one — the braking authority is not cut short.
-            // Without encoders: no speed control loop → we rely on the PWM cap (duty_cap).
-            if (use_enc && m_cfg.vlim_enable != 0)
-            {
-                const float v_target = (v_veh < 0.f) ? m_cfg.rev_speed_ms : m_cfg.speed_limit_ms;
-                const float vcap = m_speed_pid.update(v_target, std::fabs(v_veh), hw::CTRL_DT_S,
-                                                      m_cfg.vlim_kp, m_cfg.vlim_ki, m_cfg.vlim_kd, 0.f, 1.f);
-                out_l *= vcap;
-                out_r *= vcap;
-            }
-            else
-            {
-                m_speed_pid.reset();
-            }
-
-            if (std::fabs(fwd) < 1e-3f && std::fabs(turn) < 1e-3f)
-            {
-                // ARMED + centered stick → ACTIVE BRAKING (plugging PID) if encoders present
-                // AND PID braking enabled; else dynamic braking (short-circuit) if enabled;
-                // else FREEWHEEL (coast). The disarmed/fault resting brake is separate (above).
-                if (use_enc && m_cfg.brk_pid_enable != 0)
-                {
-                    braking = true;
-                    out_l = brakeWheel(m_brake_l, sl, m_cfg, hw::CTRL_DT_S);
-                    out_r = brakeWheel(m_brake_r, sr, m_cfg, hw::CTRL_DT_S);
-                }
-                else if (m_cfg.dyn_brake_en != 0)
-                {
-                    braking = true;
-                    dyn_brake = true;
-                }
-                // else: freewheel — out stays 0, no braking.
-            }
-            else
-            {
-                m_last_act_us = now;
-            }
-        }
         state = State::Run;
+        if (in.pad.drive)
+        {
+            // The stick sets the TARGET; the ramp decides how fast the command may get there.
+            // A centred stick simply targets 0 — that is the whole of the pseudo-freewheel.
+            fwd  = deadzone(in.pad.y, m_cfg.thr_deadzone);
+            turn = deadzone(in.pad.x, m_cfg.thr_deadzone);
+            const bool stick_idle = (std::fabs(fwd) < 1e-3f) && (std::fabs(turn) < 1e-3f);
+            float tgt_l = 0.f, tgt_r = 0.f;
+            if (!stick_idle)
+            {
+                mixerFor(m_cfg.mix_type).mix(fwd, turn, m_cfg, tgt_l, tgt_r);
+                m_last_act_us = now;
+            }
+            // Both rates are given in REAL duty per second, hence the division by the cap: at a
+            // lower duty_cap the kart is slower, so the same real slope is a steeper one in
+            // command units and it still pulls away — and stops — in the advertised time.
+            const float inv_cap = 1.f / std::max(cap_frac, 0.05f);
+            const float up = (static_cast<float>(m_cfg.accel_pct_s) / 100.f) * inv_cap;
+            const float dn = (static_cast<float>(m_cfg.decel_pct_s) / 100.f) * inv_cap;
+            m_last_l = ramp(tgt_l, m_last_l, up, dn, hw::CTRL_DT_S);
+            m_last_r = ramp(tgt_r, m_last_r, up, dn, hw::CTRL_DT_S);
+            out_l = m_last_l;
+            out_r = m_last_r;
+
+            const bool rolling = (std::fabs(out_l) > 1e-4f) || (std::fabs(out_r) > 1e-4f);
+            if (!stick_idle)   mode = BrakeMode::None;    // the driver is asking for drive
+            else if (rolling)  mode = BrakeMode::Coast;   // centred, still sliding down
+            // Centred AND already at 0: the mode stays Dynamic below, and says so — on this
+            // driver a command of 0 grounds both windings, so that is the brake, not a coast.
+        }
+    }
+    if (BrakeMode::Dynamic == mode)
+    {
+        // Not armed / blocked / A released / run-down finished → DYNAMIC BRAKING.
+        // Nothing to slide down from next time, and the accel ramp starts again from standstill.
+        m_last_l = 0.f;
+        m_last_r = 0.f;
     }
 
-    out.dyn_brake = dyn_brake;   // motor short-circuit, otherwise driving / active plugging
+    out.dyn_brake = (BrakeMode::Dynamic == mode);
     // Motor SIGN (mot_inv_*, per WHEEL) then CHANNEL routing (mot_swap_lr), applied here and
-    // only here: out_l/out_r stay the logical per-wheel "+ = forward" commands for the checks
-    // and telemetry below; CtrlOutputs carries what each driver CHANNEL receives.
+    // only here: out_l/out_r stay the logical per-wheel "+ = forward" commands for the
+    // telemetry; CtrlOutputs carries what each driver CHANNEL receives.
     const float wheel_l = (0 != m_cfg.mot_inv_l) ? -out_l : out_l;
     const float wheel_r = (0 != m_cfg.mot_inv_r) ? -out_r : out_r;
     const bool  swap    = (0 != m_cfg.mot_swap_lr);
     out.out_l = swap ? wheel_r : wheel_l;
     out.out_r = swap ? wheel_l : wheel_r;
     out.cap = cap;
-    if (use_enc)
-    {
-        updateEncStuck(now, 0.5f * (out_l + out_r), v_veh);
-        updateEncSanity(now, braking || dyn_brake, out_l, out_r, sl, sr);
-    }
 
-    // Auto disarm after inactivity.
+    // Auto disarm after inactivity (no driving: A held + stick).
     if (m_armed && (now - m_last_act_us) > static_cast<int64_t>(m_cfg.disarm_s) * 1000000) m_armed = false;
 
     // ── Tick telemetry ──
     m_tel.state      = state;
-    m_tel.faults     = fmask;
-    // Don't publish a speed/rpm for a wheel whose encoder is IN ERROR — absent, magnet out of
-    // field, or a latched encoder fault (stuck/reversed/erratic): the reading is meaningless →
-    // 0 as fallback. (Control above still uses the RAW sl/sr so its sanity checks can fault.)
-    const bool enc_faulted = m_enc_fault || m_enc_rev_fault || m_enc_mad_fault;
-    const bool enc_l_valid = in.sensors.enc_ok_l && in.sensors.mag_ok_l && !enc_faulted;
-    const bool enc_r_valid = in.sensors.enc_ok_r && in.sensors.mag_ok_r && !enc_faulted;
-    const float sl_disp = enc_l_valid ? sl : 0.f;
-    const float sr_disp = enc_r_valid ? sr : 0.f;
-    m_tel.speed_l    = sl_disp;
-    m_tel.speed_r    = sr_disp;
-    m_tel.rpm_l      = enc_l_valid ? m_cps_l * m_cfg.enc_rpm_per_cps : 0.f;
-    m_tel.rpm_r      = enc_r_valid ? m_cps_r * m_cfg.enc_rpm_per_cps : 0.f;
-    m_tel.speed_ms   = 0.5f * (sl_disp + sr_disp);   // display; 0 for any wheel in error
+    m_tel.stop       = stop;
     m_tel.fwd        = fwd;
     m_tel.turn       = turn;
     m_tel.out_l      = out_l;
     m_tel.out_r      = out_r;
-    m_tel.brake_mode = dyn_brake ? BrakeMode::Dynamic : (braking ? BrakeMode::Active : BrakeMode::None);
+    m_tel.brake_mode = mode;
     m_tel.armed      = m_armed;
     m_tel.btn_start  = in.pad.start;
 
@@ -392,10 +168,9 @@ CtrlOutputs KartController::step(const CtrlInputs& in)
 // The inputs/reads lock briefly; tick() runs step() under lock but
 // calls the callbacks OUTSIDE the lock (no deadlock if the host reads the controller back).
 
-void KartController::setCallbacks(UpdateSensorsFn updateSensors, UpdateOutputsFn updateOutputs)
+void KartController::setCallbacks(UpdateOutputsFn updateOutputs)
 {
     std::lock_guard<std::mutex> lk(m_mtx);
-    m_update_sensors = std::move(updateSensors);
     m_update_outputs = std::move(updateOutputs);
 }
 
@@ -425,16 +200,13 @@ CtrlTelemetry KartController::telemetry() const
 
 CtrlOutputs KartController::tick(int64_t now_us)
 {
-    UpdateSensorsFn read;
     UpdateOutputsFn apply;
     {
         std::lock_guard<std::mutex> lk(m_mtx);
-        read = m_update_sensors;
         apply = m_update_outputs;
     }
     CtrlInputs in;
     in.now_us = now_us;
-    in.sensors = read ? read() : SensorReadings{};   // without wiring: "absent" sensors
     CtrlOutputs out;
     {
         std::lock_guard<std::mutex> lk(m_mtx);

@@ -7,15 +7,17 @@ FreeRTOS at **1000 Hz**; priorities **0 (idle) → 24 (max)**, a **higher number
 
 | Task | Priority | Core | Stack (B) | Period | Role | Source |
 |---|:--:|:--:|:--:|---|---|---|
-| **`control`** | **18** | **1** (APP) | 6144 | **500 Hz** | Control loop: pluggable **stick→motor mixing** (`mixer.hpp`), **rollover protection**, active (PID) braking + speed limiter, arming/fault state machine, event-log pushes (RAM ring only); **subscribed to the 2 s watchdog (PANIC)** | `controller.cpp` (`Controller::start`) |
+| **`control`** | **18** | **1** (APP) | 6144 | **500 Hz** | Control loop: gamepad state in, **A-button gate** (released = dynamic brake), pluggable **stick→motor mixing** (`mixer.hpp`), accel/decel ramps (`accel_pct_s` / `decel_pct_s`, the fall being the pseudo-freewheel), `duty_cap`, PWM/DIR out, arming state machine, event-log pushes (RAM ring only). **No sensor read** — no I²C, no ADC; **subscribed to the 2 s watchdog (PANIC)** | `controller.cpp` (`Controller::start`) |
 | **`leds`** | **3** | **0** (PRO) | 3072 | ~20 Hz | Status display on the WS2812B strip (RMT) **+ event-log drain** (`evlog::maintain()`: RAM ring → flash, only while disarmed) | `leds.cpp` (`ledsStart`) |
 | **`bt`** | **5** | **0** (PRO) | 8192 | (loop) | **BTstack / Bluepad32 loop**: Bluetooth stack, pairing and gamepad frames | `input_bp32.c` (`inputbp_start`) |
 
-> **Why `control` sits at 18** (it started life at 6): host-side Bluetooth work on core 1
-> preempted the loop long enough to stretch the interval between two AS5600 reads past the
-> sensor's ½-turn window — the absolute angle then aliases and the measured speed flips sign
-> in bursts. 18 keeps the loop under only the system tier (esp_timer 22, Wi-Fi/BT 23, IPC 24),
-> and it yields every cycle (`vTaskDelayUntil`), so it starves nothing.
+> **Why `control` sits at 18** (it started life at 6): it was raised when the loop still read
+> the AS5600 wheel encoders — host-side Bluetooth work on core 1 preempted it long enough to
+> stretch the interval between two reads past the sensor's ½-turn window, and the absolute
+> angle aliased. The encoders are gone since 2026-09-29 and the loop reads no sensor at all;
+> the priority stays, because it costs nothing and keeps the stick-to-motor latency independent
+> of whatever else runs on core 1. 18 keeps the loop under only the system tier (esp_timer 22,
+> Wi-Fi/BT 23, IPC 24), and it yields every cycle (`vTaskDelayUntil`), so it starves nothing.
 > The `bt` task runs `btstack_run_loop_execute()` (blocking); the BT stack additionally
 > creates its own system tasks (BT controller, BTC/BTU) on core 0.
 > There is deliberately **no** dedicated event-log task: its first version cost 3 kB of stack
@@ -44,8 +46,8 @@ Values = **IDF defaults** (configurable in sdkconfig); listed to situate the rel
   any core) is a **flash write** (the cache suspends): that is why every NVS-writing verb
   (`set`, `wifiset`, calibration, pairing) is **refused while armed**, and why the event log
   drains to flash **only while disarmed**.
-- The **Wi-Fi STA reconnection** (every 5 s) runs in the context of the `esp_timer` task
-  (not a dedicated task).
+- The **Wi-Fi STA reconnection** (5 s after a drop, then doubling up to 5 min; postponed
+  while armed) runs in the context of the `esp_timer` task (not a dedicated task).
 - **Watchdog (TWDT, 2 s, `CONFIG_ESP_TASK_WDT_PANIC=y`)**: the `control` task re-arms it every
   cycle; a block > 2 s **reboots** (a warning would leave the motors on their last PWM). The
   idle tasks are watched too.

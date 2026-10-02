@@ -49,12 +49,13 @@ struct RunResult
     float final_v = 0.f;
     float coast_dist = -1.f;       // distance travelled since the power was cut (-1 = never cut)
     bool  ever_armed = false;
-    bool  ever_fault = false;
+    bool  ever_blocked = false;   // something got in the way of driving at least once (Stop)
     bool  wheel_lifted = false;   // a wheel left the ground (even briefly)
     bool  tipped = false;         // tipped (point of no return crossed)
-    Fault final_fault = Fault::None;
-    float t_first_fault = -1.f;
+    Stop  final_stop = Stop::None;
+    float t_first_blocked = -1.f;
     float t_disarmed_after = -1.f;   // time of the first disarm AFTER having been armed
+    int   rumbles = 0;                // gamepad vibrations emitted (RumbleAdvisor)
 };
 
 // Runs a scenario tick by tick; `hook` (optional) is called at each step —
@@ -89,10 +90,10 @@ inline RunResult runScenario(const Scenario& sc, const FrameHook& hook = nullptr
         r.ever_armed |= t.armed;
         r.wheel_lifted |= (0 != veh.liftSide());
         r.tipped |= veh.tipped();
-        if (0 != (t.faults & fb::BLOCKING))
+        if (Stop::None != t.stop)
         {
-            r.ever_fault = true;
-            if (r.t_first_fault < 0.f) r.t_first_fault = veh.t();
+            r.ever_blocked = true;
+            if (r.t_first_blocked < 0.f) r.t_first_blocked = veh.t();
         }
         if (was_armed && !t.armed && r.t_disarmed_after < 0.f) r.t_disarmed_after = veh.t();
         was_armed = t.armed;
@@ -110,7 +111,8 @@ inline RunResult runScenario(const Scenario& sc, const FrameHook& hook = nullptr
         if (hook) hook(veh, ctrl, t);
     }
     r.final_v = veh.v();
-    r.final_fault = primaryFault(ctrl.telemetry().faults);
+    r.final_stop = ctrl.telemetry().stop;
+    r.rumbles = ctrl.rumbles;
     return r;
 }
 
@@ -119,9 +121,9 @@ inline std::vector<Scenario> allScenarios()
 {
     std::vector<Scenario> v;
 
-    // Pluggable stick→motor mixing (mixer.hpp): the child-friendly curves must soften the
+    // Pluggable stick→motor mixing (mixer.hpp): the child-friendly curve must soften the
     // MIDDLE of the stick (proven exactly by the host unit tests) without costing the top
-    // end or the braking authority — which is what these two check behaviorally.
+    // end — which is what this checks behaviorally.
     v.push_back({
         "mix_expo",
         "EXPO mixing: full stick still reaches full speed",
@@ -134,23 +136,13 @@ inline std::vector<Scenario> allScenarios()
             c.y = 1.f;
             return c;
         }});
-    v.push_back({
-        "mix_soft",
-        "SOFT mixing: tapered acceleration, braking keeps FULL authority",
-        12.f,
-        [](KartConfig& c) { c.mix_type = 2; },
-        nullptr,
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = (t < 8.f) ? 1.f : -1.f;   // drive at the taper, then hard plugging brake
-            return c;
-        }});
 
-    // EXTREME — THE project test: full throttle then a hard-turn step, protection active.
+    // EXTREME — full throttle then a hard-turn step. There is NO rollover protection any more
+    // (2026-09-29, the owner's call): at the default duty_cap 1.0 this TIPS the kart. Kept as
+    // the measurement that says so, and as the manoeuvre the duty_cap sweep runs.
     v.push_back({
         "virage_pleine_vitesse",
-        "Full throttle up to vmax then hard turn (rollover protection ACTIVE)",
+        "Full throttle then hard turn, NO protection: tips at duty_cap 1.0",
         10.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;
@@ -160,37 +152,21 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // COUNTER-TEST, and the RECORD OF WHY THE LAYOUT WAS REVERSED: the SAME three wheels with
-    // the mass at the wrong end (driven axle at the front, bench far from it — xcg 0.560 from
-    // the paired axle) tips as soon as the protection is off. Reversing the tricycle — single
-    // caster to the front, bench over the driven axle — moved the CG to 0.213 and the same
-    // manoeuvre now survives (see virage_sans_protection below). Same parts, 0.39 g → 0.69 g.
+    // The RECORD OF WHY THE LAYOUT WAS REVERSED: the SAME three wheels with the mass at the
+    // wrong end (driven axle at the front, bench far from it — xcg 0.560 from the paired axle).
+    // Same parts, 0.39 g instead of the built 0.53 g — it tips far harder than the built kart.
     v.push_back({
         "ancienne_disposition",
-        "Old tricycle (mass far from the driven axle), turn_limit_en=0: tips",
+        "Old tricycle (mass far from the driven axle): tips",
         10.f,
-        [](KartConfig& c) { c.turn_limit_en = 0; },
+        nullptr,
         [](Vehicle& veh) {
-            // The historical machine, faithfully: its own wheelbase too, not today's.
+            // The historical machine, faithfully: its own wheelbase and its own (faster)
+            // gearing too, not today's.
             veh.params().wb_m  = 1.013f;
             veh.params().xcg_m = 0.560f;
+            veh.params().gear  = 17.07f;
         },
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = 1.f;
-            c.x = (t >= 5.f) ? 1.f : 0.f;
-            return c;
-        }});
-
-    // The BUILT layout, protection off: it survives — but on less than 1 m/s² of margin, which
-    // is exactly why the limiter stays on. Geometry now does most of the work, not all of it.
-    v.push_back({
-        "virage_sans_protection",
-        "Built layout (reversed tricycle), turn_limit_en=0: survives, but thin",
-        10.f,
-        [](KartConfig& c) { c.turn_limit_en = 0; },
-        nullptr,
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
@@ -240,10 +216,10 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // Commanded deceleration (stick braking): the scenario of the false "reversal".
+    // Commanded deceleration (stick pulled back while moving, A held): plugging.
     v.push_back({
         "freinage_stick",
-        "Accelerate then stick fully back: plugging — NO EncoderDir fault expected",
+        "Accelerate then stick fully back: plugging, nothing in the way",
         10.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;
@@ -254,14 +230,13 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // Reverse: full reverse — held by ITS OWN speed limit (rev_speed_ms,
-    // same PID, target chosen by the measured direction), independent of the forward limit
-    // (left at 3.3). 2 m/s to prove the control loop (the motors saturate around 3).
+    // Reverse: full reverse. No speed limit of its own any more — duty_cap bounds it, like
+    // forward. (The caster does not steer in reverse: the kart is as fast backwards as forwards.)
     v.push_back({
         "marche_arriere",
-        "Full reverse: the speed converges on rev_speed_ms (2 m/s), no fault",
+        "Full reverse: as fast as forward (duty_cap only), nothing in the way",
         12.f,
-        [](KartConfig& c) { c.rev_speed_ms = 2.f; },
+        nullptr,
         nullptr,
         [](float t) {
             PadCmd c;
@@ -270,15 +245,42 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // Active (PID) braking: release at full speed → active stop.
+    // ── The A button (hold to drive, 2026-09-29) ──
+    // Armed, stick pushed, A NEVER held: nothing moves (and no buzz — only "not armed" buzzes).
     v.push_back({
-        "frein_pid_arret",
-        "Release the stick at vmax: active (PID) braking (command 0), bounded stopping distance",
+        "sans_bouton_A",
+        "Armed, full stick, A never held: the kart stays put (dynamic brake)",
+        6.f, nullptr, nullptr,
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = 1.f;
+            c.drive = false;
+            return c;
+        }});
+    // A released at full speed, stick still pushed: A wins → dynamic brake.
+    v.push_back({
+        "relache_A",
+        "Full speed, then A released (stick still pushed): dynamic brake stops the kart",
         10.f, nullptr, nullptr,
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
-            c.y = (t < 5.f) ? 1.f : 0.f;
+            c.y = 1.f;
+            c.drive = (t < 5.f);
+            return c;
+        }});
+    // A held, stick released at full speed: PSEUDO-freewheel. The driver cannot float its
+    // outputs, so the PWM slides down at decel_pct_s — compare with arret_urgence_plat, which is
+    // the REAL coast (power gone, bridges open).
+    v.push_back({
+        "roue_libre_A",
+        "Full speed, then stick released with A held: pseudo-freewheel (decel ramp)",
+        20.f, nullptr, nullptr,
+        [](float t) {
+            PadCmd c;
+            if (armPhase(t, c)) return c;
+            c.y = (t < 6.f) ? 1.f : 0.f;
             return c;
         }});
 
@@ -295,59 +297,17 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // Encoder failures (the FULL STOP must trigger, the right cause displayed).
-    v.push_back({
-        "encodeur_inverse",
-        "Left AS5600 wired backwards: Fault::EncoderDir in < 1.5 s of driving",
-        8.f, nullptr,
-        [](Vehicle& v) { v.enc_mode_l = EncMode::Reversed; },
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = 1.f;
-            return c;
-        }});
-    // Same wiring fault with the reversed-encoder watchdog DISABLED (enc_rev_chk=0, the
-    // commissioning-checked configuration): EncoderDir must NOT latch — and the STUCK net
-    // must still stop the kart, because one reversed wheel averages the vehicle speed to ~0
-    // while the command stays firm. Documents exactly what safety remains without the guard.
-    v.push_back({
-        "encodeur_inverse_sans_garde",
-        "Reversed encoder, watchdog OFF: the wheel-stuck net still stops it",
-        8.f,
-        [](KartConfig& c) { c.enc_rev_chk = 0; },
-        [](Vehicle& v) { v.enc_mode_l = EncMode::Reversed; },
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = 1.f;
-            return c;
-        }});
-    // Motor inversion set on a CORRECTLY wired motor: the left wheel drives backwards on
-    // forward stick. The watchdog sees the measured speed opposite to the (logical) command.
-    v.push_back({
-        "moteur_inverse_mal_regle",
-        "mot_inv_l=1 on a correctly wired motor: Fault::EncoderDir in < 1.5 s of driving",
-        8.f,
-        [](KartConfig& c) { c.mot_inv_l = 1; },
-        nullptr,
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = 1.f;
-            return c;
-        }});
     // The emergency stop, as it now IS: the mushroom sits in the main relay's coil loop, so
     // it cuts the ESP32 along with the motors. Nothing is reported, nothing is braked — the
     // kart COASTS. On the flat, rolling resistance alone (~30 N against ~98 kg = 0.31 m/s²)
-    // takes about TEN SECONDS and fifteen metres to bring it down from full speed: the e-stop
-    // removes the power, it does not stop the kart. That is the number this scenario exists to
-    // print, and the reason the mushroom is a last resort rather than the normal way to stop —
-    // releasing the stick, which brakes, is the normal way. The slope scenarios below show the
+    // takes about EIGHT SECONDS and eleven metres to bring it down from full speed (18T→32T
+    // chain): the e-stop removes the power, it does not stop the kart. That is the number this
+    // scenario exists to print, and the reason the mushroom is a last resort rather than the
+    // normal way to stop — releasing A, which brakes, is the normal way. The slope scenarios below show the
     // same cut where it is genuinely dangerous.
     v.push_back({
         "arret_urgence_plat",
-        "E-stop at full speed on the flat: everything dies, the kart coasts ~15 m to a stop",
+        "E-stop at full speed on the flat: everything dies, the kart coasts ~11 m to a stop",
         20.f,
         nullptr,
         nullptr,
@@ -358,48 +318,15 @@ inline std::vector<Scenario> allScenarios()
             if (t >= 6.f) c.sys_power = false;   // the mushroom: coil open, whole kart off
             return c;
         }});
-    v.push_back({
-        "encodeur_absent",
-        "Right AS5600 silent (I2C): Fault::EncoderAbsent, arming refused",
-        5.f, nullptr,
-        [](Vehicle& v) { v.enc_mode_r = EncMode::Absent; },
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = 0.5f;
-            return c;
-        }});
-    v.push_back({
-        "encodeur_fou",
-        "Aberrant measurement (> 8 m/s): Fault::EncoderMad",
-        6.f, nullptr,
-        [](Vehicle& v) { v.enc_mode_l = EncMode::Crazy; },
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = 0.4f;
-            return c;
-        }});
-    v.push_back({
-        "roue_bloquee",
-        "Stuck encoders (jammed wheel/thrown chain): Fault::Encoder after ~1 s of pushing",
-        7.f, nullptr,
-        [](Vehicle& v) { v.enc_mode_l = EncMode::Stuck; v.enc_mode_r = EncMode::Stuck; },
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = 0.8f;
-            return c;
-        }});
 
     // What a WORN pack does now that nothing measures it. 11.2 V open-circuit and 0.12 Ω
     // collapse to ~8 V under a 25 A launch: the motors see less voltage, so the kart is simply
-    // SLOWER. No fault, no cutoff, no warning — the LVC went with the ADS1115, and this
+    // SLOWER. Nothing reported, no cutoff, no warning — the LVC went with the ADS1115, and this
     // scenario is what states the trade-off out loud: a flat battery is now a driving feel,
     // not a diagnosis. (Deep-discharge protection is the pack's own business.)
     v.push_back({
         "batterie_usee",
-        "Worn 12 V pack: no fault of any kind, the kart is just slower",
+        "Worn 12 V pack: nothing is reported, the kart is just slower",
         12.f, nullptr,
         [](Vehicle& v) {
             v.params().batt_v0 = 11.2f;
@@ -412,60 +339,33 @@ inline std::vector<Scenario> allScenarios()
             return c;
         }});
 
-    // REALISTIC: 8% downhill, stick released — active braking holds the kart on the slope
-    // (within the motor capacity: ~134 N of holding force against 77 N of gravity).
-    v.push_back({
-        "descente_frein",
-        "Slope 8%: stick released, the (PID) brake must hold the kart",
-        12.f, nullptr,
-        [](Vehicle& v) { v.params().slope_rad = -std::atan(0.08f); },
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = (t < 4.f) ? 0.4f : 0.f;   // eases in then releases on the slope
-            return c;
-        }});
-
-    // 8% downhill with DYNAMIC BRAKING ONLY (brk_pid_enable=0): the short-circuit cannot
-    // stop (force ∝ speed) but must CAP the descent at a crawling terminal
-    // speed — the scenario's question: "does it hold anyway?"
+    // 8% downhill, A RELEASED → dynamic braking (motor short-circuit): it cannot stop the kart
+    // (force ∝ speed) but must CAP the descent at a crawling terminal speed.
     v.push_back({
         "descente_frein_dynamique",
-        "Slope 8%, dynamic braking ONLY (without PID): bounded terminal speed expected",
-        18.f,
-        [](KartConfig& c) { c.brk_pid_enable = 0; },
+        "Slope 8%, A released: dynamic braking, bounded terminal speed expected",
+        18.f, nullptr,
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.08f); },
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
-            c.y = (t < 4.f) ? 0.4f : 0.f;   // engages on the slope then releases everything
+            c.y = (t < 4.f) ? 0.4f : 0.f;   // engages on the slope…
+            c.drive = (t < 4.f);             // …then lets go of A
             return c;
         }});
 
-    // Slope 16% (steep!) — active (PID) braking: must hold the kart near a stop.
+    // Slope 16%, A released: higher terminal speed (∝ slope) — held to a crawl since the
+    // 18T→32T stage (1:23.70); it ran away at 1:17.07.
     v.push_back({
-        "descente16_frein_actif",
-        "Slope 16%, active (PID) braking: the kart must be held near a stop",
+        "descente16_frein_dynamique",
+        "Slope 16%, A released: dynamic braking only, the kart creeps down",
         18.f, nullptr,
         [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.16f); },
         [](float t) {
             PadCmd c;
             if (armPhase(t, c)) return c;
             c.y = (t < 4.f) ? 0.4f : 0.f;
-            return c;
-        }});
-
-    // Slope 16% — dynamic braking only: higher terminal speed (∝ slope), bounded?
-    v.push_back({
-        "descente16_frein_dynamique",
-        "Slope 16%, dynamic braking ONLY: terminal speed ~1 m/s expected",
-        18.f,
-        [](KartConfig& c) { c.brk_pid_enable = 0; },
-        [](Vehicle& veh) { veh.params().slope_rad = -std::atan(0.16f); },
-        [](float t) {
-            PadCmd c;
-            if (armPhase(t, c)) return c;
-            c.y = (t < 4.f) ? 0.4f : 0.f;
+            c.drive = (t < 4.f);
             return c;
         }});
 
@@ -486,6 +386,7 @@ inline std::vector<Scenario> allScenarios()
             if (t >= 6.f) c.sys_power = false;   // the mushroom: the whole kart goes dark
             return c;
         }});
+
     v.push_back({
         "coupure_pente16",
         "Slope 16%: e-stop pressed at t=6 s → fast runaway",

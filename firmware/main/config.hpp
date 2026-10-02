@@ -14,14 +14,11 @@ struct KartStatus
     // SIMPLE struct (no more atomics): read by COPY under mutex via statusSnapshot(),
     // written by statusPublish() — a single writer (the control loop).
     int      m_state = static_cast<int>(State::Lockout);
-    int      m_fault = static_cast<int>(Fault::None);
-    unsigned m_faults = 0;    // mask of ACTIVE conditions (Faults page)
-    float    m_rpm_l = 0.f;   // SIGNED rear left wheel (AS5600 #1, rpm)
-    float    m_rpm_r = 0.f;
-    float    m_speed_ms = 0.f;// SIGNED VEHICLE speed (m/s) — pivot in place → 0
-    float    m_fwd = 0.f;     // forward command after mix/limits [-1..1]
-    float    m_turn = 0.f;    // turn command after rollover protection [-1..1]
+    int      m_stop = static_cast<int>(Stop::None);   // why it will not drive (one cause)
+    float    m_fwd = 0.f;     // forward command after the deadzone [-1..1]
+    float    m_turn = 0.f;    // turn command after the deadzone [-1..1]
     bool     m_btn_start = false;
+    bool     m_btn_drive = false;   // A held (hold to drive)
     float    m_out_l = 0.f;   // left motor PWM [-1..1]
     float    m_out_r = 0.f;
     int      m_brake_mode = static_cast<int>(BrakeMode::Dynamic);

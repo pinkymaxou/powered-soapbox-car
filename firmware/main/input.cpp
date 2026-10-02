@@ -34,6 +34,7 @@ std::atomic<float> m_raw_y{0.f};
 std::atomic<bool>  m_connected{false};
 std::atomic<bool>  m_estop{false};
 std::atomic<bool>  m_start{false};       // gamepad START/Options button (arming)
+std::atomic<bool>  m_drive{false};       // gamepad A button (hold to drive)
 std::atomic<uint32_t> m_buttons{0};      // button mask: buttons | (misc<<16) (display)
 std::atomic<float> m_zl{0.f};            // left analog trigger [0..1]
 std::atomic<float> m_zr{0.f};            // right analog trigger [0..1]
@@ -128,7 +129,7 @@ bool padDataFresh()
 
 // ── Hooks called by the BT backend (input_bp32.c) ──
 // Gamepad frame: normalized axes ~[-1..1] + buttons (emergency stop, START, display mask).
-extern "C" void inputbp_on_data(float x, float y, int estop, int start, uint32_t buttons,
+extern "C" void inputbp_on_data(float x, float y, int estop, int start, int drive, uint32_t buttons,
                                 float zl, float zr, float rx2, float ry2)
 {
     const int64_t now = esp_timer_get_time();
@@ -152,6 +153,7 @@ extern "C" void inputbp_on_data(float x, float y, int estop, int start, uint32_t
     m_raw_y.store(y);
     m_estop.store(0 != estop);
     m_start.store(0 != start);
+    m_drive.store(0 != drive);
     m_buttons.store(buttons);
     m_zl.store(zl);
     m_zr.store(zr);
@@ -185,6 +187,7 @@ extern "C" void inputbp_on_conn(int connected, const char* name, int batt)
         m_zl.store(0.f);     m_zr.store(0.f);
         m_estop.store(false);
         m_start.store(false);
+        m_drive.store(false);
         m_buttons.store(0);
         m_prev_report_us = 0;   // the reconnection gap is not a link-quality sample
     }
@@ -246,6 +249,7 @@ input::State input::get()
     }
     s.estop = m_estop.load();
     s.start = m_start.load();
+    s.drive = m_drive.load();
     s.buttons = m_buttons.load();
     s.zl = m_zl.load();
     s.zr = m_zr.load();
@@ -258,7 +262,7 @@ input::State input::get()
     // extremes. Recalibration happens on an already-calibrated pad, and the wizard tells the
     // driver to push both sticks to their stops: if the kart were still armed, those sweeps
     // would be live full-throttle commands. Zeroing here plus calibrated()==false below (which
-    // raises the blocking NOCAL fault → disarm + brake) closes both ends: starting a
+    // gives Stop::NotCalibrated → disarm + brake) closes both ends: starting a
     // calibration disarms the kart, and it cannot be re-armed until the wizard finishes.
     if (!m_calibrated.load() || 1 == m_cal_state.load())
     {
@@ -354,8 +358,8 @@ void input::calFinish()
 
 void input::calCancel() { m_cal_state.store(0); }
 int  input::calState()  { return m_cal_state.load(); }
-// Reported NOT calibrated during collection, on purpose: the controller turns that into the
-// blocking NOCAL fault, so a calibration started while driving disarms the kart at the next
+// Reported NOT calibrated during collection, on purpose: the controller turns that into
+// Stop::NotCalibrated, so a calibration started while driving disarms the kart at the next
 // tick and arming stays refused until calFinish/calCancel (see the matching gate in get()).
 bool input::calibrated(){ return m_calibrated.load() && 1 != m_cal_state.load(); }
 bool        input::pairing() { return m_pairing.load(); }

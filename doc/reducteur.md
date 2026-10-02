@@ -1,4 +1,4 @@
-# 1:17 gearbox — motor pinion identification and gear train design
+# Drivetrain (1:23.7) — motor pinion identification and gear train design
 
 ## Motor pinion (measured)
 
@@ -16,15 +16,29 @@
 **24 DP: 3.33 mm** vs module 1: 3.14 mm; or print a 16T/24 DP test pinion
 and check the tooth-in-tooth meshing with the motor pinion.
 
-## ⭐ REVISION (chosen): 1:13.33 gearbox (16→80, 30→80) + 25T→32T #35 chain = **1:17.07**
+## ⭐ REVISION (chosen): 1:13.33 gearbox (16→80, 30→80) + 18T→32T #35 chain = **1:23.70**
+
+> 🔁 **2026-09-29: gearbox-output sprocket 25T → 18T** — the owner's change, to slow the kart
+> down for the children. Chain stage 1.28 → **1.778**, total 1:17.07 → **1:23.70**: top speed
+> **×0.72** (simulated ~2.5 m/s loaded, was ~3.3), wheel torque **×1.39**. Everything in this
+> revision is recomputed for the 18T; the 25T figures are quoted where the comparison helps.
 
 | Mesh | Ratio | Center distance | Parts |
 |---|---|---|---|
 | **16T motor → 80T** | 5:1 | `96/48` = 2.0000″ = **50.80 mm** | 80T: pitch Ø 84.7, outside Ø **86.8 mm** |
 | **30T → 80T (output)** | 2.667:1 | `110/48` = 2.2917″ = **58.21 mm** | 30T integral with the 1st 80T (compound gear) |
-| **25T → 32T #35 sprockets** | 1.28:1 | **free** (chain cut to length) | 25 and 32 **coprime** (wear spread out) |
+| **18T → 32T #35 sprockets** | 1.778:1 | **free** (chain cut to length) | 18 and 32 share a factor 2 — **not coprime** (see the wear note below) |
 
-- **Total: 13.33 × 1.28 = 17.07** — top speed ~3.4 m/s (10″ wheel), firmware-limited to 3.3 m/s; ~7% more torque than 1:16.
+- **Total: 13.33 × 1.778 = 23.70** — ~2.6 m/s no-load on a 10″ wheel, **~2.5 m/s loaded
+  (simulated)**, bounded only by `duty_cap`: nothing measures the speed since 2026-09-29.
+  ×0.72 speed and ×1.39 wheel torque against the 1:17.07 of the 25T. The extra torque also
+  brought a 16 % slope within reach of the dynamic brake (the kart creeps down at ~0.5 m/s
+  where it ran away at 1:17.07).
+- **Wear no longer spreads over every tooth.** 18 and 32 are both even, and the link count
+  must be even too (below), so a given roller only ever lands on some of the teeth: with the
+  60 links of the 165 mm layout, gcd(60, 18) = 6 → each roller meets **3 of the 18T's 18
+  teeth**. The 25T (odd) spread wear over all of its teeth; a 17T or 19T would again. Minor at
+  this duty — inspect the 18T for uneven tooth wear.
 - ⚠️ **Higher loads at stage 2**: intermediate torque ×5 (1.8 N·m) → **Ft ≈ 113 N** on
   the 30T. At 20 mm thickness → ~22 MPa (ASA limit): **increase stage 2 to 25 mm** (~18 MPa).
 - **Why a #35 roller chain and not a toothed belt** (belts abandoned for now): a chain is
@@ -33,16 +47,21 @@ and check the tooth-in-tooth meshing with the motor pinion.
   belt lengths on the shelf. On a one-off build where the mount position settles during assembly,
   that is decisive. **#35** = 3/8″ (9.525 mm) pitch, roller/bushing Ø 0.200″, inner link width
   3/16″; **9.3 kN minimum ultimate** per ANSI, so roughly **1.2 kN working** (ultimate ÷ 8).
-  Against an actual chain tension of **~126 N** (4.8 N·m at the gearbox output on the 25T's
-  38 mm pitch radius) that is a factor of ~10 — vastly over-specified, which is fine.
+  Against an actual chain tension of **~175 N** (4.8 N·m at the gearbox output on the 18T's
+  27.4 mm pitch radius; it was ~126 N on the 25T's 38 mm) that is a factor of **~7** — still
+  far over-specified, which is fine. The **sprocket teeth** are another matter: see
+  [what actually makes a printed sprocket strong](#what-actually-makes-a-printed-sprocket-strong).
 - ⚠️ **The counterpart**: a chain does **not** damp shocks the way a belt does (they go straight
   into the gear teeth), it needs **lubrication**, and it needs **sprocket alignment + tension**
   kept up — slack chain climbs a sprocket flank and gets thrown. Budget an adjustable motor mount.
-- ⚠️ **Sprockets are big**: at 3/8″ pitch a 25T sprocket is Ø 76 mm at the pitch line — nearly the
-  84.7 mm of the 80T gear next to it, and the 32T reaches **Ø 102 mm outside**. Check the housing
-  and frame clearance; a 25T *pulley* was half that. Generator parameters: see below.
-- Firmware: `GEAR_RATIO = 1.28` (magnet at the gearbox output). Calculated alternatives:
-  25→34 = 1:17.0; 30→42 = 1:17.5; 25→36 = 1:18.0.
+- ⚠️ **Sprockets are big**: at 3/8″ pitch the 18T is Ø 54.9 mm at the pitch line (Ø 59.7
+  outside — the 25T was 76 / 81 mm), comfortably inside the 84.7 mm of the 80T gear next to it;
+  the 32T still reaches **Ø 102 mm outside**. Check the housing and frame clearance. Generator
+  parameters: see below.
+- Firmware: **nothing to set** — `GEAR_RATIO` and `enc_per_wheel` went with the wheel encoders
+  on 2026-09-29; the ratio only lives in the simulator (`VehicleParams::gear = 23.70`).
+  Calculated alternatives on the same 32T: 19→32 = 1:22.5 and 17→32 = 1:25.1 (odd, so wear
+  spreads over every tooth again); 20→36 = 1:24.0.
 
 ### Where to put the gearbox output sprocket
 
@@ -60,26 +79,34 @@ maximum, and then only with a tensioner).
 the wheel axle works, as long as it stays out of the two vertical 45° sectors. That is a lot of
 freedom for dodging a frame member — the gearbox can go forward, back, or diagonally up.
 
-| entraxe C | links (even) | wrap on 25T | slack at 1 % |
-|---|---|---|---|
-| 130 mm | 56 | 170.7° | 1.3 mm |
-| 150 mm | 62 | 171.9° | 1.5 mm |
-| **165 mm** | **64** | **172.6°** | **1.7 mm** |
-| 180 mm | 68 | 173.3° | 1.8 mm |
-| 300 mm | 92 | 176.0° | 3.0 mm |
+18T → 32T, `L = 2C/p + (N1+N2)/2 + ((N2−N1)/(2π))² · p/C` rounded up to an even count; wrap on
+the small sprocket at the nominal C:
 
+| entraxe C | links (even) | C that fits exactly | wrap on 18T | slack at 1 % |
+|---|---|---|---|---|
+| 130 mm | 54 | 136.5 mm | 161.3° | 1.3 mm |
+| 150 mm | 58 | 155.7 mm | 163.8° | 1.5 mm |
+| **165 mm** | **60** | **165.3 mm** | **165.3°** | **1.7 mm** |
+| 180 mm | 64 | 184.5 mm | 166.5° | 1.8 mm |
+| 300 mm | 90 | 308.8 mm | 171.9° | 3.0 mm |
+
+- **Swapping 25T → 18T on the 165 mm mount takes the chain from 64 to 60 links** (165.3 mm fits 60
+  exactly). The old 64-link chain would need 184.5 mm — outside the ±15 mm slot — so take four
+  links out rather than moving the gearbox.
 - **A short centre distance costs almost nothing here.** The 30–50 pitch guideline is written for
-  fast, heavily loaded industrial drives. This chain runs at **1.3 m/s** and **10 % of its working
-  load** (126 N of 1200 N). Going from 300 to 150 mm multiplies articulations per km by 1.5 — noise
-  at that duty. Wrap stays above 170° throughout, because the two sprockets are nearly the same size.
+  fast, heavily loaded industrial drives. This chain runs at **~1.0 m/s** (1.3 with the 25T) and
+  **15 % of its working load** (175 N of 1200 N). Going from 300 to 150 mm multiplies articulations
+  per km by 1.5 — noise at that duty. Wrap stays above 160° throughout: less than the 25T's 170°+
+  (the two sprockets are further apart in size now), still far above the ~120° usually quoted as
+  the minimum on the small sprocket.
 - **What a short centre distance really costs is tension sensitivity**: 1.7 mm of nominal slack is
-  hard to set by eye, and 1 % of elongation on a 610 mm chain is 6 mm — a large relative change. You
-  will re-tension more often. That is the whole trade.
+  hard to set by eye, and 1 % of elongation on a 572 mm (60-link) chain is 5.7 mm — a large
+  relative change. You will re-tension more often. That is the whole trade.
 - **Even link count is mandatory**: an odd count needs a cranked offset link, roughly 20 % weaker.
 - **Slack ~1 % of C, not the usual 2 %** — reverse is always allowed on this kart, so both runs take
   turns being the tight side and there is no permanent slack side to be generous with.
 - **Slot the mount ±15 mm**: two links quantise the centre distance in ~9.5 mm steps, and 3 % of wear
-  elongation on a 610 mm chain moves it another ~9 mm.
+  elongation on a 572 mm chain moves it another ~9 mm.
 
 ![Gearbox schematic](schematics/gearbox.png)
 
@@ -127,24 +154,26 @@ Settings that finally printed the gears cleanly after chasing a recurring extrud
 The "Create Sprocket" dialogs default to **#40**, whose pitch and roller are both wrong for
 this build. Four numbers, and only the tooth count changes between the two sprockets:
 
-| Field | 25T (gearbox output) | 32T (wheel) | Why |
+| Field | 18T (gearbox output) | 32T (wheel) | Why |
 |---|---|---|---|
 | Chain Pitch | **0.375 in** | **0.375 in** | #35 = 3/8″ = 9.525 mm (#40's 0.50″ is the usual wrong default) |
-| Number Of Teeth | **25** | **32** | 1.28:1, and coprime → wear spreads over all teeth |
+| Number Of Teeth | **18** | **32** | 1.778:1 (the gearbox side was 25T until 2026-09-29); both even → see the wear note above |
 | Roller Diameter | **0.200 in** | **0.200 in** | #35 roller Ø (#40 is 0.313″) |
 | Sprocket Thickness | **0.170 in** | **0.170 in** | 4.32 mm — must fit between the inner link plates (**4.76 mm**); 0.25″ = 6.35 mm does NOT |
 
 Check the generated body against these before printing — if the pitch was ignored, the
 diameters give it away immediately:
 
-| | pitch Ø | outside Ø | tooth-root Ø |
+| | pitch Ø `p/sin(180°/N)` | outside Ø `p·(0.6 + cot(180°/N))` | tooth-root Ø (pitch Ø − roller) |
 |---|---|---|---|
-| 25T | 76.0 mm | 81.1 mm | 70.9 mm |
+| **18T** | **54.9 mm** | **59.7 mm** | 49.8 mm |
 | 32T | **97.2 mm** | **102.4 mm** | 92.1 mm |
+| *25T (previous)* | *76.0 mm* | *81.1 mm* | *70.9 mm* |
 
 The 0.170″ thickness is not a rounded guess: it is **18 layers × 0.24 mm exactly** in the
 profile below, leaving 0.44 mm of clearance inside the link plates. Both sprockets print with
-that same profile. ✅ **32T printed and verified meshing with the real #35 chain (2026-08-05).**
+that same profile — the 18T changes only the tooth count, not pitch, roller or thickness.
+✅ **32T printed and verified meshing with the real #35 chain (2026-08-05).**
 
 ### PETG print profile — #35 sprockets (Creality K1 Max) — 25T and 32T printed
 
@@ -193,13 +222,15 @@ Short version: **infill is not what you think it is, and it is not what breaks.*
 the sprocket carry load, and they are carried by different settings.
 
 **The web carries torque from the bore out to the rim** — that is the only job the infill has.
-Treating it as a thin disc in torsion, at 4.8 N·m of gearbox output torque:
+Treating it as a thin disc in torsion (4.32 mm thick), at 4.8 N·m of gearbox output torque —
+the same torque whatever the tooth count, so the same numbers as on the 25T; the 18T's web is
+simply shorter, its tooth root sitting at r ≈ 24.9 mm:
 
 | radius | shear in the web |
 |---|---|
 | 12.5 mm (at the bore) | 1.13 MPa |
 | 20 mm | 0.44 MPa |
-| 30 mm | 0.20 MPa |
+| ~25 mm (18T tooth root) | 0.29 MPa |
 
 PETG takes 12–15 MPa. So the web is over-strength by a factor of **ten or more even at 40 %
 infill** — and at 5 top + 5 bottom shells out of 18 layers, the part is 73 % solid by thickness
@@ -211,18 +242,22 @@ across; five 0.42 mm walls give 2.1 mm of solid from each side = 4.2 mm. The inf
 reaches a tooth. What sets tooth strength is the **wall count** and, far more, the **print
 orientation**.
 
-Root bending, with the ~126 N chain tension:
+Root bending, with the ~175 N chain tension of the 18T (same #35 tooth section, scaled by the
+tension; the 25T's ~126 N gave 16.4 / 8.2 / 5.5 MPa):
 
 | teeth sharing the load | stress at the root |
 |---|---|
-| 1 | **16.4 MPa** — at/over the PETG allowable |
-| 2 | 8.2 MPa |
-| 3 | 5.5 MPa |
+| 1 | **22.7 MPa** — **over** the PETG allowable (12–15 MPa) by half again or more |
+| 2 | 11.4 MPa — at the allowable |
+| 3 | 7.6 MPa |
 
 Which is the real reason the earlier warning about **chain tension and sprocket alignment**
-is not housekeeping advice: with proper wrap a dozen teeth are engaged and the first few share
-the pull, but a slack or misaligned chain rides up and dumps the whole 126 N onto **one** tooth
-— right where a printed part is already at its limit. That is how a tooth shears off.
+is not housekeeping advice: with proper wrap about eight teeth of the 18T are engaged (165°) and
+the first few share the pull, but a slack or misaligned chain rides up and dumps the whole
+175 N onto **one** tooth. On the 25T that was at/over the limit; on the 18T it is **clearly
+over it**. That is how a tooth shears off — so with the 18T, tension and alignment are no
+longer margin, they are what keeps the teeth on. The 32T carries 175 N × 48.6 mm ≈ 8.5 N·m
+(6.1 before) — ~2 MPa of web shear even at a 12.5 mm radius, still far inside PETG's.
 
 Ranked, what changes the strength of this part:
 
@@ -352,10 +387,10 @@ module 2 (15T→30T, center distance 45 mm) — ruled out in favor of reusing th
 30T Ø47.7 → wheel pulley 60T Ø95.5, screwed onto the 12″ rim). Useful tension ≈ 100 N at max
 torque — very comfortable for a 15 mm belt.
 
-> ✅ **Firmware aligned (1:13.33 revision + 1.28 sprockets)**: `hw::GEAR_RATIO = 1.28` (AS5600
-> magnet on the **gearbox output**) and `WHEEL_DIAM_M = 0.254` (**10″** wheel) applied in
-> config.hpp; vehicle speed in **m/s** (signed average of the 2 wheels — pivot → 0).
-> If the magnet is moved **onto the wheel**, set `GEAR_RATIO` back to 1.
+> 🗄️ *Historical: the firmware used to carry `hw::GEAR_RATIO = 1.28` and `WHEEL_DIAM_M = 0.254`
+> for the AS5600 magnet on the gearbox output (vehicle speed = signed average of the two
+> wheels). The wheel encoders were removed on 2026-09-29; nothing in the firmware depends on
+> the gearing any more.*
 
 ---
 

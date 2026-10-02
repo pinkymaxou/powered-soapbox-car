@@ -32,6 +32,32 @@ inline float slew(float target, float current, float rate, float dt)
     return target;
 }
 
+// ASYMMETRIC rate limiter on a motor command: `up` bounds how fast it may grow AWAY from
+// zero, `dn` how fast it may fall back TOWARD zero. Either rate ≤ 0 disables its own side
+// (the command jumps straight to the target that way).
+//   up  exists for the motor DRIVERS: a stick slammed open is a step from 0 to full duty, and
+//       a brushed motor answers a step like that with its stall current.
+//   dn  is what the freewheel run-down used to be, said as a rate instead of a duration —
+//       the MDD20A cannot float its outputs, so "coasting" is the command sliding to 0.
+// A REVERSAL is the two in sequence: fall to 0 at `dn`, then build the other way at `up`.
+// Neither rate ever delays the real brake — releasing A, disarming or any Stop cause bypasses
+// this entirely and grounds the windings on the spot.
+inline float ramp(float target, float current, float up, float dn, float dt)
+{
+    if (target * current < 0.f)          // reversing: spend `dn` getting back to 0 first
+    {
+        if (dn > 0.f)
+        {
+            const float zeroed = slew(0.f, current, dn, dt);
+            if (0.f != zeroed) return zeroed;
+        }
+        current = 0.f;
+    }
+    const float rate = (std::fabs(target) > std::fabs(current)) ? up : dn;
+    if (rate <= 0.f) return target;      // that side disabled → straight through
+    return slew(target, current, rate, dt);
+}
+
 // Differential arcade mixing: left = forward + turn·gain, right = forward − turn·gain.
 inline void mixArcade(float fwd, float turn, float gain, float& out_l, float& out_r)
 {
@@ -40,52 +66,6 @@ inline void mixArcade(float fwd, float turn, float gain, float& out_l, float& ou
     out_l = clampf(fwd + turn * gain, -1.f, 1.f);
     out_r = clampf(fwd - turn * gain, -1.f, 1.f);
 }
-
-// "ISO-LATERAL-ACCELERATION" rollover protection: a_lat ≈ k·v·δ (δ = commanded
-// differential) ⇒ the turn limit decreases as 1/v — the SAME lateral acceleration is
-// allowed at all speeds, calibrated to equal hi_limit at v_max. Below v_full — and everywhere
-// hi·v_max/v exceeds 100% (v ≤ hi·v_max) — full turn: pivot in place at full power stays
-// allowed. Beyond v_max (runaway downhill), the limit KEEPS tightening: less authority = less
-// risk. Replaces the old linear ramp: its excess at mid-speed tipped over offset loads as soon
-// as turn_gain = 1 (proven by simulation, scenario adulte_enfant).
-inline float turnLimit(float v_abs, float v_full, float v_max, float hi_limit)
-{
-    if (v_abs <= v_full) return 1.f;
-    return clampf(hi_limit * v_max / std::max(v_abs, 0.05f), 0.f, 1.f);
-}
-
-// "Sensor/motor wired backwards" detection: firm command on one side, wheel measured
-// FIRMLY on the other for win_us WITHOUT its speed decreasing. The key point:
-// a commanded DECELERATION (braking at the stick, kart already moving) also has a speed opposed
-// to the command — but it MELTS toward zero; reversed wiring gives an opposed speed that is
-// STABLE or GROWING. We re-anchor the window whenever |v| decreases by more than `decay`.
-struct RevDetect
-{
-    int64_t m_t0 = 0;    // start of the opposition window (0 = inactive)
-    float   m_v0 = 0.f;  // |v| at the anchor
-
-    // true = CONFIRMED reversal (firm, persistent and non-decreasing opposition).
-    bool update(float out, float v, int64_t now_us, int64_t win_us,
-                float out_min, float v_min, float decay)
-    {
-        const bool opposed = (std::fabs(out) > out_min) && (std::fabs(v) > v_min) &&
-                             (out * v < 0.f);
-        if (!opposed)
-        {
-            m_t0 = 0;
-            return false;
-        }
-        if (0 == m_t0 || std::fabs(v) < m_v0 - decay)   // start, or it decelerates → re-anchor
-        {
-            m_t0 = now_us;
-            m_v0 = std::fabs(v);
-            return false;
-        }
-        return (now_us - m_t0) > win_us;
-    }
-
-    void reset() { m_t0 = 0; }
-};
 
 // Circle→square compensation: the physical stick is bounded by a CIRCLE (x²+y²≤1); at
 // full diagonal each axis caps at ~0.71. Stretches radially (constant direction,

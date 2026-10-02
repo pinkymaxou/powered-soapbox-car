@@ -30,29 +30,28 @@ message ParamVal {
 // Fields 4-7 (vbat, batt_type, batt_lo, batt_hi) and 30 (idle_off_s) are RESERVED, not
 // reused: nothing measures the battery any more and the firmware cannot cut its own power.
 message Status {
-  // Nested so the generated C types are Status_State / Status_Fault / Status_BrakeMode —
-  // they must NOT collide with the C++ enum class State/Fault/BrakeMode in control_types.hpp.
-  enum State     { LOCKOUT = 0; CALIBRATE = 1; RUN = 2; FAULT = 3; }
-  enum BrakeMode { NONE = 0; DYNAMIC = 1; ACTIVE = 2; }
-  enum Fault {
-    // 2 (LVC) and 9 (MOTOR_POWER) are retired: no battery measurement, and the e-stop now
-    // opens the main relay's coil — it cuts the ESP itself, so there is nothing to report.
-    reserved 2, 9;
-    NO_FAULT = 0; ESTOP = 1; NOT_CALIBRATED = 3; ENCODER = 4;
-    ENCODER_DIR = 5; ENCODER_MAD = 6; ENCODER_ABSENT = 7; ENCODER_MAGNET = 8;
-  }
-  reserved 4, 5, 6, 7, 30;
+  // Nested so the generated C types are Status_State / Status_Stop / Status_BrakeMode —
+  // they must NOT collide with the C++ enum class State/Stop/BrakeMode in control_types.hpp.
+  // 3 was FAULT — there is no fault state any more (see Stop), so it is retired, not reused.
+  enum State     { reserved 3; LOCKOUT = 0; CALIBRATE = 1; RUN = 2; }
+  // 2 was ACTIVE (PID braking, gone with the encoders); it now means COAST — live only.
+  enum BrakeMode { NONE = 0; DYNAMIC = 1; COAST = 2; }
+  // WHY the kart will not drive — ONE cause, mirrors enum class Stop (control_types.hpp).
+  // It replaces the Fault enum and the fault bitmask, both dropped on 2026-09-30: nothing
+  // the firmware can see can break any more, and what is left are four ordinary gamepad
+  // conditions. Value names are prefixed because enum values share the message's scope
+  // (NONE is already BrakeMode's).
+  enum Stop { STOP_NONE = 0; STOP_PAD_LOST = 1; STOP_PAD_STALE = 2; STOP_ESTOP = 3;
+              STOP_NOT_CALIBRATED = 4; }
+  // 8/9/10 were speed_ms / rpm_l / rpm_r: nothing measures the wheels any more.
+  // 2 (fault) and 3 (faults) went with the fault layer on 2026-09-30 — see stop = 32.
+  reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 30;
   State  state = 1;
-  Fault  fault = 2;
-  uint32 faults = 3;            // mask of active conditions (fb:: bits)
-  float  speed_ms = 8;          // VEHICLE speed (m/s, signed — 0 while pivoting)
-  float  rpm_l = 9;             // LEFT wheel speed in rpm (signed)
-  float  rpm_r = 10;            // RIGHT wheel speed in rpm (signed)
   float  fwd = 11;
   float  turn = 12;
   float  out_l = 13;
   float  out_r = 14;
-  BrakeMode brake_mode = 15;    // NONE (traction/freewheel) · DYNAMIC · ACTIVE (PID)
+  BrakeMode brake_mode = 15;    // NONE (driving) · DYNAMIC (short-circuit) · COAST (pseudo-freewheel)
   bool   arming = 16;
   bool   btn_start = 17;
   bool   pad_conn = 18;
@@ -67,6 +66,8 @@ message Status {
   float  pad_ry2 = 27;
   uint32 pad_btns = 28;
   int32  pad_age_ms = 29;       // gamepad heartbeat (age of the last HID report)
+  bool   btn_drive = 31;        // A held (hold to drive)
+  Stop   stop = 32;             // why it will not drive (STOP_NONE = nothing in the way)
 }
 
 message ParamMeta {
@@ -89,14 +90,11 @@ message Vals   { repeated ParamVal  params = 1; }
 // History: each series = RAW bytes (1 byte/sample, oldest → newest).
 message Hist {
   reserved 3, 10;               // dt_batt / batt — the battery chart went with the ADC
-  uint32 dt_fast = 1;           // s between samples (accel/pwm/rpm)
-  uint32 dt_spd = 2;
+  reserved 2, 7, 8, 9;          // dt_spd / rpml / rpmr / spd — went with the encoders
+  uint32 dt_fast = 1;           // s between samples (accel/pwm)
   bytes  accel = 4;
   bytes  pwml = 5;
   bytes  pwmr = 6;
-  bytes  rpml = 7;
-  bytes  rpmr = 8;
-  bytes  spd = 9;               // m/s ×10
   bytes  loop = 11;             // worst 500 Hz tick per slot, in 50 µs units
 }
 
@@ -154,7 +152,7 @@ message SysDyn {
   uint32 heap_min = 3;
   uint32 ledc_fix = 4;          // LEDC clock sentinel
   uint32 loop_max_us = 5;       // worst 500 Hz tick since last read (budget 2000 µs)
-  uint32 sens_max_us = 6;       // worst sensor read (I2C cost alone, no preemption)
+  reserved 6;                   // sens_max_us — the I2C sensor read is gone
   // Gamepad link quality: CUMULATIVE count of HID report-to-report gaps per bucket
   // (diff two reads), and the worst gap of the last complete 1 s window.
   uint32 pad_gap_max_ms = 7;
@@ -172,9 +170,9 @@ message SysDyn {
 message Ok {}
 
 // Persistent event log ("why did it disarm"): last entries, oldest → newest.
-// code mirrors evlog::Ev (1 Boot, 2 Arm, 3 Disarm, 4 Fault; 5 IdleOff and 6 LvcOff are
-// retired with the power latch but may still sit in an older partition);
-// data is the fault mask for Disarm/Fault, the reset reason for Boot.
+// code mirrors evlog::Ev (1 Boot, 2 Arm, 7 Disarm; 3 the old mask-carrying Disarm, 4 Fault,
+// 5 IdleOff and 6 LvcOff are retired but may still sit in an older partition);
+// data is the Stop cause for Disarm, the reset reason for Boot.
 message EvlogEntry {
   uint32 t_ms = 1;              // uptime of that boot, in ms
   uint32 boot = 2;              // boot counter (persisted): groups entries per power cycle

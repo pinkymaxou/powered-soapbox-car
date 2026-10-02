@@ -21,9 +21,10 @@ struct TaskCfg
     BaseType_t  core;    // 0 = PRO_CPU (network/system), 1 = APP_CPU (application)
 };
 
-// 500 Hz control loop — isolated on the application core (1), HIGH priority so higher-priority
-// system work (timers, IPC, the Wi-Fi/BT stacks) can't stall it past the encoder's ½-turn
-// window (which would alias the absolute AS5600 angle). Below esp_timer(22)/Wi-Fi/BT(23)/IPC(24).
+// 500 Hz control loop — isolated on the application core (1), HIGH priority so the stick reaches
+// the motors on time whatever the network does. (It was raised to 18 when it also read the
+// AS5600 encoders, whose absolute angle aliased past ½ turn between reads; the encoders are gone
+// since 2026-09-29, the priority stays — it costs nothing.) Below esp_timer(22)/Wi-Fi/BT(23)/IPC(24).
 // It yields every cycle (vTaskDelayUntil), so the high priority starves nothing. WDT 2 s + PANIC.
 constexpr TaskCfg CONTROL{"control", 6144, 18, 1};
 

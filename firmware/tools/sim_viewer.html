@@ -51,19 +51,14 @@
  <button onclick="play()">▶ Replay</button>
  <button onclick="toggleCharts()">📈 Charts</button>
  <button onclick="document.getElementById('hypo').style.display='block'">ℹ️ Assumptions</button>
- <label id="tlwrap" style="display:none;gap:6px;align-items:center;cursor:pointer">
-  <input type="checkbox" id="tl" checked> 🛡️ rollover protection</label>
- <label id="olwrap" style="display:none;gap:6px;align-items:center;cursor:pointer">
-  <input type="checkbox" id="ol"> 🔧 open-loop</label>
  <label id="mxwrap" style="display:none;gap:6px;align-items:center;cursor:pointer">
   🎮 mixing <select id="mx">
    <option value="0" selected>linear</option>
    <option value="1">expo</option>
-   <option value="2">expo + speed-soft</option>
   </select></label>
  <span class="badge" id="bstate">—</span>
  <span class="badge" id="bbrake">—</span>
- <span class="badge" id="bfault" style="display:none">—</span>
+ <span class="badge" id="bstop" style="display:none">—</span>
  <div id="stats">
   <span>t <b id="st">0.0</b> s</span>
   <span>v <b id="sv">0.00</b> m/s</span>
@@ -82,8 +77,8 @@
  <h3>Vehicle speed (m/s)</h3><canvas id="cv" height="110"></canvas>
  <h3>Lateral acceleration vs tip limit (m/s²)</h3><canvas id="ca" height="110"></canvas>
  <h3>Motor outputs (signed PWM)</h3><canvas id="co" height="110"></canvas>
- <h3>Encoders (sensor rpm) — measured vs actual</h3><canvas id="ce" height="110"></canvas>
- <h3>Gamepad — stick vs effective setpoint (ramps + rollover protection)</h3><canvas id="cp" height="110"></canvas>
+ <h3>Wheel speed (rpm) — model only, nothing on the kart measures it</h3><canvas id="ce" height="110"></canvas>
+ <h3>Gamepad — stick vs effective setpoint (after the deadzone)</h3><canvas id="cp" height="110"></canvas>
  <h3>Battery energy (estimate) — cumulative Wh · instantaneous W ÷ 100</h3><canvas id="cw" height="110"></canvas>
 </div>
 <div id="hypo">
@@ -101,21 +96,22 @@
       (V + back-EMF across R<sub>a</sub> would give ~150 A without this bound). Max force at the wheel
       ≈ 52 N per motor. Dynamic braking = short circuit (V = 0, current through R<sub>a</sub>).</li>
   <li><b>Battery</b>: ideal source + internal resistance (V = V₀ − R·I). No discharge model.</li>
-  <li><b>Sensors</b>: AS5600 quantized to 12 bits ×1.28 (like the real one); perfect gamepad (the script speaks in calibrated setpoint); injectable failures (missing/inverted/frozen/aberrant).</li>
+  <li><b>Sensors</b>: none — the kart has no sensor on its wheels since 2026-09-29 (no encoders, so no speed limiter, no PID brake, no rollover protection). Perfect gamepad (the script speaks in calibrated setpoint). The A button is held unless a scenario releases it.</li>
   <li><b>Power cut (main switch or e-stop)</b>: the controller stops running and the bridges
       open → FLOATING motors, no electrical force — only rolling against the slope
       remains (scenarios <code>coupure_pente8/16</code>: runaway demonstrated).</li>
  </ul>
  <h3>Motor capacity and slope holding</h3>
  <ul>
-  <li><b>Max drive force</b>: i clamped to 19.6 A → wheel torque = k<sub>t</sub>·i·16·0.85 →
-      <b>≈ 52 N per wheel, ≈ 104 N total</b> (+ ~30 N of rolling that helps hold).</li>
-  <li><b>Maximum holdable slope</b> (loaded kart 98 kg): m·g·sin θ ≤ 134 N →
-      <b>≈ 11%</b>. Below that (8%: 77 N), the PID brake holds near a stop; beyond that
-      (16%: 152 N), the kart SLIDES even with the brake active — the
-      <code>descente16_*</code> scenarios demonstrate it. A steep slope requires a mechanical brake.</li>
+  <li><b>Max drive force</b>: i clamped to 19.6 A → wheel torque = k<sub>t</sub>·i·23.70·0.85 →
+      <b>≈ 77 N per wheel, ≈ 154 N total</b> (+ ~30 N of rolling that helps hold). The 18T→32T
+      chain stage (1:23.70, was 1:17.07) is worth ×1.39 here.</li>
+  <li><b>Dynamic braking only</b> (A released): the short circuit cannot hold the kart at a
+      standstill (force ∝ speed), it caps the descent — ~0.2 m/s on 8 %, ~0.5 m/s on 16 %
+      (<code>descente*_frein_dynamique</code>). The ceiling, 184 N against m·g·sin θ for the
+      loaded 98 kg kart, is <b>≈ 19 %</b>. Stopping on a slope requires a mechanical brake.</li>
   <li><b>Clamped dynamic braking</b>: in short circuit, i = k<sub>e</sub>·ω/R<sub>a</sub>
-      reaches 19.6 A around ~0.9 m/s — beyond that, its force is CONSTANT (~104 N), it no longer
+      reaches 19.6 A around ~0.6 m/s — beyond that, its force is CONSTANT (~154 N), it no longer
       grows with speed.</li>
  </ul>
  <h3>Energy (estimate) — how the calculation is done</h3>
@@ -126,7 +122,7 @@
   <li><b>Terminal voltage</b>: V<sub>terminals</sub> = V₀ − R<sub>int</sub>·(|i<sub>L</sub>| + |i<sub>R</sub>|)
       — the battery sag under load is therefore included in the calculation.</li>
   <li><b>Battery power</b>: P = V<sub>terminals</sub> × (|i<sub>L</sub>| + |i<sub>R</sub>|) during
-      <b>traction</b> and <b>PID braking</b> (plugging draws real battery current);
+      <b>traction</b> and <b>plugging</b> (stick pulled back while rolling draws real battery current);
       <b>P = 0 during dynamic braking</b> — the short circuit drives the current through
       the motor's R<sub>a</sub>, the energy dissipates as motor heat, not from the battery.</li>
   <li><b>Cumulative energy</b>: E = ∫ P·dt, integrated at 500 Hz, displayed in Wh.</li>
@@ -146,17 +142,17 @@
   <li><b>Geometric consequence (reversed tricycle)</b>: w_eff = (track/2)·(1 − x_cg/wheelbase)
       ≈ 0.416 × (1 − 0.455/1.165) ≈ <b>0.25 m</b> → tip limit a_tip = g·w_eff/h_cg
       ≈ <b>5.2 m/s²</b> (0.53 g). It was 6.8 m/s² while the bench sat ON the driven axle —
-      moving the two 6″ apart cost 78 mm of w_eff. ⚠️ Consequence: the software turn limiter is
-      no longer redundancy. Tick <b>rollover protection off</b> and drive a full-speed turn and
-      the kart <b>rolls over</b> (<code>virage_sans_protection</code>, −0.60 m/s²), where the
-      previous layout stayed planted at +0.92. Turn the layout fully around — caster at the
-      rear, x_cg 0.56 — and it is worse again: <code>ancienne_disposition</code>, 3.8 m/s².</li>
+      moving the two 6″ apart cost 78 mm of w_eff. ⚠️ There is <b>no rollover protection</b>
+      any more (the owner's call, 2026-09-29): at the slower 1:23.70 gearing, two children
+      centred stay planted through a full-speed full turn (<code>virage_pleine_vitesse</code>,
+      +1.6 m/s²). Turn the layout fully around — caster at the rear, x_cg 0.56, old gearing —
+      and it tips: <code>ancienne_disposition</code>.</li>
   <li><b>Offset load modeled</b> (y_cg): tipping becomes asymmetric — the edge
-      on the loaded side loses its margin. The <code>enfant_seul_cote</code> and
-      <code>adulte_enfant</code> scenarios show that with the DEFAULT settings an offset CG can
-      tip over in an extreme maneuver; the iso-a_lat limit (∝ 1/v, <code>turn_alat_vmax = 0.2</code>,
-      turn gain 1.0) also protects these cases — <code>enfant_seul_cote</code> is in fact the
-      binding case of the whole parameter sweep, which is why the settable range stops at 0.3.</li>
+      on the loaded side loses its margin. <code>enfant_seul_cote</code> (one child to one
+      side) and <code>adulte_enfant</code> TIP at duty_cap 1.0 in a full-speed full turn, and
+      stay upright at 0.9 (0.8 ≈ the margin the old protection gave). Nothing in the firmware
+      limits the turn: <code>duty_cap</code> is the only lever. (On the flat with 40 lb pellet
+      bags the owner could not tip the real kart — bags sit lower than a seated child.)</li>
   <li><b>Model limitation</b>: passengers leaning shift the real CG dynamically
       — which is why the tests require a <b>margin</b> and not just "does not tip over".</li>
  </ul>
@@ -567,13 +563,12 @@ trailGeo.setDrawRange(0, 0);
 scene.add(new THREE.Line(trailGeo, new THREE.LineBasicMaterial({color:0x58a6ff})));
 
 // ── Stream state ──
-const ST = ['IDLE','CALIBRATION','ARMED','FAULT'];
-// Index 2 (was LOW BATTERY) is retired with the voltage sensor; the slot stays so the
-// others keep their number, matching Fault:: on the firmware side.
-const FA = ['—','E-STOP','—','NOT CALIBRATED','ENCODER STUCK','ENCODER INVERTED',
-            'ENCODER ABERRANT','ENCODER MISSING'];
-const BRK = ['⚪ traction','🟠 dynamic braking','🟢 active brake (PID)'];
-let atip = 5.0, vlim = 3.3, cur = null, es = null;
+const ST = ['IDLE','CALIBRATION','ARMED'];
+// WHY the kart will not drive — matches enum class Stop on the firmware side. It replaced the
+// fault enum and its mask on 2026-09-30, once nothing was left that could report itself broken.
+const SL = ['—','NO GAMEPAD','GAMEPAD SILENT','E-STOP','NOT CALIBRATED'];
+const BRK = ['⚪ traction','🟠 dynamic braking (A released)','🟢 pseudo-freewheel (A held, stick centred)'];
+let atip = 5.0, cur = null, es = null;
 
 // ── Camera: chase the kart + MOUSE ORBIT (drag = rotate, wheel = zoom) ──
 const cam = {yaw: Math.PI, pitch: 0.42, dist: 4.5};   // offsets relative to the kart's heading
@@ -591,11 +586,11 @@ addEventListener('wheel', e => {
 }, {passive:true});
 
 // ── MANUAL keyboard driving ──
-const keys = {up:0, down:0, left:0, right:0, start:0, estop:0};
+const keys = {up:0, down:0, left:0, right:0, start:0, estop:0, drive:0};
 let driveTimer = null;
 const KEYMAP = {ArrowUp:'up', w:'up', z:'up', ArrowDown:'down', s:'down',
                 ArrowLeft:'left', a:'left', q:'left', ArrowRight:'right', d:'right',
-                Enter:'start', ' ':'estop'};
+                Enter:'start', ' ':'estop', Shift:'drive'};   // Shift = the pad's A (hold to drive)
 addEventListener('keydown', e => {
   if (e.key === 'r' || e.key === 'R'){ play(); return; }
   const k = KEYMAP[e.key];
@@ -628,7 +623,8 @@ function readGamepad(){
     [x, y] = squareMap(x, y);
     return {x, y,
             start: gp.buttons[9] && gp.buttons[9].pressed,   // START/Options → arming
-            estop: gp.buttons[1] && gp.buttons[1].pressed};  // B → emergency stop
+            estop: gp.buttons[1] && gp.buttons[1].pressed,   // B → emergency stop
+            drive: gp.buttons[0] && gp.buttons[0].pressed};  // A → hold to drive
   }
   return null;
 }
@@ -640,8 +636,7 @@ function sendInput(){
     y: Math.max(-1, Math.min(1, ky + (gp ? gp.y : 0))),
     start: keys.start || (gp && gp.start) ? 1 : 0,
     estop: keys.estop || (gp && gp.estop) ? 1 : 0,
-    tl: document.getElementById('tl').checked ? 1 : 0,   // 🛡️ rollover protection (turn_limit_en)
-    ol: document.getElementById('ol').checked ? 1 : 0,   // 🔧 open-loop test mode (open_loop)
+    a: keys.drive || (gp && gp.drive) ? 1 : 0,           // A held (hold to drive)
     mx: parseInt(document.getElementById('mx').value, 10) || 0,  // 🎮 mixing type (mix_type)
   };
   fetch('/input', {method:'POST', body: JSON.stringify(cmd)}).catch(() => {});
@@ -662,11 +657,10 @@ let chV, chA, chO, chE, chP, chW, lastChartUpd = 0;
 const CHART_MAX = 2000;   // points kept per series ≈ 2 min of history at the 16 Hz push rate
 let frameSeq = 0;         // frame counter used to decimate the chart pushes
 function initCharts(){
-  chV = mkChart('cv', [{l:'v', c:'#58a6ff'}, {l:'limit', c:'#8b949e', d:[5,4]}], -1, 4);
+  chV = mkChart('cv', [{l:'v', c:'#58a6ff'}], -1, 4);
   chA = mkChart('ca', [{l:'|a_lat|', c:'#d29922'}, {l:'a_tip (tip)', c:'#f85149', d:[5,4]}], 0, 7);
   chO = mkChart('co', [{l:'motor L', c:'#3fb950'}, {l:'motor R', c:'#ffa657'}], -1.1, 1.1);
-  chE = mkChart('ce', [{l:'L measured', c:'#3fb950'}, {l:'R measured', c:'#ffa657'},
-                       {l:'L actual', c:'#3fb950', d:[4,4]}, {l:'R actual', c:'#ffa657', d:[4,4]}], -150, 450);
+  chE = mkChart('ce', [{l:'L wheel', c:'#3fb950'}, {l:'R wheel', c:'#ffa657'}], -150, 250);
   chP = mkChart('cp', [{l:'turn stick', c:'#8cf', d:[4,4]}, {l:'turn effective', c:'#58a6ff'},
                        {l:'forward stick', c:'#f8c', d:[4,4]}, {l:'forward effective', c:'#ff2ea6'}], -1.15, 1.15);
   chW = mkChart('cw', [{l:'cumulative Wh', c:'#e3b341'}, {l:'W ÷ 100', c:'#7ee787', d:[4,4]}], 0, 6);
@@ -676,15 +670,12 @@ function resetCharts(){
 }
 function chartPush(m){
   chV.data.datasets[0].data.push({x:m.t, y:m.v});
-  chV.data.datasets[1].data.push({x:m.t, y:vlim});
   chA.data.datasets[0].data.push({x:m.t, y:Math.abs(m.alat)});
   chA.data.datasets[1].data.push({x:m.t, y:atip});
   chO.data.datasets[0].data.push({x:m.t, y:m.outl});
   chO.data.datasets[1].data.push({x:m.t, y:m.outr});
-  chE.data.datasets[0].data.push({x:m.t, y:m.encl});
-  chE.data.datasets[1].data.push({x:m.t, y:m.encr});
-  chE.data.datasets[2].data.push({x:m.t, y:m.encl_vrai});
-  chE.data.datasets[3].data.push({x:m.t, y:m.encr_vrai});
+  chE.data.datasets[0].data.push({x:m.t, y:m.rpml});
+  chE.data.datasets[1].data.push({x:m.t, y:m.rpmr});
   chP.data.datasets[0].data.push({x:m.t, y:m.stickx});
   chP.data.datasets[1].data.push({x:m.t, y:m.padx});
   chP.data.datasets[2].data.push({x:m.t, y:m.sticky});
@@ -738,7 +729,6 @@ function play(){
     const m = JSON.parse(e.data);
     if (m.meta){
       atip = m.atip;
-      vlim = m.vlim || 3.3;
       terrain.visible = !!m.terrain;
       trees.visible = !!m.terrain;
       shed.visible = !!m.terrain;
@@ -746,13 +736,11 @@ function play(){
       brAmbient.visible = false; brLights.forEach(l => l.visible = false);
       scene.fog = new THREE.Fog(0xa8c8e8, 40, 170);
       document.getElementById('brOverlay').style.display = 'none';
-      document.getElementById('tlwrap').style.display = m.terrain ? 'flex' : 'none';
-      document.getElementById('olwrap').style.display = m.terrain ? 'flex' : 'none';
       document.getElementById('mxwrap').style.display = m.terrain ? 'flex' : 'none';
       grid.visible = !m.terrain;
       flatGround.visible = !m.terrain;
       document.getElementById('desc').textContent = m.desc +
-        (m.terrain ? '  ·  ↑↓←→/WASD or 🎮 left stick · Enter/START (1 s) arm · Space/B e-stop · R restart'
+        (m.terrain ? '  ·  ↑↓←→/WASD or 🎮 left stick · hold Shift/🎮 A to drive · Enter/START (1 s) arm · Space/B e-stop · R restart'
                    + (padSeen ? '  ·  🎮 gamepad detected' : '') : '');
       if (m.params){
         fillParams(m.params);
@@ -853,12 +841,12 @@ function animate(){
       bs.className = 'badge bad';
     } else {
       bs.textContent = (ST[cur.state] || cur.state) + (cur.armed ? '' : ' · disarmed');
-      bs.className = 'badge ' + (cur.state === 2 ? 'ok' : (cur.state === 3 ? 'bad' : ''));
+      bs.className = 'badge ' + (cur.state === 2 ? 'ok' : '');
     }
     document.getElementById('bbrake').textContent = BRK[cur.brake] || cur.brake;
-    const bf = document.getElementById('bfault');
-    bf.style.display = cur.fault ? '' : 'none';
-    bf.textContent = FA[cur.fault] || ('fault ' + cur.fault);
+    const bf = document.getElementById('bstop');
+    bf.style.display = cur.stop ? '' : 'none';
+    bf.textContent = SL[cur.stop] || ('stop ' + cur.stop);
     bf.className = 'badge bad';
     const lifted = !tipped && 0 !== (cur.lift || 0);
     const tm = document.getElementById('tipmsg');

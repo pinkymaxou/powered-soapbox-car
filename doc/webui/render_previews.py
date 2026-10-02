@@ -23,31 +23,31 @@ for m in re.finditer(r'^## (.+?)$(.*?)```css\n(.*?)```', md, re.S | re.M):
     blocks[m.group(1).split('—')[0].strip().lower()] = m.group(3)
 
 sample_status = """{
- state:2, fault:0, faults:0, speed_ms:0.86, rpm_l:905, rpm_r:898,
+ state:2, stop:0,
  fwd:0.60, turn:0.25, out_l:0.62, out_r:-0.30, brake_mode:0, arming:true, btn_start:false,
- pad_conn:true, pad_batt:87, pad_x:0.25, pad_y:0.60, pad_cx:0.25, pad_cy:0.60,
+ btn_drive:true, pad_conn:true, pad_batt:87, pad_x:0.25, pad_y:0.60, pad_cx:0.25, pad_cy:0.60,
  pad_zl:0, pad_zr:0, pad_rx2:0, pad_ry2:0, pad_btns:0, pad_age_ms:12
 }"""
 
 # The first rows of the real PARAMS table (config_params.cpp), in display order.
 sample_params = """[
- {name:'speed_limit_ms',desc:'Speed limit (m/s)',cat:'Speed & power',fval:3.3,fmin:0.3,fmax:7},
- {name:'rev_speed_ms',  desc:'Reverse limit (m/s)',cat:'Speed & power',fval:1.0,fmin:0.3,fmax:3},
  {name:'duty_cap',      desc:'PWM cap (0-1)',   cat:'Speed & power',fval:1.0,fmin:0.05,fmax:1},
  {name:'thr_deadzone',  desc:'Stick deadzone',  cat:'Gamepad',      fval:0.06,fmin:0,fmax:0.3},
  {name:'turn_gain',     desc:'Turn gain (0-1)', cat:'Gamepad',      fval:1.0,fmin:0,fmax:1},
- {name:'mix_type',      desc:'Mixing type (0/1/2)',cat:'Drive feel',ival:1,imin:0,imax:2},
- {name:'turn_limit_en', desc:'Rollover protection (0/1)',cat:'Rollover protection',bval:true,bmin:false,bmax:true},
- {name:'use_encoders',  desc:'Use encoders (0/1)',cat:'Behavior',   bval:true,bmin:false,bmax:true}
+ {name:'mix_type',      desc:'Mixing type (0/1)',cat:'Drive feel',  ival:0,imin:0,imax:1},
+ {name:'accel_pct_s',   desc:'Accel ramp (%/s)',cat:'Drive feel',   ival:200,imin:0,imax:1000},
+ {name:'decel_pct_s',   desc:'Decel ramp (%/s)',cat:'Drive feel',   ival:100,imin:0,imax:1000},
+ {name:'mot_swap_lr',   desc:'Swap LEFT/RIGHT motors',cat:'Behavior',bval:false,bmin:false,bmax:true},
+ {name:'disarm_s',      desc:'Auto disarm (s)', cat:'Behavior',     ival:30,imin:5,imax:600}
 ]"""
 
 EPILOGUE = """
 <script>
 // Static preview: no kart behind the page, so feed its own render functions one frame.
-const fa = document.getElementById('faults'), cf = document.getElementById('cfg');
+const fa = document.getElementById('board'), cf = document.getElementById('cfg');
 fa.hidden = false; cf.hidden = false;
 fa.parentNode.insertBefore(fa, cf);          // Dashboard first, then Configuration
-document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'faults'));
+document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'board'));
 buildForm(%s);
 showStatus(%s);
 document.getElementById('status').textContent = 'Preview — sample data, no kart connected';
